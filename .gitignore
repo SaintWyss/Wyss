@@ -1,0 +1,75 @@
+# Entorno Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+
+# Node / JS (por si se agrega frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Secretos y configuración sensible
+.env
+.env.*
+!.env.example
+config/secrets/
+*.key
+*.pem
+*.p12
+
+# Base de datos local
+*.db
+*.sqlite
+*.sqlite3
+
+# Índices locales (se regeneran desde las fuentes)
+data/indexes/
+data/vectors/
+data/cache/
+
+# Logs de ejecución
+logs/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Archivos de prueba generados
+tests/fixtures/generated/
+tests/tmp/
+
+# Cobertura
+.coverage
+htmlcov/
+.pytest_cache/
+-e 
+# Datos de runtime (DB, índices, logs)
+data/*
+!data/.gitkeep
