@@ -83,6 +83,7 @@ Santiago puede encontrar cualquier cosa en sus 2 TB en segundos, delegar tareas 
 | Unix socket + JSON-RPC para daemon | Simple, sin dep HTTP, bajo overhead, seguro (solo procesos locales) | — Pending |
 | uv para deps | Más rápido que pip/poetry, lockfile robusto, estándar 2025 | — Pending |
 | Hexagonal + Plugin Pattern | Extensibilidad sin ruptura — nueva feature = nueva clase | — Pending |
+| Hermes Agent (NousResearch) como cerebro de orquestación — modo híbrido | Evita construir orquestador NL/planes/rutinas de cero (solapa Fases 5 y 9). Hermes corre en container aislado, tools built-in deshabilitadas; toda acción real pasa por MCP server de Wyss → CognitivePolicyEngine + audit gatean cada call fail-closed. Hermes = adapter detrás de OrchestratorPort; reglas inviolables 1-9 se mantienen como garantía determinística. Decidido 2026-06-11 | — Pending |
 
 ---
 
