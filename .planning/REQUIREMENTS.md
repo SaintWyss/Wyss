@@ -37,8 +37,8 @@
 - [x] **POL-01**: Todo plan pasa por la política cognitiva antes de ejecutarse *(RF-018)*
 - [x] **POL-02**: Nivel A ejecuta directo; B pide confirmación simple [s/N]; C pide confirmación fuerte (escribir "CONFIRMAR") *(RF-019)*
 - [x] **POL-03**: Nivel D se rechaza con explicación, queda auditado, y ningún path de código lo ejecuta — aunque el owner insista *(RF-020, regla #2)*
-- [ ] **POL-04**: La clasificación D es determinística (denylist de operaciones); el LLM puede subir el riesgo estimado, nunca bajarlo
-- [ ] **POL-05**: La política evalúa el plan completo + agregados (cantidad de archivos, directorios tocados) — sin bypass por composición de pasos menores
+- [x] **POL-04**: La clasificación D es determinística (denylist de operaciones); el LLM puede subir el riesgo estimado, nunca bajarlo
+- [x] **POL-05**: La política evalúa el plan completo + agregados (cantidad de archivos, directorios tocados) — sin bypass por composición de pasos menores
 - [ ] **POL-06**: Eval set del clasificador de política: planes dorados con nivel esperado; un falso-A (ejecutar lo que debía confirmar) se detecta en CI *(gap #8)*
 - [ ] **POL-07**: El contenido recuperado de BC se trata como dato no confiable — jamás como instrucción; nunca eleva el nivel de un plan aprobado *(gap #10)*
 

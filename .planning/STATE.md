@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-11T19:23:01.942Z"
+last_updated: "2026-06-11T19:28:03.291Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 01 (fundaciones) — EXECUTING
-Plan: 2 of 6
+Plan: 6 of 6
 
 - **Phase:** 1 of 10 (Fundaciones)
-- **Status:** Executing Phase 01 — gap plan 01-04 (CR-01) completado; siguen 01-05, 01-06
+- **Status:** Executing Phase 01 — gap plan 01-05 (CognitivePolicyEngine) completado; queda 01-06
 - **Last activity:** 2026-06-11
 
 ## Decisions Log
@@ -48,6 +48,8 @@ Plan: 2 of 6
 | 2026-06-11 | Smoke test WAL fail-fast al construir el logger | `journal_mode≠wal` → `AuditIntegrityError`; nunca degradar silencioso un audit log sobre NTFS/fuseblk (Pitfall 6/T4) (01-03) |
 | 2026-06-11 | Test ntfs opt-in vía `skipif` por `WYSS_TEST_NTFS` | No alterar `addopts` globales; el test de integración sobre el mount real corre solo on-demand (01-03) |
 | 2026-06-11 | Guarda de rechazo D por valor/orden + `isinstance` fail-closed (no `is`) | CR-01: `risk_level is RiskLevel.D` era no-op ante ints crudos de deserialización JSON-RPC; ahora `risk >= RiskLevel.D` tras isinstance guard rechaza fail-closed (POL-03, 01-04) |
+| 2026-06-11 | `CognitivePolicyEngine` sin `evaluate_action()` público; agregados a nivel-plan | Evaluar pasos uno a uno saltearía los umbrales agregados (bypass por composición); 200 deletes → D solo si se evalúa el plan entero (POL-05, 01-05) |
+| 2026-06-11 | `BUILTIN_DENY` como `Final[tuple[DenyRule,...]]` en código, no en TOML | La config solo agrega reglas (`deny = BUILTIN_DENY + config`); nunca puede vaciarlas — D sigue absoluto sin importar el TOML (regla #2; POL-04, 01-05) |
 
 ## Blockers
 
