@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: "Phase 1 — context gathered, ready for /gsd:plan-phase 1"
-last_updated: "2026-06-11T02:12:48.144Z"
-last_activity: 2026-06-10 — proyecto inicializado (questioning → research → requirements → roadmap)
+status: executing
+last_updated: "2026-06-11T13:19:04.920Z"
+last_activity: 2026-06-11
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
 ---
 
 # Wyss — State
@@ -20,13 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** Encontrar cualquier cosa en 2 TB en segundos + delegar tareas a agentes con control total y auditoría de todo.
-**Current focus:** Phase 1 — Fundaciones
+**Current focus:** Phase 01 — fundaciones
 
 ## Current Position
 
+Phase: 01 (fundaciones) — EXECUTING
+Plan: 2 of 3 (01-01 completado)
+
 - **Phase:** 1 of 10 (Fundaciones)
-- **Status:** Phase 1 — context gathered, ready for /gsd:plan-phase 1
-- **Last activity:** 2026-06-10 — proyecto inicializado (questioning → research → requirements → roadmap)
+- **Status:** Executing Phase 01 — plan 01-01 completado
+- **Last activity:** 2026-06-11
 
 ## Decisions Log
 
@@ -37,6 +40,8 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 | 2026-06-10 | pymupdf primario para PDF (no PyPDF2) | PyPDF2 deprecado; throughput crítico a 2TB |
 | 2026-06-10 | Clasificación nivel D determinística por denylist | El LLM puede ser persuadido vía contenido indexado; solo puede subir riesgo |
 | 2026-06-10 | Permisos como scoped facades (capability-based) | Filtro estructural antes del retrieval, no checks post-hoc |
+| 2026-06-11 | `include_external_packages=true` en import-linter | El contrato `forbidden` de `core` lista `pydantic` (externo); sin esa opción `lint-imports` aborta (01-01) |
+| 2026-06-11 | `uv.lock` commiteado; `src/__init__.py` eliminado | Instalaciones reproducibles; el `__init__.py` raíz rompía los imports flat `from core...` (Assumption A5) (01-01) |
 
 ## Blockers
 

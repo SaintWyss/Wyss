@@ -34,7 +34,7 @@
 
 ### Cognitive Policy (Seguridad cognitiva)
 
-- [ ] **POL-01**: Todo plan pasa por la política cognitiva antes de ejecutarse *(RF-018)*
+- [x] **POL-01**: Todo plan pasa por la política cognitiva antes de ejecutarse *(RF-018)*
 - [ ] **POL-02**: Nivel A ejecuta directo; B pide confirmación simple [s/N]; C pide confirmación fuerte (escribir "CONFIRMAR") *(RF-019)*
 - [ ] **POL-03**: Nivel D se rechaza con explicación, queda auditado, y ningún path de código lo ejecuta — aunque el owner insista *(RF-020, regla #2)*
 - [ ] **POL-04**: La clasificación D es determinística (denylist de operaciones); el LLM puede subir el riesgo estimado, nunca bajarlo
@@ -89,7 +89,7 @@
 
 ### Audit (transversal)
 
-- [ ] **AUD-01**: Toda acción relevante registra: actor, instrucción, plan, decisión de política, confirmación, acciones, resultado, costo — en SQLite *(RF-022, regla #1)*
+- [x] **AUD-01**: Toda acción relevante registra: actor, instrucción, plan, decisión de política, confirmación, acciones, resultado, costo — en SQLite *(RF-022, regla #1)*
 - [ ] **AUD-02**: El owner puede consultar el historial de acciones *(RF-023)*
 - [ ] **AUD-03**: Eval set de conocimiento: N consultas doradas con archivo esperado — regresión detectable *(gap #8)*
 
