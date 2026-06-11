@@ -19,6 +19,14 @@
 4. AuditLogger escribe eventos a SQLite y todo componente posterior lo recibe inyectado (firma verificada por tests)
 5. La config TOML se valida con Pydantic al boot — config inválida = fail-fast con error legible
 
+**Plans:** 6 plans (01-01..01-03 ejecutados; 01-04..01-06 cierre de gaps tras verificación)
+- [x] 01-01-PLAN.md — toolchain uv + esqueleto multi-paquete
+- [x] 01-02-PLAN.md — dominio frozen + 14 ports (interfaces primero)
+- [x] 01-03-PLAN.md — SqliteAuditLogger append-only (AUD-01)
+- [ ] 01-04-PLAN.md — fix CR-01: rechazo D no salteable por valor + isinstance (POL-03)
+- [ ] 01-05-PLAN.md — CognitivePolicyEngine + denylist built-in + golden/composición (POL-03/04/05)
+- [ ] 01-06-PLAN.md — bootstrap config Pydantic→dominio, fail-fast, denylist aditiva (POL-04/05)
+
 ### Phase 2: Gateway de Modelos
 **Goal:** Único punto de salida a IA externa, con minimización de contexto, gate de costo y tracing — antes de que exista cualquier consumidor.
 **Requirements:** GATE-01, GATE-02, GATE-03, GATE-04, GATE-05
