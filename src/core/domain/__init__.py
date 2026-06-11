@@ -3,7 +3,12 @@
 from core.domain.agent import AgentDefinition, Report
 from core.domain.audit import ActorType, AuditEvent, AuditEventType, Span
 from core.domain.config import WyssSettings
-from core.domain.errors import AuditIntegrityError, PolicyViolation, WyssError
+from core.domain.errors import (
+    AuditIntegrityError,
+    ConfigError,
+    PolicyViolation,
+    WyssError,
+)
 from core.domain.execution import ToolResult, Verification
 from core.domain.gateway import AgentModelRequest, ModelRequest, ModelResponse
 from core.domain.knowledge import (
@@ -41,6 +46,8 @@ __all__ = [
     "AuditEventType",
     "AuditIntegrityError",
     "Chunk",
+    # errors
+    "ConfigError",
     # policy
     "DenyRule",
     "ExtractedContent",
