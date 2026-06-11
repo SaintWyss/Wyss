@@ -97,6 +97,45 @@ def test_level_d_with_non_reject_outcome_also_rejected() -> None:
     assert agent.run_called is False
 
 
+def test_raw_int_level_d_does_not_bypass_rejection() -> None:
+    """CR-01: PolicyDecision con ints crudos (risk=4, outcome=3) NO saltea el rechazo D (T-01-04-EoP).
+
+    `4 == RiskLevel.D` pero `4 is RiskLevel.D` es False: la guarda por identidad (`is`)
+    dejaba correr `_run`. La guarda por valor/orden + isinstance debe rechazar fail-closed.
+    """
+    audit = FakeAuditPort()
+    agent = _agent(audit)
+    decision = PolicyDecision(
+        task_id="t-1",
+        risk_level=4,  # type: ignore[arg-type]
+        outcome=3,  # type: ignore[arg-type]
+    )
+    with pytest.raises(PolicyViolation):
+        agent.execute(_plan(), decision)
+    assert agent.run_called is False
+    types = [e.event_type for e in audit.events]
+    assert AuditEventType.POLICY_DECISION in types
+    assert AuditEventType.ACTION_STARTED not in types
+
+
+def test_raw_int_corrupt_types_fail_closed() -> None:
+    """CR-01 fail-closed: tipos no-enum (risk=4, outcome=1 ints crudos) rechazan, nunca ejecutan.
+
+    outcome=1 (EXECUTE int crudo) + risk=4 (D int crudo): aunque el outcome int no sea REJECT,
+    el isinstance guard rechaza por tipo corrupto antes de cualquier ejecución (T-01-04-EoP).
+    """
+    audit = FakeAuditPort()
+    agent = _agent(audit)
+    decision = PolicyDecision(
+        task_id="t-1",
+        risk_level=4,  # type: ignore[arg-type]
+        outcome=1,  # type: ignore[arg-type]
+    )
+    with pytest.raises(PolicyViolation):
+        agent.execute(_plan(), decision)
+    assert agent.run_called is False
+
+
 def test_allowed_decision_runs_and_audits() -> None:
     """Decisión A → `_run` se invoca; events contiene inicio y completado (flujo normal)."""
     audit = FakeAuditPort()
