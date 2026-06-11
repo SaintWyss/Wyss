@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: executing
-last_updated: "2026-06-11T19:28:03.291Z"
+status: verifying
+last_updated: "2026-06-11T19:32:36.298Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
-  percent: 0
+  completed_plans: 6
+  percent: 10
 ---
 
 # Wyss — State
@@ -28,7 +28,7 @@ Phase: 01 (fundaciones) — EXECUTING
 Plan: 6 of 6
 
 - **Phase:** 1 of 10 (Fundaciones)
-- **Status:** Executing Phase 01 — gap plan 01-05 (CognitivePolicyEngine) completado; queda 01-06
+- **Status:** Phase complete — ready for verification
 - **Last activity:** 2026-06-11
 
 ## Decisions Log
@@ -50,6 +50,8 @@ Plan: 6 of 6
 | 2026-06-11 | Guarda de rechazo D por valor/orden + `isinstance` fail-closed (no `is`) | CR-01: `risk_level is RiskLevel.D` era no-op ante ints crudos de deserialización JSON-RPC; ahora `risk >= RiskLevel.D` tras isinstance guard rechaza fail-closed (POL-03, 01-04) |
 | 2026-06-11 | `CognitivePolicyEngine` sin `evaluate_action()` público; agregados a nivel-plan | Evaluar pasos uno a uno saltearía los umbrales agregados (bypass por composición); 200 deletes → D solo si se evalúa el plan entero (POL-05, 01-05) |
 | 2026-06-11 | `BUILTIN_DENY` como `Final[tuple[DenyRule,...]]` en código, no en TOML | La config solo agrega reglas (`deny = BUILTIN_DENY + config`); nunca puede vaciarlas — D sigue absoluto sin importar el TOML (regla #2; POL-04, 01-05) |
+| 2026-06-11 | `load_settings` levanta `ConfigError` (dominio) en vez de `sys.exit` | Fail-fast testeable con `pytest.raises`; el caller CLI de Fase 5 decide el exit. Pydantic muere en bootstrap — core nunca ve un BaseModel (import-linter; SC5, 01-06) |
+| 2026-06-11 | deny rules de config: `match_action`→`action_type`, `match_target`→`target_patterns` | Mapeo del TOML canónico al `DenyRule` de dominio; `match_target` ausente = tupla vacía (matchea cualquier target) (01-06) |
 
 ## Blockers
 
