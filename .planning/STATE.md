@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: verifying
-last_updated: "2026-06-11T14:10:09.060Z"
+status: executing
+last_updated: "2026-06-11T19:23:01.942Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 10
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 10
+  completed_phases: 0
+  total_plans: 6
+  completed_plans: 4
+  percent: 0
 ---
 
 # Wyss — State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 01 (fundaciones) — COMPLETE (ready for verification)
-Plan: 3 of 3 (01-01, 01-02 y 01-03 completados)
+Phase: 01 (fundaciones) — EXECUTING
+Plan: 2 of 6
 
 - **Phase:** 1 of 10 (Fundaciones)
-- **Status:** Phase 1 — gap plans 01-04/05/06 created and verified, ready for /gsd:execute-phase 1 --gaps-only
+- **Status:** Executing Phase 01 — gap plan 01-04 (CR-01) completado; siguen 01-05, 01-06
 - **Last activity:** 2026-06-11
 
 ## Decisions Log
@@ -47,6 +47,7 @@ Plan: 3 of 3 (01-01, 01-02 y 01-03 completados)
 | 2026-06-11 | `SqliteAuditLogger.span()` usa `AuditEvent.new` directo | El dominio frozen solo expone `new()`; el adapter compone los SPAN_* sin inventar API en el núcleo puro (01-03) |
 | 2026-06-11 | Smoke test WAL fail-fast al construir el logger | `journal_mode≠wal` → `AuditIntegrityError`; nunca degradar silencioso un audit log sobre NTFS/fuseblk (Pitfall 6/T4) (01-03) |
 | 2026-06-11 | Test ntfs opt-in vía `skipif` por `WYSS_TEST_NTFS` | No alterar `addopts` globales; el test de integración sobre el mount real corre solo on-demand (01-03) |
+| 2026-06-11 | Guarda de rechazo D por valor/orden + `isinstance` fail-closed (no `is`) | CR-01: `risk_level is RiskLevel.D` era no-op ante ints crudos de deserialización JSON-RPC; ahora `risk >= RiskLevel.D` tras isinstance guard rechaza fail-closed (POL-03, 01-04) |
 
 ## Blockers
 
