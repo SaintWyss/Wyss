@@ -14,10 +14,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 
+from audit.schema import PRAGMAS, apply_schema
 from core.domain import ActorType, AuditEvent, AuditEventType, Span
 from core.domain.errors import AuditIntegrityError
-
-from audit.schema import PRAGMAS, apply_schema
 
 _INSERT = (
     "INSERT INTO audit_events "
