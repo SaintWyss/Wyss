@@ -53,19 +53,46 @@ OWNER
 
 ```
 wyss/
-├── docs/           Documentación fundacional (17 documentos)
+├── docs/              Documentación fundacional (18 documentos)
 ├── src/
-│   ├── core/       Núcleo: orquestador, planificador, política cognitiva
+│   ├── core/          Núcleo hexagonal puro (stdlib only, mypy strict)
+│   │   ├── domain/    Entidades frozen (Task, Plan, Action, RiskLevel, AuditEvent…) — sin infra
+│   │   ├── ports/     Los 14 contratos (13 typing.Protocol + AgentBase ABC) — D-11
+│   │   └── policy/    CognitivePolicyEngine puro + denylist built-in no removible
 │   ├── orchestrator/  Intent Router, Task Planner, Confirmation Manager
-│   ├── agents/     Modelo base y runtime de agentes
-│   ├── knowledge/  Pipeline de ingesta, índice semántico, Retrieval Engine
-│   ├── gateway/    Model Router, Context Minimizer, Cost Tracker
-│   ├── execution/  Adaptadores (FileSystem, Shell, Git, etc.)
-│   └── audit/      Audit Logger
-├── tests/          Pruebas por módulo
-├── config/         Configuración del sistema (sin secretos)
-└── scripts/        Utilidades de desarrollo y despliegue
+│   ├── agents/        Modelo base y runtime de agentes
+│   ├── knowledge/     Pipeline de ingesta, índice semántico, Retrieval Engine
+│   ├── gateway/       Model Router, Context Minimizer, Cost Tracker
+│   ├── execution/     Adaptadores (FileSystem, Shell, Git, etc.)
+│   ├── audit/         Audit Logger (SQLite append-only, DB separada)
+│   └── bootstrap/     Composition root (DI manual) + frontera Pydantic→dominio
+├── tests/             Pruebas por módulo
+├── config/            Configuración del sistema en TOML (sin secretos)
+└── scripts/           Utilidades de desarrollo y despliegue
 ```
+
+Las carpetas `core/domain/`, `core/ports/`, `core/policy/` y `bootstrap/` son nuevas
+de la Fase 1 (Fundaciones):
+
+- **`core/domain/`** — entidades de dominio como `frozen` dataclasses, stdlib only. Todo lo demás las importa; ellas no importan nada del sistema.
+- **`core/ports/`** — los 14 contratos hexagonales (Protocols + la ABC `AgentBase`). Se definen y commitean antes que cualquier implementación (D-11); los módulos vecinos importan de aquí, nunca de las impls.
+- **`core/policy/`** — el `CognitivePolicyEngine` puro (`Plan -> PolicyDecision`). La denylist de nivel D vive aquí en código como invariante `Final`; la config solo puede AGREGAR reglas, jamás quitarlas.
+- **`bootstrap/`** — composition root con DI manual (D-10) y la única frontera donde vive Pydantic: valida `config.toml` al boot (fail-fast) y entrega frozen dataclasses al núcleo. Pydantic nunca entra a `core/`.
+
+### Verificación
+
+El proyecto se instala con `uv` (gestor de deps + venv) y usa paquetes top-level genéricos
+(`core`, `audit`, `bootstrap`…) bajo un venv dedicado — tradeoff aceptado en D-01 a cambio
+de imports flat (`from core.ports import ...`). La cadena de verificación completa, que todo
+plan posterior debe dejar verde, es:
+
+```bash
+uv sync                                 # instala deps + proyecto editable
+uv run pytest && uv run mypy && uv run ruff check src tests && uv run lint-imports
+```
+
+`mypy` corre en modo strict sobre `src` y `tests`; `import-linter` (`lint-imports`) verifica
+los contratos hexagonales (núcleo puro stdlib-only, capas independientes entre sí).
 
 ## Principios
 

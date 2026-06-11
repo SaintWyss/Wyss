@@ -1,0 +1,51 @@
+# Wyss — Configuración de ejemplo (formato canónico TOML, D-09)
+# Copiar como config.toml y completar con valores reales.
+#
+# NUNCA poner secretos ni API keys aquí: las claves de proveedores van en
+# `config/.env.example` → `.env` (que está en .gitignore). Esta config solo
+# describe estructura, rutas y umbrales — todo no sensible.
+
+# Directorio raíz de datos de runtime (índices, vectores, cache).
+data_dir = "data"
+
+# Audit store en SQLite SEPARADO de los datos de usuario (D-06).
+audit_db = "data/audit.db"
+
+# Política cognitiva: umbrales de agregación anti-bypass (POL-05).
+# Son los defaults de RESEARCH §3.2; ajustables por el owner.
+[policy]
+# > file_count_b targets modificados distintos → mínimo B.
+file_count_b = 10
+# > file_count_c targets modificados distintos → mínimo C.
+file_count_c = 100
+# > dir_count_c directorios distintos tocados por escritura → mínimo C.
+dir_count_c = 5
+# > delete_count_d acciones file.delete agregadas → D (denylist built-in).
+delete_count_d = 50
+
+# Directorios/patrones sensibles: una escritura sobre ellos escala el nivel.
+# Estos NO son la denylist de nivel D (esa vive en código, no es removible);
+# son señales de sensibilidad que suben el riesgo estimado.
+sensitive_dirs = [
+  "~/.ssh",
+  "/etc",
+  "/boot",
+  "data",          # el data dir de Wyss — regla #6 (auto-protección)
+  "**/.env*",
+  "**/*.key",
+  "**/id_rsa*",
+]
+
+# Reglas de denegación ADICIONALES (opcional).
+#
+# Regla #2 — INVARIANTE ESTRUCTURAL: las reglas de config solo AGREGAN a la
+# denylist built-in. Los invariantes de nivel D viven en código
+# (`core/policy/builtin_deny.py`, Final) y NO son removibles por config:
+# un TOML jamás puede vaciar ni desactivar la denylist. Si pudiera, el nivel D
+# dejaría de ser absoluto editando un archivo.
+#
+# Ejemplo (comentado) de cómo el owner amplía la denylist:
+# [[policy.deny]]
+# id = "no-tocar-proyectos-criticos"
+# match_target = "~/Data/10_Workspace/projects/**"
+# match_action = "file.delete"
