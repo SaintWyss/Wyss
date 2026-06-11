@@ -1,3 +1,18 @@
+---
+gsd_state_version: 1.0
+milestone: v0.1
+milestone_name: milestone
+status: "Not started — ready for `/gsd:plan-phase 1`"
+last_updated: "2026-06-11T02:12:35.142Z"
+last_activity: 2026-06-10 — proyecto inicializado (questioning → research → requirements → roadmap)
+progress:
+  total_phases: 10
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+---
+
 # Wyss — State
 
 ## Project Reference
