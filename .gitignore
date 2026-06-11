@@ -39,8 +39,10 @@ config/secrets/
 *.pem
 *.p12
 
-# Base de datos local
+# Base de datos local (incluye sidecars WAL/SHM de SQLite)
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 
@@ -69,7 +71,9 @@ tests/tmp/
 .coverage
 htmlcov/
 .pytest_cache/
--e 
+.mypy_cache/
+.ruff_cache/
+
 # Datos de runtime (DB, índices, logs)
 data/*
 !data/.gitkeep
