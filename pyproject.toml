@@ -26,6 +26,9 @@ packages = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "ntfs: tests que corren sobre el mount NTFS/fuseblk real (solo con WYSS_TEST_NTFS=1)",
+]
 
 [tool.mypy]
 python_version = "3.12"

@@ -4,6 +4,9 @@ Si una firma no cumple el contrato, falla `uv run mypy` (files incluye tests), n
 Los tests solo assertan `is not None`; la verificación REAL es estática.
 """
 
+from pathlib import Path
+
+from audit import SqliteAuditLogger
 from core.domain import AgentDefinition
 from core.ports import (
     AgentBase,
@@ -42,6 +45,12 @@ from tests.ports.fakes import (
 def test_audit_port_conforms() -> None:
     port: AuditPort = FakeAuditPort()
     assert port is not None
+
+
+def test_sqlite_audit_logger_conforms(tmp_path: Path) -> None:
+    # Pattern 5: mypy verifica que el adapter real cumple AuditPort (no solo el fake).
+    logger: AuditPort = SqliteAuditLogger(tmp_path / "audit.db")
+    assert logger is not None
 
 
 def test_config_store_conforms() -> None:
