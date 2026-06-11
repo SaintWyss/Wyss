@@ -116,4 +116,18 @@
 
 ## Traceability
 
-(Completada por el roadmapper — mapeo requirement → fase)
+| Categoría | Requirements | Fase |
+|---|---|---|
+| POL (núcleo política) | POL-01..05 | Phase 1 — Fundaciones |
+| AUD (esquema) | AUD-01 | Phase 1 — Fundaciones |
+| GATE | GATE-01..05 | Phase 2 — Gateway |
+| KNOW (ingesta) | KNOW-01..03, 06..09, 11 | Phase 3 — Pipeline de Ingesta |
+| KNOW (búsqueda) | KNOW-04, 05, 10 · AUD-03 | Phase 4 — Búsqueda Híbrida |
+| ORCH | ORCH-01..07 · POL-06 · AUD-02 | Phase 5 — Orquestador Daemon |
+| EXEC | EXEC-01..04 | Phase 6 — Capa de Ejecución |
+| AGENT (modelo) | AGENT-01..06, 08 · POL-07 | Phase 7 — Modelo de Agentes |
+| AGENT (Belgrano) | AGENT-07, 09 | Phase 8 — Belgrano |
+| ROUT | ROUT-01..07 | Phase 9 — Multi-agente y Rutinas |
+| TEAM | TEAM-01..05 | Phase 10 — Modo Equipo |
+
+55/55 mapeados — cobertura completa.
