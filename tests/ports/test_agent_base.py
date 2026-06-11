@@ -98,7 +98,7 @@ def test_level_d_with_non_reject_outcome_also_rejected() -> None:
 
 
 def test_raw_int_level_d_does_not_bypass_rejection() -> None:
-    """CR-01: PolicyDecision con ints crudos (risk=4, outcome=3) NO saltea el rechazo D (T-01-04-EoP).
+    """CR-01: ints crudos (risk=4, outcome=3) NO saltean el rechazo D (T-01-04-EoP).
 
     `4 == RiskLevel.D` pero `4 is RiskLevel.D` es False: la guarda por identidad (`is`)
     dejaba correr `_run`. La guarda por valor/orden + isinstance debe rechazar fail-closed.

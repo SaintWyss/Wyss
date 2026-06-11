@@ -50,29 +50,42 @@ class AgentBase(ABC):
         """Template method NO salteable.
 
         El nivel FINAL viaja en `PolicyDecision` (no en `Plan`, que es frozen y solo lleva
-        `estimated_risk`). Si la decisión es REJECT o nivel D: audita el rechazo y raisea
-        `PolicyViolation` SIN llamar `_run()` (T1, belt-and-suspenders, POL-03).
+        `estimated_risk`). Rechazo por VALOR + fail-closed (CR-01, POL-03): comparar por
+        valor/orden (no por identidad de singleton) y rechazar ante tipos corruptos no-enum.
+        Una `PolicyDecision` puede llegar deserializada de JSON-RPC (Fase 5) con ints crudos
+        que mypy no validó; la guarda `is` era un no-op ante esos valores. Si REJECT, nivel D,
+        o tipo corrupto: audita el rechazo y raisea `PolicyViolation` SIN llamar `_run()`
+        (T1, belt-and-suspenders).
         """
         agent_id = self._definition.agent_id
 
-        if decision.outcome is Outcome.REJECT or decision.risk_level is RiskLevel.D:
+        risk = decision.risk_level
+        outcome = decision.outcome
+        if (
+            not isinstance(risk, RiskLevel)
+            or not isinstance(outcome, Outcome)
+            or outcome == Outcome.REJECT
+            or risk >= RiskLevel.D
+        ):
             self._audit.log(
                 AuditEvent.new(
                     task_id=plan.task_id,
                     actor_type=ActorType.AGENT,
                     actor_id=agent_id,
                     event_type=AuditEventType.POLICY_DECISION,
-                    message="plan rechazado por política (nivel D / REJECT)",
+                    message="plan rechazado por política (nivel D / REJECT / tipo corrupto)",
                     payload={
-                        "risk_level": decision.risk_level.name,
-                        "outcome": decision.outcome.name,
+                        "risk_level": risk.name if isinstance(risk, RiskLevel) else repr(risk),
+                        "outcome": (
+                            outcome.name if isinstance(outcome, Outcome) else repr(outcome)
+                        ),
                         "matched_rules": list(decision.matched_rules),
+                        "reasons": list(decision.reasons),
                     },
                 )
             )
-            raise PolicyViolation(
-                f"plan {plan.task_id} rechazado: nivel {decision.risk_level.name}"
-            )
+            level = risk.name if isinstance(risk, RiskLevel) else repr(risk)
+            raise PolicyViolation(f"plan {plan.task_id} rechazado: nivel {level}")
 
         self._audit.log(
             AuditEvent.new(
