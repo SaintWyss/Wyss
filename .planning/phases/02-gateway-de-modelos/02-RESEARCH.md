@@ -475,7 +475,7 @@ class OllamaEmbeddingProvider:
 | A5 | El `.env` de wyss tendrá `ANTHROPIC_API_KEY` y `LITELLM_MASTER_KEY` | Runtime State | Bajo — es decisión de config del owner; documentar en `.env.example`. |
 | A6 | Reusar `EmbeddingProvider` de `core/ports/knowledge.py` (no port nuevo) | Code Examples | Bajo — verificado que existe; confirmar firma exacta (Open Q1). |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **¿`AgentModelRequest` lleva `max_tokens`/límite de tokens, o sale del tier config?**
    - What we know: `ModelRequest` (provider) tiene `max_tokens`; `AgentModelRequest` (agente) hoy solo tiene agent_id/task_id/prompt. D-26 agrega tier + purpose.
