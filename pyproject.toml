@@ -3,10 +3,20 @@ name = "wyss"
 version = "0.1.0"
 description = "Asistente operativo personal multi-agente — humano primero"
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.13"]
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.13",
+]
 
 [dependency-groups]
-dev = ["pytest>=9", "mypy>=2.1", "ruff>=0.15", "import-linter>=2.11"]
+dev = [
+    "pytest>=9",
+    "mypy>=2.1",
+    "ruff>=0.15",
+    "import-linter>=2.11",
+    "respx>=0.23.1",
+    "pytest-asyncio>=1.4.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -26,8 +36,11 @@ packages = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 markers = [
   "ntfs: tests que corren sobre el mount NTFS/fuseblk real (solo con WYSS_TEST_NTFS=1)",
+  "integration: tests contra servicios reales (opt-in por env var)",
+  "gateway: tests del gateway de modelos (providers, router, minimizer, cost, traces)",
 ]
 
 [tool.mypy]
