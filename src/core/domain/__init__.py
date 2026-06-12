@@ -5,8 +5,11 @@ from core.domain.audit import ActorType, AuditEvent, AuditEventType, Span
 from core.domain.config import WyssSettings
 from core.domain.errors import (
     AuditIntegrityError,
+    BudgetExceeded,
     ConfigError,
     PolicyViolation,
+    SecretDetected,
+    UnknownTier,
     WyssError,
 )
 from core.domain.execution import ToolResult, Verification
@@ -45,6 +48,7 @@ __all__ = [
     "AuditEvent",
     "AuditEventType",
     "AuditIntegrityError",
+    "BudgetExceeded",
     "Chunk",
     # errors
     "ConfigError",
@@ -66,6 +70,7 @@ __all__ = [
     "Report",
     # risk
     "RiskLevel",
+    "SecretDetected",
     "SourceFile",
     "Span",
     # security
@@ -75,6 +80,7 @@ __all__ = [
     "TaskStatus",
     # execution
     "ToolResult",
+    "UnknownTier",
     # knowledge
     "Vector",
     "Verification",

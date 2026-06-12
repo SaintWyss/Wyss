@@ -30,3 +30,6 @@ class AgentModelRequest:
     agent_id: str
     task_id: str
     prompt: str
+    # NUEVO (D-26) — defaults obligatorios para no romper construcciones posicionales de Fase 1.
+    tier: str = "economico"
+    purpose: str = "general"
