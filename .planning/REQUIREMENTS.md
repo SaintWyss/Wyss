@@ -44,11 +44,11 @@
 
 ### Gateway (Modelos externos)
 
-- [ ] **GATE-01**: Único punto de salida a IA externa; ≥ 2 proveedores configurables, intercambiables vía config sin tocar código *(RF-007)*
-- [ ] **GATE-02**: Selección de modelo por costo/complejidad/riesgo (lógica local → económico → fuerte) *(RF-007)*
-- [ ] **GATE-03**: El Context Minimizer filtra secretos, rutas innecesarias y contexto no solicitado antes de TODA llamada externa *(RF-021, regla #4)*
-- [ ] **GATE-04**: Cost Tracker registra tokens y costo por llamada y actúa como gate — presupuesto con hard-stop, no solo reporte
-- [ ] **GATE-05**: Tracing por llamada LLM: prompt, contexto, output, latencia, costo — consultable, separado de la auditoría *(gap #9)*
+- [x] **GATE-01**: Único punto de salida a IA externa; ≥ 2 proveedores configurables, intercambiables vía config sin tocar código *(RF-007)*
+- [x] **GATE-02**: Selección de modelo por costo/complejidad/riesgo (lógica local → económico → fuerte) *(RF-007)*
+- [x] **GATE-03**: El Context Minimizer filtra secretos, rutas innecesarias y contexto no solicitado antes de TODA llamada externa *(RF-021, regla #4)*
+- [x] **GATE-04**: Cost Tracker registra tokens y costo por llamada y actúa como gate — presupuesto con hard-stop, no solo reporte
+- [x] **GATE-05**: Tracing por llamada LLM: prompt, contexto, output, latencia, costo — consultable, separado de la auditoría *(gap #9)*
 
 ### Agents
 

@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: verifying
-last_updated: "2026-06-12T00:18:52.414Z"
-last_activity: 2026-06-11
+status: executing
+last_updated: "2026-06-12T00:33:02.640Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 10
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 11
+  completed_plans: 7
   percent: 10
 ---
 
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** Encontrar cualquier cosa en 2 TB en segundos + delegar tareas a agentes con control total y auditoría de todo.
-**Current focus:** Phase 2 — gateway de modelos
+**Current focus:** Phase 02 — gateway-de-modelos
 
 ## Current Position
 
-Phase: 01 (fundaciones) — EXECUTING
-Plan: Not started
+Phase: 02 (gateway-de-modelos) — EXECUTING
+Plan: 2 of 5
 
 - **Phase:** 2 of 10 (gateway de modelos)
-- **Status:** Phase 2 planned — 5 plans verified, ready to execute
-- **Last activity:** 2026-06-11
+- **Status:** Executing Phase 02
+- **Last activity:** 2026-06-12
 
 ## Decisions Log
 
@@ -52,6 +52,11 @@ Plan: Not started
 | 2026-06-11 | `BUILTIN_DENY` como `Final[tuple[DenyRule,...]]` en código, no en TOML | La config solo agrega reglas (`deny = BUILTIN_DENY + config`); nunca puede vaciarlas — D sigue absoluto sin importar el TOML (regla #2; POL-04, 01-05) |
 | 2026-06-11 | `load_settings` levanta `ConfigError` (dominio) en vez de `sys.exit` | Fail-fast testeable con `pytest.raises`; el caller CLI de Fase 5 decide el exit. Pydantic muere en bootstrap — core nunca ve un BaseModel (import-linter; SC5, 01-06) |
 | 2026-06-11 | deny rules de config: `match_action`→`action_type`, `match_target`→`target_patterns` | Mapeo del TOML canónico al `DenyRule` de dominio; `match_target` ausente = tupla vacía (matchea cualquier target) (01-06) |
+| 2026-06-12 | `AgentModelRequest` +tier/+purpose con defaults (`economico`/`general`) | D-26: campos aditivos con default no rompen construcciones posicionales de Fase 1 (Pitfall 5); suite de ports verde (02-01) |
+| 2026-06-12 | `SecretDetected` solo recibe `pattern_name`, jamás el secreto | D-20 fail-closed: el error nombra el patrón que matcheó; el valor sensible nunca entra a la clase ni al audit (02-01) |
+| 2026-06-12 | `UnknownTier(tier, *, available)` sin fallback silencioso | D-17: tier desconocido → error explícito con tiers disponibles; el router nunca enruta a un default (02-01) |
+| 2026-06-12 | Re-export de las 3 excepciones desde `core.domain.__init__` | Coherente con PolicyViolation/ConfigError ya re-exportados; replica el patrón existente del repo, no inventa uno nuevo (02-01) |
+| 2026-06-12 | httpx directo (sin SDK anthropic/openai, sin tenacity) | Evita doble-retry; el retry manual centralizado se hace en 02-05 (02-01) |
 
 ## Blockers
 
