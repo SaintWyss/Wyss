@@ -5,6 +5,7 @@ excepciones de dominio que las olas siguientes de la Fase 2 levantan: `SecretDet
 `BudgetExceeded`, `UnknownTier`. Todas derivan de `WyssError` (fail-closed).
 """
 
+from core.domain.config import GatewaySettings
 from core.domain.errors import (
     BudgetExceeded,
     SecretDetected,
@@ -41,6 +42,16 @@ def test_domain_exceptions_derive_from_wyss_error() -> None:
     assert isinstance(SecretDetected("x"), WyssError)
     assert isinstance(BudgetExceeded("x"), WyssError)
     assert isinstance(UnknownTier("t", available=("a",)), WyssError)
+
+
+def test_gateway_settings_repr_never_exposes_env_values() -> None:
+    """WR-01: env_values (API keys reales) NO aparece en repr() — canal latente de fuga."""
+    secret = "sk-ant-valor-real-super-secreto-de-test"
+    settings = GatewaySettings(
+        tiers={}, prices={}, global_budget=1.0, env_values=(secret,)
+    )
+    assert secret not in repr(settings)
+    assert secret not in str(settings)
 
 
 def test_unknown_tier_exposes_tier_and_available() -> None:

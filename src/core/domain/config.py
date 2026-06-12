@@ -29,7 +29,10 @@ class GatewaySettings:
     agent_budgets: Mapping[str, float] = field(default_factory=dict)
     timeout_s: float = 120.0  # D-25 default
     trace_retention_days: int = 90  # D-22 default
-    env_values: tuple[str, ...] = ()
+    # repr=False: env_values lleva los VALORES reales de las API keys — un repr()/print/
+    # f-string de debugging o un mensaje de excepción que incluya el settings NO debe
+    # imprimirlas (WR-01: "secrets never appear in exceptions/logs").
+    env_values: tuple[str, ...] = field(default=(), repr=False)
     config_patterns: tuple[tuple[str, str], ...] = ()  # (nombre, regex-string)
 
 
