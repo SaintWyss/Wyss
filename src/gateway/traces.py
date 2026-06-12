@@ -9,15 +9,11 @@ El `prompt` guardado es POST-minimizer (sin secretos, D-22). Vive en `gateway/`,
 `audit/`: traces != audit (Pitfall 4 — no rompe el contrato de independencia de import-linter).
 """
 
-import contextlib
-import os
-import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
 
-from core.domain.errors import TraceIntegrityError
-from gateway.traces_schema import PRAGMAS, apply_schema
+from gateway.db import open_gateway_db
 
 _INSERT = (
     "INSERT INTO traces "
@@ -47,34 +43,14 @@ class TraceStore:
     """Store SQLite de traces consultables (D-22). WAL fail-fast; NO append-only (purga 90d)."""
 
     def __init__(self, db_path: Path) -> None:
-        """Abre la DB, verifica WAL fail-fast y aplica el esquema (sin triggers append-only).
+        """Abre la DB de gateway vía `open_gateway_db` (0600 + WAL fail-fast + esquema).
 
-        Raisea ``TraceIntegrityError`` si ``PRAGMA journal_mode`` no retorna ``"wal"``: sobre
-        NTFS/fuseblk WAL puede degradar y el trace de costo no puede correr sin durabilidad
-        (Pitfall 6). Espejo exacto del smoke test de `SqliteAuditLogger`.
+        Raisea ``TraceIntegrityError`` si WAL no está disponible (Pitfall 6). La apertura
+        es COMPARTIDA con `CostTracker` (WR-08/WR-09): las garantías no dependen del orden
+        de construcción de los stores.
         """
         self._db_path = db_path
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
-        # traces.db contiene prompts/outputs COMPLETOS post-min (D-22): restringir a 0600
-        # (solo el owner) — T-02-trace-file-perms. best-effort: en FS sin modos POSIX (NTFS)
-        # chmod puede no aplicar, pero no debe abortar el boot del store.
-        with contextlib.suppress(OSError):
-            os.chmod(db_path, 0o600)
-        journal_mode: str | None = None
-        for pragma in PRAGMAS:
-            row = self._conn.execute(pragma).fetchone()
-            if pragma.endswith("WAL") and row is not None:
-                journal_mode = str(row[0]).lower()
-        if journal_mode != "wal":
-            self._conn.close()
-            raise TraceIntegrityError(
-                f"traces en {db_path}: PRAGMA journal_mode retornó "
-                f"{journal_mode!r}, se esperaba 'wal'. WAL no está disponible sobre "
-                "este filesystem (probablemente NTFS/fuseblk). Mové data/ a un "
-                "filesystem ext4 para garantizar durabilidad de los traces."
-            )
-        apply_schema(self._conn)
+        self._conn = open_gateway_db(db_path)
 
     def write(
         self,

@@ -14,7 +14,6 @@ El estado de gasto vive en una tabla `spend_ledger` dentro de traces.db (una sol
 gateway, Open Question 3); el DDL lo aporta `traces_schema.apply_schema`.
 """
 
-import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
@@ -22,7 +21,7 @@ from types import TracebackType
 from core.domain.audit import ActorType, AuditEvent, AuditEventType
 from core.domain.errors import BudgetExceeded
 from core.ports.audit import AuditPort
-from gateway.traces_schema import PRAGMAS, apply_schema
+from gateway.db import open_gateway_db
 
 _INSERT = (
     "INSERT INTO spend_ledger "
@@ -46,7 +45,9 @@ class CostTracker:
         agent_budgets: dict[str, float],
         audit: AuditPort,
     ) -> None:
-        """Abre la DB de gateway (WAL fail-fast vía apply_schema) y fija límites inmutables."""
+        """Abre la DB de gateway (0600 + WAL fail-fast vía `open_gateway_db`, WR-08) y fija
+        límites inmutables. Un CostTracker standalone tiene las MISMAS garantías de
+        durabilidad/permisos que TraceStore — no dependen del orden de construcción."""
         self._db_path = db_path
         self._prices = dict(prices)
         self._global_budget = global_budget
@@ -59,11 +60,7 @@ class CostTracker:
         # no suspende dentro de ellos — son atómicos respecto a otras corutinas.
         self._inflight_global: float = 0.0
         self._inflight_agent: dict[str, float] = {}
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
-        for pragma in PRAGMAS:
-            self._conn.execute(pragma)
-        apply_schema(self._conn)
+        self._conn = open_gateway_db(db_path)
 
     def estimate_cost(
         self, model_alias: str, est_tokens_in: int, est_tokens_out: int

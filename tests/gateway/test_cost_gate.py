@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from core.domain.errors import BudgetExceeded
+from core.domain.errors import BudgetExceeded, TraceIntegrityError
 from gateway.cost import CostTracker
 from tests.ports.fakes import FakeAuditPort
 
@@ -135,6 +135,18 @@ def test_durable_state_vetoes_after_budget_drained(traces_db_path: Path) -> None
             ct.authorize("belgrano", "deepseek-default", 100, 100)  # 0.2 -> 3.2 > 3.0
     finally:
         ct.close()
+
+
+def test_cost_tracker_standalone_fail_fast_when_journal_not_wal(
+    traces_db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(7) WR-08: un CostTracker STANDALONE (sin TraceStore previo) también verifica WAL
+    fail-fast — la durabilidad del spend_ledger no depende del orden de construcción."""
+    import gateway.db as mod
+
+    monkeypatch.setattr(mod, "PRAGMAS", ("PRAGMA journal_mode=DELETE",))
+    with pytest.raises(TraceIntegrityError):
+        _tracker(traces_db_path)
 
 
 def test_inflight_reservation_blocks_concurrent_authorize(traces_db_path: Path) -> None:

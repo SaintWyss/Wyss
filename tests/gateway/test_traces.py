@@ -202,8 +202,11 @@ def test_no_append_only_triggers(traces_db_path: Path) -> None:
 def test_fail_fast_when_journal_not_wal(
     traces_db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """(4) journal_mode != wal -> TraceIntegrityError con el path en el mensaje (Pitfall 6)."""
-    import gateway.traces as mod
+    """(4) journal_mode != wal -> TraceIntegrityError con el path en el mensaje (Pitfall 6).
+
+    Los PRAGMAs viven en `gateway.db.open_gateway_db` (apertura compartida, WR-08).
+    """
+    import gateway.db as mod
 
     monkeypatch.setattr(mod, "PRAGMAS", ("PRAGMA journal_mode=DELETE",))
     with pytest.raises(TraceIntegrityError) as excinfo:
