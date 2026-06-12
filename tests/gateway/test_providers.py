@@ -133,7 +133,7 @@ async def test_litellm_envia_authorization_bearer(
 async def test_provider_propaga_4xx_sin_reintentar(
     http_client: httpx.AsyncClient, respx_mock: respx.MockRouter
 ) -> None:
-    """(4) 4xx -> raise_for_status propaga; el provider NO reintenta (el retry vive afuera, D-25)."""
+    """(4) 4xx -> raise_for_status propaga; el provider NO reintenta (retry vive afuera, D-25)."""
     route = respx_mock.post("https://api.anthropic.com/v1/messages").mock(
         return_value=httpx.Response(400, json={"error": "bad request"})
     )

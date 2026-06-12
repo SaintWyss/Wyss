@@ -12,13 +12,13 @@ from core.domain.gateway import TierConfig
 
 
 class ModelRouter:
-    """Resuelve `tier -> TierConfig` por config inyectada. Determinístico, fail-closed (D-16/D-17)."""
+    """Resuelve `tier -> TierConfig` por config inyectada: puro y fail-closed (D-16/17)."""
 
     def __init__(self, tiers: dict[str, TierConfig]) -> None:
         self._tiers = tiers
 
     def resolve(self, tier: str) -> TierConfig:
-        """Devuelve la TierConfig del tier; tier inexistente -> `UnknownTier` (sin fallback, D-17)."""
+        """Devuelve la TierConfig del tier; inexistente -> `UnknownTier` (sin fallback, D-17)."""
         try:
             return self._tiers[tier]
         except KeyError:

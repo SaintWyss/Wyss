@@ -13,7 +13,7 @@ from core.domain.knowledge import Vector
 
 
 class FakeModelProvider:
-    """ModelProvider en memoria: devuelve una ModelResponse fija o levanta una excepción inyectada."""
+    """ModelProvider en memoria: devuelve una ModelResponse fija o levanta excepción inyectada."""
 
     def __init__(
         self,
@@ -41,7 +41,7 @@ class FakeModelProvider:
 
 
 class FakeEmbeddingProvider:
-    """EmbeddingProvider determinista: un vector por texto, derivado del largo (sin red, CI-safe)."""
+    """EmbeddingProvider determinista: un vector por texto según el largo (sin red, CI-safe)."""
 
     def __init__(self, *, dims: int = 3) -> None:
         self._dims = dims
