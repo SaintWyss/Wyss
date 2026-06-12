@@ -7,6 +7,7 @@ seguridad: el secreto/budget bloquean ANTES de cualquier provider.complete (prov
 0 veces), el secreto nunca entra al audit, y el ModelResponse devuelto lleva el costo LOCAL.
 """
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -198,6 +199,56 @@ async def test_unknown_tier_propagates_without_fallback(
 
     assert provider.calls == []
     assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
+
+
+class _SlowProvider:
+    """Provider que se queda EN VUELO hasta que el test libere el evento (TOCTOU, WR-06)."""
+
+    def __init__(self, gate: asyncio.Event) -> None:
+        self._gate = gate
+        self.calls: list[ModelRequest] = []
+
+    @property
+    def name(self) -> str:
+        return "slow"
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.calls.append(request)
+        await self._gate.wait()
+        return ModelResponse(
+            text="ok", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1
+        )
+
+
+async def test_concurrent_asks_cannot_exceed_budget(
+    traces_db_path: Path, audit: FakeAuditPort
+) -> None:
+    """WR-06: con presupuesto para UNA sola llamada, dos asks concurrentes no pasan ambas.
+
+    La reserva en vuelo de la primera (est 0.513: 1 tok in + 512 max_tokens a 1.0/1k)
+    cuenta en el authorize de la segunda → BudgetExceeded, no overshoot por TOCTOU.
+    """
+    gate = asyncio.Event()
+    provider = _SlowProvider(gate)
+    gw = _build_gateway(
+        db_path=traces_db_path,
+        audit=audit,
+        provider=provider,  # type: ignore[arg-type]
+        global_budget=0.6,  # alcanza para 1 estimado (0.513), no para 2 (1.026)
+    )
+    req1 = AgentModelRequest(agent_id="a", task_id="t-c1", prompt="hola", tier="economico")
+    req2 = AgentModelRequest(agent_id="a", task_id="t-c2", prompt="hola", tier="economico")
+
+    task1 = asyncio.create_task(gw.ask(req1))
+    await asyncio.sleep(0)  # task1 reserva y queda en vuelo dentro del provider
+    task2 = asyncio.create_task(gw.ask(req2))
+    await asyncio.sleep(0)  # task2 pasa por authorize() viendo la reserva en vuelo
+    gate.set()
+    results = await asyncio.gather(task1, task2, return_exceptions=True)
+
+    assert sum(isinstance(r, BudgetExceeded) for r in results) == 1
+    assert sum(isinstance(r, ModelResponse) for r in results) == 1
+    assert len(provider.calls) == 1  # solo UNA llamada salió
 
 
 async def test_missing_provider_raises_domain_error_audited(

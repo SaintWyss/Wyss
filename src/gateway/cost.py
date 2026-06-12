@@ -52,6 +52,13 @@ class CostTracker:
         self._global_budget = global_budget
         self._agent_budgets = dict(agent_budgets)
         self._audit = audit
+        # Reservas en vuelo (WR-06): estimados de llamadas autorizadas cuyo gasto real aún
+        # no se registró. Sin esto, N asks concurrentes con presupuesto para 1 pasan TODOS
+        # el gate (TOCTOU entre authorize() y record() a través del await del provider).
+        # No requiere asyncio.Lock: reserve/release/authorize son síncronos y el event loop
+        # no suspende dentro de ellos — son atómicos respecto a otras corutinas.
+        self._inflight_global: float = 0.0
+        self._inflight_agent: dict[str, float] = {}
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path)
         for pragma in PRAGMAS:
@@ -71,16 +78,44 @@ class CostTracker:
     def authorize(
         self, agent_id: str, model_alias: str, est_in: int, est_out: int
     ) -> None:
-        """Veta con `BudgetExceeded` si gasto + estimado excede el global o el cap del agente.
+        """Veta con `BudgetExceeded` si gasto + en-vuelo + estimado excede global o cap.
 
         Se llama ANTES de `provider.complete()` (Pitfall 2). Cada retry (D-25) re-llama esto.
+        El gasto en vuelo (reservas de llamadas concurrentes aún sin record) cuenta contra
+        ambos límites (WR-06): el presupuesto es enforced también bajo concurrencia.
         """
         est = self.estimate_cost(model_alias, est_in, est_out)
-        if self.month_spend() + est > self._global_budget:
+        if self.month_spend() + self._inflight_global + est > self._global_budget:
             raise BudgetExceeded("presupuesto global mensual agotado")
         cap = self._agent_budgets.get(agent_id)
-        if cap is not None and self.month_spend_agent(agent_id) + est > cap:
-            raise BudgetExceeded(f"presupuesto del agente {agent_id} agotado")
+        if cap is not None:
+            inflight_agent = self._inflight_agent.get(agent_id, 0.0)
+            if self.month_spend_agent(agent_id) + inflight_agent + est > cap:
+                raise BudgetExceeded(f"presupuesto del agente {agent_id} agotado")
+
+    def reserve(
+        self, agent_id: str, model_alias: str, est_in: int, est_out: int
+    ) -> float:
+        """Reserva el estimado como gasto EN VUELO hasta `release()` (WR-06).
+
+        El gateway reserva tras pasar `authorize()` y libera al terminar el intento
+        (éxito o fallo): mientras el provider corre, otras corutinas concurrentes ven
+        la reserva en `authorize()` y no pueden exceder el presupuesto. Devuelve el
+        monto reservado, que DEBE pasarse a `release()`.
+        """
+        est = self.estimate_cost(model_alias, est_in, est_out)
+        self._inflight_global += est
+        self._inflight_agent[agent_id] = self._inflight_agent.get(agent_id, 0.0) + est
+        return est
+
+    def release(self, agent_id: str, amount: float) -> None:
+        """Libera una reserva en vuelo hecha con `reserve()` (piso en 0.0, nunca negativo)."""
+        self._inflight_global = max(0.0, self._inflight_global - amount)
+        remaining = self._inflight_agent.get(agent_id, 0.0) - amount
+        if remaining <= 0.0:
+            self._inflight_agent.pop(agent_id, None)
+        else:
+            self._inflight_agent[agent_id] = remaining
 
     def record(
         self,

@@ -193,6 +193,13 @@ class ModelGateway:
             except BudgetExceeded:
                 self._audit_failed(request, "presupuesto agotado")
                 raise
+            # Reserva en vuelo (WR-06): mientras el provider corre (punto de suspensión),
+            # otras corutinas concurrentes ven este estimado en authorize() y no pueden
+            # exceder el presupuesto. Se libera al terminar el intento; en el camino de
+            # éxito no hay await entre release y cost.record (sin ventana de subconteo).
+            reserved = self._cost.reserve(
+                request.agent_id, model_alias, est_in, est_out
+            )
             # (b)+(c) llamada al provider; clasificar el error.
             try:
                 return await provider.complete(model_request)
@@ -209,6 +216,11 @@ class ModelGateway:
                 # transientes por naturaleza (ej. LiteLLM caído) → retry y, agotado,
                 # TASK_FAILED auditado — el fallo de red nunca queda sin rastro.
                 last_exc = exc
+            finally:
+                # Liberar SIEMPRE la reserva del intento (éxito, fatal o transiente):
+                # en éxito, record() registra el gasto real inmediatamente después sin
+                # ceder el control; en fallo, el próximo intento re-reserva (WR-06).
+                self._cost.release(request.agent_id, reserved)
             # transiente: backoff antes de reintentar (mismo provider, sin fallback de tier).
             if attempt < self._max_retries:
                 await asyncio.sleep(self._backoff_base * 2**attempt)

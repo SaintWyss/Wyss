@@ -137,6 +137,38 @@ def test_durable_state_vetoes_after_budget_drained(traces_db_path: Path) -> None
         ct.close()
 
 
+def test_inflight_reservation_blocks_concurrent_authorize(traces_db_path: Path) -> None:
+    """(6) WR-06: una reserva en vuelo cuenta contra el gate global hasta release()."""
+    ct = _tracker(traces_db_path, global_budget=5.0)
+    try:
+        ct.authorize("a", "gemini-default", 1000, 500)  # 3.0 <= 5.0: pasa
+        reserved = ct.reserve("a", "gemini-default", 1000, 500)  # 3.0 en vuelo
+        # Segunda llamada concurrente: 3.0 (en vuelo) + 3.0 (est) > 5.0 → veta.
+        with pytest.raises(BudgetExceeded, match="global"):
+            ct.authorize("b", "gemini-default", 1000, 500)
+        ct.release("a", reserved)
+        # Liberada la reserva (la primera llamada falló), la segunda vuelve a pasar.
+        ct.authorize("b", "gemini-default", 1000, 500)
+    finally:
+        ct.close()
+
+
+def test_inflight_reservation_counts_against_agent_cap(traces_db_path: Path) -> None:
+    """(6b) WR-06: la reserva en vuelo del agente cuenta contra SU cap, no contra otros."""
+    ct = _tracker(
+        traces_db_path, global_budget=1000.0, agent_budgets={"belgrano": 5.0}
+    )
+    try:
+        reserved = ct.reserve("belgrano", "gemini-default", 1000, 500)  # 3.0 en vuelo
+        with pytest.raises(BudgetExceeded, match="belgrano"):
+            ct.authorize("belgrano", "gemini-default", 1000, 500)  # 3.0 + 3.0 > 5.0
+        ct.authorize("otro", "gemini-default", 1000, 500)  # otro agente: no afectado
+        ct.release("belgrano", reserved)
+        ct.authorize("belgrano", "gemini-default", 1000, 500)  # liberada: pasa
+    finally:
+        ct.close()
+
+
 def test_month_window_excludes_previous_month(traces_db_path: Path) -> None:
     """(5b) el gasto se calcula por ventana de mes calendario sobre created_at."""
     ct = _tracker(traces_db_path, global_budget=10.0)
