@@ -15,16 +15,24 @@ para errores de validación, el campo (loc). El `sys.exit` se deja al caller CLI
 de modo que el comportamiento sea testeable con `pytest.raises` sin matar el proceso.
 """
 
+import os
+import re
 import tomllib
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from core.domain.config import WyssSettings
+from core.domain.config import GatewaySettings, WyssSettings
 from core.domain.errors import ConfigError
+from core.domain.gateway import TierConfig
 from core.domain.policy import AggregateThresholds, DenyRule, PolicyRules
 from core.domain.risk import RiskLevel
 from core.policy.builtin_deny import BUILTIN_DENY
+
+# Variables del .env que el gateway conoce: sus valores se cargan al boot como `env_values`
+# del minimizer (D-21), para el bloqueo por substring exacto. Sus NOMBRES viven acá; los
+# VALORES salen de os.environ y nunca se loguean ni entran a config.toml/traces (V2/V7).
+_GATEWAY_ENV_KEYS: tuple[str, ...] = ("ANTHROPIC_API_KEY", "LITELLM_MASTER_KEY")
 
 # Niveles base por action_type (docs/13). Fail-closed: lo desconocido lo resuelve el engine a C.
 _BASE_LEVELS: dict[str, RiskLevel] = {
@@ -63,6 +71,43 @@ class PolicyConfigModel(BaseModel):
     deny: list[DenyRuleModel] = []
 
 
+class TierConfigModel(BaseModel):
+    """Un tier de la sección [gateway.tiers]: provider + alias + tope de tokens (D-16)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model_alias: str
+    max_tokens: int
+
+
+class SecretPatternModel(BaseModel):
+    """Patrón de secreto ADICIONAL por config (D-21): se agrega a los built-in, no los vacía."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    regex: str
+
+
+class GatewayConfigModel(BaseModel):
+    """Sección [gateway]: tiers, precios, presupuesto, timeout, retención, patrones extra.
+
+    `extra="forbid"` fail-closed (un typo aborta el boot). Mapea a `GatewaySettings` frozen
+    en `_to_gateway_settings` (Pydantic muere ahí). Defaults de timeout/retención por D-25/D-22.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tiers: dict[str, TierConfigModel] = {}
+    prices: dict[str, float] = {}
+    global_budget: float = 0.0
+    agent_budgets: dict[str, float] = {}
+    timeout_s: float = 120.0
+    trace_retention_days: int = 90
+    secret_patterns: list[SecretPatternModel] = []
+
+
 class WyssConfigModel(BaseModel):
     """Raíz del config.toml validado. `frozen=True` + `extra="forbid"` (fail-closed total)."""
 
@@ -71,6 +116,7 @@ class WyssConfigModel(BaseModel):
     data_dir: Path
     audit_db: Path
     policy: PolicyConfigModel = PolicyConfigModel()
+    gateway: GatewayConfigModel = GatewayConfigModel()
 
 
 def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
@@ -81,6 +127,50 @@ def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
         description=model.description,
         action_type=model.match_action,
         target_patterns=targets,
+    )
+
+
+def _gateway_env_values() -> tuple[str, ...]:
+    """Valores reales del .env que el gateway conoce (D-21), leídos de os.environ al boot.
+
+    Solo los VALORES (para el bloqueo por substring del minimizer); los nombres viven en
+    `_GATEWAY_ENV_KEYS`. Un valor ausente se omite — no se inventa ni se loguea (V2/V7).
+    """
+    return tuple(
+        value for key in _GATEWAY_ENV_KEYS if (value := os.environ.get(key))
+    )
+
+
+def _to_gateway_settings(model: GatewayConfigModel) -> GatewaySettings:
+    """Mapea la sección [gateway] Pydantic → GatewaySettings frozen (Pydantic muere acá).
+
+    Los regex de secret_patterns se compilan/validan acá: un regex inválido → ConfigError
+    legible al boot (fail-fast). Los patrones son ADITIVOS — el GatewaySettings lleva SOLO los
+    de config; el merge con `BUILTIN_SECRET_PATTERNS` lo hace el minimizer en runtime (D-21).
+    """
+    config_patterns: list[tuple[str, str]] = []
+    for sp in model.secret_patterns:
+        try:
+            re.compile(sp.regex)
+        except re.error as e:
+            raise ConfigError(
+                f"regex inválido en [gateway.secret_patterns] '{sp.name}': {e}"
+            ) from e
+        config_patterns.append((sp.name, sp.regex))
+    return GatewaySettings(
+        tiers={
+            name: TierConfig(
+                provider=t.provider, model_alias=t.model_alias, max_tokens=t.max_tokens
+            )
+            for name, t in model.tiers.items()
+        },
+        prices=dict(model.prices),
+        global_budget=model.global_budget,
+        agent_budgets=dict(model.agent_budgets),
+        timeout_s=model.timeout_s,
+        trace_retention_days=model.trace_retention_days,
+        env_values=_gateway_env_values(),
+        config_patterns=tuple(config_patterns),
     )
 
 
@@ -104,7 +194,12 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         base_levels=dict(_BASE_LEVELS),
         thresholds=thresholds,
     )
-    return WyssSettings(data_dir=model.data_dir, audit_db=model.audit_db, policy=policy)
+    return WyssSettings(
+        data_dir=model.data_dir,
+        audit_db=model.audit_db,
+        policy=policy,
+        gateway=_to_gateway_settings(model.gateway),
+    )
 
 
 def load_settings(path: Path) -> WyssSettings:

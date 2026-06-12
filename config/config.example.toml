@@ -49,3 +49,48 @@ sensitive_dirs = [
 # id = "no-tocar-proyectos-criticos"
 # match_target = "~/Data/10_Workspace/projects/**"
 # match_action = "file.delete"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gateway de modelos (Fase 2): único punto de salida a IA externa (GATE-01..05).
+#
+# NUNCA poner API keys acá: ANTHROPIC_API_KEY / LITELLM_MASTER_KEY viven SOLO en
+# `.env` (os.environ) — el gateway las lee del entorno, jamás de este archivo.
+[gateway]
+# Presupuesto GLOBAL mensual en USD (hard-stop pre-autorizado, D-18). Al agotarse,
+# la llamada se veta ANTES de salir; el destrabe es editar esto + reload (D-19).
+global_budget = 50.0
+# Timeout por llamada en segundos (D-25).
+timeout_s = 120.0
+# Retención de traces en días; los traces vencidos se purgan (audit es forever, D-22).
+trace_retention_days = 90
+
+# Tiers: el caller declara el tier, el router resuelve a provider+modelo (D-16, sin
+# fallback automático entre tiers, D-17). Los aliases referencian modelos REALES del
+# LiteLLM del owner (localhost:4000): gemini-default, deepseek-default, qwen-default.
+[gateway.tiers.economico]
+provider = "litellm"
+model_alias = "gemini-default"
+max_tokens = 1024
+
+[gateway.tiers.fuerte]
+provider = "anthropic"
+model_alias = "claude-opus-4-6"
+max_tokens = 4096
+
+# Tabla de precios LOCAL por alias (USD por 1K tokens, D-24): el costo se calcula
+# determinístico acá, nunca dependiendo de que el provider lo reporte bien.
+[gateway.prices]
+gemini-default = 0.0005
+deepseek-default = 0.0003
+qwen-default = 0.0004
+claude-opus-4-6 = 0.015
+
+# Límite opcional por agente (USD/mes). Prepara AGENT-02 (presupuesto por agente).
+[gateway.agent_budgets]
+belgrano = 10.0
+
+# Patrones de secreto ADICIONALES (D-21): se AGREGAN a los built-in (sk-ant-, AKIA,
+# ghp_, JWT, PEM...), nunca los vacían. Útil para formatos internos del owner.
+# [[gateway.secret_patterns]]
+# name = "token_interno_wyss"
+# regex = "WYSS-[A-Z0-9]{16}"

@@ -2,7 +2,7 @@
 
 from core.domain.agent import AgentDefinition, Report
 from core.domain.audit import ActorType, AuditEvent, AuditEventType, Span
-from core.domain.config import WyssSettings
+from core.domain.config import GatewaySettings, WyssSettings
 from core.domain.errors import (
     AuditIntegrityError,
     BudgetExceeded,
@@ -60,6 +60,8 @@ __all__ = [
     # policy
     "DenyRule",
     "ExtractedContent",
+    # config
+    "GatewaySettings",
     "Hit",
     "IndexEntry",
     # gateway
