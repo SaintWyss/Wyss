@@ -1,0 +1,171 @@
+"""CostTracker — gate de presupuesto pre-autorización + registro de gasto (GATE-04, D-18/D-24).
+
+`authorize()` veta con `BudgetExceeded` ANTES de cada llamada al provider: lee el gasto
+acumulado del mes (durable en spend_ledger), suma el costo estimado LOCAL y compara contra el
+presupuesto global y el cap por-agente. Si excede, levanta — la llamada nunca sale (Pitfall 2:
+un presupuesto que solo registra después es advisory, no enforced).
+
+El costo SIEMPRE se calcula local (`(in+out)/1000 * precio_config`, D-24): el costo reportado
+por el provider se guarda comparativo en `cost_usd_provider` pero NUNCA gobierna el gate. No
+existe API runtime para mutar el presupuesto (D-19, regla #6) — destrabe solo editando config
++ reload; esta clase no expone setters de límites.
+
+El estado de gasto vive en una tabla `spend_ledger` dentro de traces.db (una sola DB de
+gateway, Open Question 3); el DDL lo aporta `traces_schema.apply_schema`.
+"""
+
+import sqlite3
+from datetime import UTC, datetime
+from pathlib import Path
+from types import TracebackType
+
+from core.domain.audit import ActorType, AuditEvent, AuditEventType
+from core.domain.errors import BudgetExceeded
+from core.ports.audit import AuditPort
+from gateway.traces_schema import PRAGMAS, apply_schema
+
+_INSERT = (
+    "INSERT INTO spend_ledger "
+    "(agent_id, model_alias, tokens_in, tokens_out, "
+    "cost_usd_local, cost_usd_provider, created_at) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+)
+
+
+class CostTracker:
+    """Gate de presupuesto: veta pre-autorización (D-18) + registra gasto local durable (D-24).
+
+    Sin setters de límites: el presupuesto solo cambia editando config + reload (D-19, regla #6).
+    """
+
+    def __init__(
+        self,
+        db_path: Path,
+        prices: dict[str, float],
+        global_budget: float,
+        agent_budgets: dict[str, float],
+        audit: AuditPort,
+    ) -> None:
+        """Abre la DB de gateway (WAL fail-fast vía apply_schema) y fija límites inmutables."""
+        self._db_path = db_path
+        self._prices = dict(prices)
+        self._global_budget = global_budget
+        self._agent_budgets = dict(agent_budgets)
+        self._audit = audit
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(db_path)
+        for pragma in PRAGMAS:
+            self._conn.execute(pragma)
+        apply_schema(self._conn)
+
+    def estimate_cost(
+        self, model_alias: str, est_tokens_in: int, est_tokens_out: int
+    ) -> float:
+        """Costo local estimado: (in+out)/1000 * precio del alias (D-24).
+
+        `KeyError` si el alias no tiene precio en config — fail-fast, config incompleta.
+        """
+        price = self._prices[model_alias]
+        return (est_tokens_in + est_tokens_out) / 1000 * price
+
+    def authorize(
+        self, agent_id: str, model_alias: str, est_in: int, est_out: int
+    ) -> None:
+        """Veta con `BudgetExceeded` si gasto + estimado excede el global o el cap del agente.
+
+        Se llama ANTES de `provider.complete()` (Pitfall 2). Cada retry (D-25) re-llama esto.
+        """
+        est = self.estimate_cost(model_alias, est_in, est_out)
+        if self.month_spend() + est > self._global_budget:
+            raise BudgetExceeded("presupuesto global mensual agotado")
+        cap = self._agent_budgets.get(agent_id)
+        if cap is not None and self.month_spend_agent(agent_id) + est > cap:
+            raise BudgetExceeded(f"presupuesto del agente {agent_id} agotado")
+
+    def record(
+        self,
+        agent_id: str,
+        model_alias: str,
+        tokens_in: int,
+        tokens_out: int,
+        provider_reported_cost: float | None = None,
+        created_at: str | None = None,
+    ) -> float:
+        """Persiste el gasto real (costo LOCAL, D-24) y sube el acumulado del mes.
+
+        `provider_reported_cost` se guarda solo comparativo — NUNCA gobierna el gate (D-24).
+        Devuelve el costo local registrado. Emite un evento COST_RECORDED al audit (nunca con
+        el secreto, solo metadatos de costo).
+        """
+        cost_local = self.estimate_cost(model_alias, tokens_in, tokens_out)
+        ts = created_at if created_at is not None else datetime.now(UTC).isoformat()
+        self._conn.execute(
+            _INSERT,
+            (
+                agent_id,
+                model_alias,
+                tokens_in,
+                tokens_out,
+                cost_local,
+                provider_reported_cost,
+                ts,
+            ),
+        )
+        self._conn.commit()
+        self._audit.log(
+            AuditEvent.new(
+                actor_type=ActorType.SYSTEM,
+                actor_id=agent_id,
+                event_type=AuditEventType.COST_RECORDED,
+                message=f"costo registrado para {model_alias}",
+                payload={
+                    "model_alias": model_alias,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "cost_usd_local": cost_local,
+                    "cost_usd_provider": provider_reported_cost,
+                },
+            )
+        )
+        return cost_local
+
+    def month_spend(self) -> float:
+        """Gasto local acumulado en el mes calendario actual (ventana sobre created_at)."""
+        (total,) = self._conn.execute(
+            "SELECT COALESCE(SUM(cost_usd_local), 0.0) FROM spend_ledger "
+            "WHERE created_at >= ?",
+            (self._month_start_iso(),),
+        ).fetchone()
+        return float(total)
+
+    def month_spend_agent(self, agent_id: str) -> float:
+        """Gasto local del agente en el mes calendario actual."""
+        (total,) = self._conn.execute(
+            "SELECT COALESCE(SUM(cost_usd_local), 0.0) FROM spend_ledger "
+            "WHERE agent_id = ? AND created_at >= ?",
+            (agent_id, self._month_start_iso()),
+        ).fetchone()
+        return float(total)
+
+    @staticmethod
+    def _month_start_iso() -> str:
+        """ISO del primer instante del mes calendario actual en UTC."""
+        now = datetime.now(UTC)
+        return now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+
+    def close(self) -> None:
+        """Cierra la conexión subyacente."""
+        self._conn.close()
+
+    def __enter__(self) -> "CostTracker":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
