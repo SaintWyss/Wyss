@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: executing
-last_updated: "2026-06-12T00:52:23.319Z"
+status: completed
+last_updated: "2026-06-12T13:41:04.698Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 10
+  completed_plans: 11
+  percent: 20
 ---
 
 # Wyss — State
@@ -24,11 +24,11 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 02 (gateway-de-modelos) — EXECUTING
+Phase: 02 (gateway-de-modelos) — COMPLETE
 Plan: 5 of 5
 
-- **Phase:** 2 of 10 (gateway de modelos)
-- **Status:** Ready to execute
+- **Phase:** 2 of 10 (gateway de modelos) — COMPLETE
+- **Status:** Phase 02 complete (5/5 planes); listo para transición a Fase 03
 - **Last activity:** 2026-06-12
 
 ## Decisions Log
@@ -67,6 +67,10 @@ Plan: 5 of 5
 | 2026-06-12 | `TraceStore` NO append-only: replica el WAL fail-fast de audit pero omite triggers; `purge_older_than(90d)` (D-22) | traces expira por retención, audit es forever; `TraceIntegrityError` nuevo nombra el subsistema correcto (02-04) |
 | 2026-06-12 | `spend_ledger` del gate de costo vive en `traces.db` (una sola DB de gateway, Open Question 3) | `CostTracker` y `TraceStore` comparten la DB; el DDL del ledger lo aporta `traces_schema.apply_schema` idempotente (02-04) |
 | 2026-06-12 | `CostTracker.authorize` veta con `BudgetExceeded` ANTES de la llamada; costo LOCAL gobierna, no el del provider; sin setters de límites | Presupuesto enforced no advisory (Pitfall 2, D-18/D-24); test verifica que el provider nunca se invoca al exceder; destrabe solo por config+reload (D-19) (02-04) |
+| 2026-06-12 | `ModelGateway.ask` orquesta Flow 4 con retry centralizado en el gateway (no en providers) | D-25: 2x transiente (429/5xx/timeout), 4xx fail-fast, gate re-pasado cada intento, sin fallback de tier; evita doble-retry (Pitfall 1) (02-05) |
+| 2026-06-12 | `GatewaySettings` frozen con default vacío en `WyssSettings` | No rompe configs de Fase 1 sin sección [gateway]; sección presente se valida fail-closed (extra=forbid) (02-05) |
+| 2026-06-12 | `build_gateway` es el único composition root del gateway; API keys solo de os.environ | Pattern 4: cablea adapters+application+facade; AuditPort inyectado nunca import audit; keys jamás en config/traces/AuditEvent (V2, Pitfall 4) (02-05) |
+| 2026-06-12 | `traces.db` con chmod 0600 en `TraceStore` (best-effort, suppress OSError) | T-02-trace-file-perms: prompts completos post-min restringidos al owner; cubre toda creación de la DB, tolerante a FS sin modos POSIX (02-05) |
 
 ## Blockers
 
