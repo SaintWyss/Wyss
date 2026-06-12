@@ -48,8 +48,8 @@
 5. `--estimate` proyecta chunks y costo antes de llamar a la API; la indexación muestra progreso con ETA
 6. Registrar un extractor nuevo no modifica una línea del pipeline (test de extensibilidad)
 
-**Plans:** 7 plans
-- [ ] 03-01-PLAN.md — fundación: deps + dominio de ingesta + errores + sección [ingest] + scaffolding de tests (Wave 0)
+**Plans:** 1/7 plans executed
+- [x] 03-01-PLAN.md — fundación: deps + dominio de ingesta + errores + sección [ingest] + scaffolding de tests (Wave 0)
 - [ ] 03-02-PLAN.md — StateStore: index.db WAL fail-fast + incremental (KNOW-02) + reanudable (KNOW-03)
 - [ ] 03-03-PLAN.md — SecretFilter de 3 capas, puro e inyectado (KNOW-07)
 - [ ] 03-04-PLAN.md — Scanner + ExtractorRegistry (plugin pattern) + 6 extractores (KNOW-06)
