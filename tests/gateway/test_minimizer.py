@@ -76,7 +76,12 @@ _ENV_TRAP = "mi-litellm-master-key-ultra-secreta"
 _TRAP_CASES: tuple[tuple[str, str | None, str, str], ...] = (
     ("env_value", _ENV_TRAP, _ENV_TRAP, "env_value"),
     ("anthropic", None, "sk-ant-api03-0123456789abcdefghij", "anthropic_key"),
-    ("openai", None, "sk-proj0123456789abcdefghij", "openai_key"),
+    ("openai_legacy", None, "sk-0123456789abcdefghijklmnop", "openai_key"),
+    # Shape REAL de las keys modernas de OpenAI: sk-proj- CON guión tras "proj" (CR-01).
+    # El patrón legacy (sk- + 20 alfanuméricos) NO la cubre; openai_proj sí debe bloquearla.
+    ("openai_proj", None, "sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12", "openai_proj"),
+    # Google API key shape real: AIza + 35 chars (CR-01) — antes egresaba sin bloqueo.
+    ("google", None, "AIzaSyA1234567890abcdefghijklmnopqrstuv", "google_api"),
     ("aws", None, "AKIA0123456789ABCDEF", "aws_access"),
     ("github", None, "ghp_0123456789abcdefghij0123456789abcdef", "github_pat"),
     ("jwt", None, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.abc-DEF_123", "jwt"),

@@ -17,6 +17,7 @@ import httpx
 import pytest
 import respx
 
+from bootstrap.config import load_settings
 from bootstrap.gateway import build_gateway
 from core.domain.audit import AuditEventType
 from core.domain.config import GatewaySettings
@@ -34,6 +35,9 @@ from tests.ports.fakes import FakeAuditPort
 # el resto son formatos built-in. NINGUNO debe producir egress.
 _FORMAT_TRAPS: list[tuple[str, str]] = [
     ("anthropic_key", "sk-ant-aaaaaaaaaaaaaaaaaaaaaaaa"),
+    # Shape real moderno de OpenAI (sk-proj- CON guión) y Google (AIza+35) — CR-01.
+    ("openai_proj", "sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12"),
+    ("google_api", "AIzaSyA1234567890abcdefghijklmnopqrstuv"),
     ("aws_access", "AKIAIOSFODNN7EXAMPLE"),
     ("github_pat", "ghp_" + "a" * 36),
     ("jwt", "eyJhbGciOiJI.eyJzdWIiOiJ.SflKxwRJSMeKK"),  # shape JWT
@@ -114,6 +118,56 @@ async def test_env_value_secret_never_egresses(
     for e in failed:
         assert secret not in str(e.payload)
         assert secret not in e.message
+    assert any(e.payload.get("pattern") == "env_value" for e in failed)
+
+
+@pytest.mark.parametrize("env_key", ["GOOGLE_API_KEY", "OPENAI_API_KEY"])
+async def test_documented_env_key_value_never_egresses(
+    env_key: str,
+    tmp_path: Path,
+    audit: FakeAuditPort,
+    respx_mock: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-01: el VALOR de GOOGLE_API_KEY/OPENAI_API_KEY exportado entra a la red env-value
+    vía bootstrap (load_settings) y bloquea sin egress aunque su formato no sea built-in."""
+    secret = f"valor-real-de-{env_key.lower()}-zz9912"
+    monkeypatch.setenv(env_key, secret)
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        'data_dir = "data"\n'
+        'audit_db = "data/audit.db"\n'
+        "\n"
+        "[gateway]\n"
+        "global_budget = 10.0\n"
+        "\n"
+        "[gateway.tiers.economico]\n"
+        'provider = "litellm"\n'
+        'model_alias = "gemini-default"\n'
+        "max_tokens = 64\n"
+        "\n"
+        "[gateway.prices]\n"
+        "gemini-default = 0.001\n",
+        encoding="utf-8",
+    )
+    settings = load_settings(config_path)
+    assert secret in settings.gateway.env_values  # bootstrap SÍ carga la clave (CR-01)
+    async with httpx.AsyncClient() as client:
+        gw = build_gateway(
+            settings.gateway, client=client, audit=audit, data_dir=str(tmp_path)
+        )
+        req = AgentModelRequest(
+            agent_id="a", task_id="t", prompt=f"la clave es {secret}", tier="economico"
+        )
+        with pytest.raises(SecretDetected):
+            await gw.ask(req)
+
+    assert respx_mock.calls.call_count == 0  # NINGÚN egress
+    failed = [e for e in audit.events if e.event_type is AuditEventType.TASK_FAILED]
+    assert failed
+    for e in failed:
+        assert secret not in e.message
+        assert secret not in str(e.payload)
     assert any(e.payload.get("pattern") == "env_value" for e in failed)
 
 

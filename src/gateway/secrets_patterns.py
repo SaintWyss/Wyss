@@ -21,6 +21,12 @@ from typing import Final
 BUILTIN_SECRET_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     ("anthropic_key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")),
     ("openai_key", re.compile(r"sk-[A-Za-z0-9]{20,}")),
+    # Formato moderno de OpenAI (sk-proj-…): el guión tras "proj" corta el patrón legacy,
+    # así que necesita su propio regex (CR-01 — una key real sk-proj- no debe egresar).
+    ("openai_proj", re.compile(r"sk-proj-[A-Za-z0-9_\-]{20,}")),
+    # Google API keys (AIza + 35 chars; gitleaks/secrets-patterns-db) — GOOGLE_API_KEY está
+    # documentada en config/.env.example y debe quedar cubierta por regex built-in (CR-01).
+    ("google_api", re.compile(r"AIza[0-9A-Za-z_\-]{35}")),
     ("aws_access", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("github_pat", re.compile(r"ghp_[A-Za-z0-9]{36}")),
     ("github_fine", re.compile(r"github_pat_[A-Za-z0-9_]{50,}")),

@@ -32,7 +32,14 @@ from core.policy.builtin_deny import BUILTIN_DENY
 # Variables del .env que el gateway conoce: sus valores se cargan al boot como `env_values`
 # del minimizer (D-21), para el bloqueo por substring exacto. Sus NOMBRES viven acá; los
 # VALORES salen de os.environ y nunca se loguean ni entran a config.toml/traces (V2/V7).
-_GATEWAY_ENV_KEYS: tuple[str, ...] = ("ANTHROPIC_API_KEY", "LITELLM_MASTER_KEY")
+# Cubre TODOS los secretos documentados en config/.env.example (CR-01): si una clave nueva
+# se documenta ahí, DEBE agregarse acá para que entre a la red de substring del minimizer.
+_GATEWAY_ENV_KEYS: tuple[str, ...] = (
+    "ANTHROPIC_API_KEY",
+    "LITELLM_MASTER_KEY",
+    "GOOGLE_API_KEY",
+    "OPENAI_API_KEY",
+)
 
 # Niveles base por action_type (docs/13). Fail-closed: lo desconocido lo resuelve el engine a C.
 _BASE_LEVELS: dict[str, RiskLevel] = {

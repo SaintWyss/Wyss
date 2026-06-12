@@ -123,6 +123,27 @@ regex = "INT-[0-9"
         load_settings(write_config(bad))
 
 
+def test_env_values_cover_all_documented_env_keys(
+    write_config: Callable[[str], Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CR-01: los CUATRO secretos documentados en config/.env.example entran a env_values.
+
+    GOOGLE_API_KEY y OPENAI_API_KEY quedaban fuera de la red de substring del minimizer.
+    """
+    expected = {
+        "ANTHROPIC_API_KEY": "valor-anthropic-de-test-123",
+        "LITELLM_MASTER_KEY": "valor-litellm-de-test-456",
+        "GOOGLE_API_KEY": "valor-google-de-test-789",
+        "OPENAI_API_KEY": "valor-openai-de-test-012",
+    }
+    for key, value in expected.items():
+        monkeypatch.setenv(key, value)
+
+    settings = load_settings(write_config(_VALID))
+
+    assert set(expected.values()) <= set(settings.gateway.env_values)
+
+
 def test_config_patterns_do_not_include_builtins(
     write_config: Callable[[str], Path],
 ) -> None:
