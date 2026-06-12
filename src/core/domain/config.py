@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.domain.gateway import TierConfig
+from core.domain.knowledge import IngestSettings
 from core.domain.policy import PolicyRules
 
 
@@ -46,3 +47,4 @@ class WyssSettings:
     gateway: GatewaySettings = field(
         default_factory=lambda: GatewaySettings(tiers={}, prices={}, global_budget=0.0)
     )
+    ingest: IngestSettings = field(default_factory=IngestSettings)

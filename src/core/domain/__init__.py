@@ -51,11 +51,8 @@ from core.domain.task import Task, TaskStatus
 
 __all__ = [
     "DEFAULT_SENSITIVE_DIRS",
-    # plan
     "Action",
-    # audit
     "ActorType",
-    # agent
     "AgentDefinition",
     "AgentModelRequest",
     "AggregateThresholds",
@@ -64,28 +61,19 @@ __all__ = [
     "AuditIntegrityError",
     "BudgetExceeded",
     "Chunk",
-    # errors
     "ConfigError",
-    # policy
     "DenyRule",
-    # knowledge (ingest results)
     "EstimateResult",
     "ExtractedContent",
-    # errors (ingesta)
     "ExtractionError",
-    # knowledge (ingest records)
     "FileRecord",
     "FileStatus",
-    # config
     "GatewaySettings",
     "Hit",
-    # errors (ingesta)
-    "IndexIntegrityError",
     "IndexEntry",
-    # knowledge (ingest results)
+    "IndexIntegrityError",
     "IngestRunResult",
     "IngestSettings",
-    # gateway
     "ModelRequest",
     "ModelResponse",
     "Outcome",
@@ -96,30 +84,21 @@ __all__ = [
     "PolicyViolation",
     "Query",
     "Report",
-    # risk
     "RiskLevel",
     "SecretDetected",
-    # errors (ingesta)
     "SecretFileExcluded",
     "SourceFile",
     "Span",
-    # security
     "Subject",
-    # task
     "Task",
     "TaskStatus",
     "TierConfig",
-    # execution
     "ToolResult",
     "UnknownTier",
-    # errors (ingesta)
     "UnsupportedFileError",
-    # knowledge
     "Vector",
     "Verification",
-    # errors
     "WyssError",
-    # config
     "WyssSettings",
     "outcome_for",
 ]

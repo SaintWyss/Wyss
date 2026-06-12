@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from core.domain.config import GatewaySettings, WyssSettings
 from core.domain.errors import ConfigError
 from core.domain.gateway import TierConfig
+from core.domain.knowledge import IngestSettings
 from core.domain.policy import AggregateThresholds, DenyRule, PolicyRules
 from core.domain.risk import RiskLevel
 from core.policy.builtin_deny import BUILTIN_DENY
@@ -183,6 +184,35 @@ class GatewayConfigModel(BaseModel):
     secret_patterns: list[SecretPatternModel] = []
 
 
+class IngestConfigModel(BaseModel):
+    """Sección [ingest]: configuración del pipeline de ingesta (D-33/D-42).
+
+    `extra="forbid"` fail-closed: un typo en la clave aborta el boot con ConfigError legible
+    (T-03-01). Mapea a `IngestSettings` frozen en `_to_ingest_settings` (Pydantic muere ahí).
+    Las listas se convierten a tuplas en la conversión — IngestSettings es frozen (no listas).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_size_tokens: int = 512
+    chunk_overlap_tokens: int = 51  # ~10% de 512
+    max_file_bytes: int = 104_857_600  # 100 MB (D-41)
+    dir_denylist: list[str] = [
+        ".git",
+        "node_modules",
+        ".cache",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+        ".tox",
+    ]
+    entropy_allowlist: list[str] = []  # D-30: globs que desactivan capa 3
+    default_kb_id: str = "default"  # Open Question 2: default si no se especifica --bc
+    max_attempts: int = 3  # D-39: reintentos automáticos antes de --retry-failed
+
+
 class WyssConfigModel(BaseModel):
     """Raíz del config.toml validado. `frozen=True` + `extra="forbid"` (fail-closed total)."""
 
@@ -192,6 +222,7 @@ class WyssConfigModel(BaseModel):
     audit_db: Path
     policy: PolicyConfigModel = PolicyConfigModel()
     gateway: GatewayConfigModel = GatewayConfigModel()
+    ingest: IngestConfigModel = IngestConfigModel()
 
 
 def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
@@ -255,6 +286,23 @@ def _to_gateway_settings(model: GatewayConfigModel) -> GatewaySettings:
     )
 
 
+def _to_ingest_settings(model: IngestConfigModel) -> IngestSettings:
+    """Mapea la sección [ingest] Pydantic → IngestSettings frozen (Pydantic muere acá).
+
+    Las listas Pydantic se convierten a tuplas porque IngestSettings es frozen (no puede tener
+    listas mutables). Espejo de `_to_gateway_settings`.
+    """
+    return IngestSettings(
+        chunk_size_tokens=model.chunk_size_tokens,
+        chunk_overlap_tokens=model.chunk_overlap_tokens,
+        max_file_bytes=model.max_file_bytes,
+        dir_denylist=tuple(model.dir_denylist),
+        entropy_allowlist=tuple(model.entropy_allowlist),
+        default_kb_id=model.default_kb_id,
+        max_attempts=model.max_attempts,
+    )
+
+
 def _to_settings(model: WyssConfigModel) -> WyssSettings:
     """Construye el WyssSettings de dominio desde el modelo Pydantic validado.
 
@@ -280,6 +328,7 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         audit_db=model.audit_db,
         policy=policy,
         gateway=_to_gateway_settings(model.gateway),
+        ingest=_to_ingest_settings(model.ingest),
     )
 
 

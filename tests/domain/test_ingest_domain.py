@@ -56,8 +56,8 @@ def test_ingest_settings_is_frozen() -> None:
     assert s.default_kb_id == "default"
     assert s.max_attempts == 3
 
-    # Frozen: no se puede asignar
-    with pytest.raises(Exception):
+    # Frozen: dataclasses frozen levantan FrozenInstanceError (subclase de AttributeError)
+    with pytest.raises(AttributeError):
         s.chunk_size_tokens = 999  # type: ignore[misc]
 
 
