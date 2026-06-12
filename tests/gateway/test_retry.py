@@ -105,6 +105,24 @@ async def test_4xx_fail_fast_no_retry(
     assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
 
 
+async def test_connect_error_retries_and_audits(
+    traces_db_path: Path, audit: FakeAuditPort, respx_mock: respx.MockRouter
+) -> None:
+    """WR-05: ConnectError (LiteLLM caído) es transiente: reintenta y, agotado, re-raise
+    con TASK_FAILED auditado — el fallo de red nunca propaga crudo sin rastro."""
+    route = respx_mock.post(_LITELLM_URL).mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+    async with httpx.AsyncClient() as client:
+        gw = _build_gateway(db_path=traces_db_path, audit=audit, client=client)
+        req = AgentModelRequest(agent_id="a", task_id="t-4", prompt="hola")
+        with pytest.raises(httpx.ConnectError):
+            await gw.ask(req)
+
+    assert route.call_count == 3  # 1 + 2 retries (transiente, D-25)
+    assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
+
+
 async def test_transient_exhausts_retries(
     traces_db_path: Path, audit: FakeAuditPort, respx_mock: respx.MockRouter
 ) -> None:

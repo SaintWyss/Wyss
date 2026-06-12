@@ -185,7 +185,7 @@ class ModelGateway:
                 f"provider '{provider_name}' del tier no está construido en el gateway; "
                 f"disponibles: {', '.join(sorted(self._providers)) or '(ninguno)'}"
             )
-        last_exc: httpx.HTTPStatusError | httpx.TimeoutException | None = None
+        last_exc: httpx.HTTPStatusError | httpx.TransportError | None = None
         for attempt in range(self._max_retries + 1):
             # (a) gate pre-autorización RE-PASADO en cada intento (D-18/D-25).
             try:
@@ -204,7 +204,10 @@ class ModelGateway:
                         request, f"error fatal del provider: {exc.response.status_code}"
                     )
                     raise
-            except httpx.TimeoutException as exc:
+            except httpx.TransportError as exc:
+                # TransportError cubre timeout/ConnectError/RemoteProtocolError (WR-05):
+                # transientes por naturaleza (ej. LiteLLM caído) → retry y, agotado,
+                # TASK_FAILED auditado — el fallo de red nunca queda sin rastro.
                 last_exc = exc
             # transiente: backoff antes de reintentar (mismo provider, sin fallback de tier).
             if attempt < self._max_retries:
