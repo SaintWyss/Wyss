@@ -9,6 +9,8 @@ El `prompt` guardado es POST-minimizer (sin secretos, D-22). Vive en `gateway/`,
 `audit/`: traces != audit (Pitfall 4 — no rompe el contrato de independencia de import-linter).
 """
 
+import contextlib
+import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -54,6 +56,11 @@ class TraceStore:
         self._db_path = db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path)
+        # traces.db contiene prompts/outputs COMPLETOS post-min (D-22): restringir a 0600
+        # (solo el owner) — T-02-trace-file-perms. best-effort: en FS sin modos POSIX (NTFS)
+        # chmod puede no aplicar, pero no debe abortar el boot del store.
+        with contextlib.suppress(OSError):
+            os.chmod(db_path, 0o600)
         journal_mode: str | None = None
         for pragma in PRAGMAS:
             row = self._conn.execute(pragma).fetchone()
