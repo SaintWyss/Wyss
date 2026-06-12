@@ -56,3 +56,71 @@ def test_env_value_trivial_corto_no_bloquea() -> None:
     assert m.scan("abc es parte de abcdef y un commit abc123") == (
         "abc es parte de abcdef y un commit abc123"
     )
+
+
+# --- Suite de seguridad: fixture "secreto trampa" multi-formato (GATE-03, criterion 2) ----
+#
+# Cada caso es (id_legible, env_value_plantado_o_None, secreto_trampa, pattern_name_esperado).
+# Cubre TODOS los formatos del criterio 2 del ROADMAP: env-value + sk-ant- + sk- + AKIA +
+# ghp_ + JWT + PEM private key multilínea. El secreto se embebe en texto legítimo y scan()
+# DEBE bloquear: el fixture trampa nunca aparece en un payload saliente.
+
+_PEM_TRAP = (
+    "-----BEGIN RSA PRIVATE KEY-----\n"
+    "MIIEpAIBAAKCAQEA0123456789abcdefghijklmnopqrstuvwxyz\n"
+    "-----END RSA PRIVATE KEY-----"
+)
+
+_ENV_TRAP = "mi-litellm-master-key-ultra-secreta"
+
+_TRAP_CASES: tuple[tuple[str, str | None, str, str], ...] = (
+    ("env_value", _ENV_TRAP, _ENV_TRAP, "env_value"),
+    ("anthropic", None, "sk-ant-api03-0123456789abcdefghij", "anthropic_key"),
+    ("openai", None, "sk-proj0123456789abcdefghij", "openai_key"),
+    ("aws", None, "AKIA0123456789ABCDEF", "aws_access"),
+    ("github", None, "ghp_0123456789abcdefghij0123456789abcdef", "github_pat"),
+    ("jwt", None, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NSJ9.abc-DEF_123", "jwt"),
+    ("pem", None, _PEM_TRAP, "pem_private"),
+)
+
+
+@pytest.mark.parametrize("trap", _TRAP_CASES, ids=lambda c: c[0])
+def test_cada_formato_trampa_es_bloqueado(trap: tuple[str, str | None, str, str]) -> None:
+    """Para cada formato trampa, scan() de un prompt que lo embebe levanta SecretDetected."""
+    _id, env_value, secreto, esperado = trap
+    env = frozenset({env_value}) if env_value is not None else frozenset()
+    m = ContextMinimizer(env_values=env, config_patterns=())
+    prompt = f"contexto legítimo previo. dato: {secreto}. texto posterior normal."
+    with pytest.raises(SecretDetected) as exc_info:
+        m.scan(prompt)
+    assert exc_info.value.pattern_name == esperado
+
+
+@pytest.mark.parametrize("trap", _TRAP_CASES, ids=lambda c: c[0])
+def test_el_secreto_nunca_aparece_en_la_excepcion(trap: tuple[str, str | None, str, str]) -> None:
+    """D-20: ni pattern_name ni str(exc) contienen el valor del secreto — no se loguea."""
+    _id, env_value, secreto, _esperado = trap
+    env = frozenset({env_value}) if env_value is not None else frozenset()
+    m = ContextMinimizer(env_values=env, config_patterns=())
+    with pytest.raises(SecretDetected) as exc_info:
+        m.scan(f"el secreto plantado es {secreto} y no debe filtrarse")
+    assert secreto not in str(exc_info.value)
+    assert secreto not in exc_info.value.pattern_name
+
+
+def test_no_falso_positivo_en_prompt_realista() -> None:
+    """Un prompt con hashes/IDs/base64 cortos legítimos NO levanta SecretDetected."""
+    m = ContextMinimizer(env_values=frozenset(), config_patterns=())
+    prompt = (
+        "el commit abc123 cierra el issue #42; la versión es 1.2.3 y el "
+        "hash corto es deadbeef. revisar PR-789 antes del deploy."
+    )
+    assert m.scan(prompt) == prompt
+
+
+def test_builtins_no_vaciables_por_config() -> None:
+    """Con config_patterns vacío los built-in siguen activos: config no puede desactivarlos."""
+    m = ContextMinimizer(env_values=frozenset(), config_patterns=())
+    with pytest.raises(SecretDetected) as exc_info:
+        m.scan("la key es sk-ant-api03-0123456789abcdefghij ahora")
+    assert exc_info.value.pattern_name == "anthropic_key"
