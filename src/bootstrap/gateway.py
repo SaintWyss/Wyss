@@ -58,6 +58,9 @@ def build_gateway(
         ),
     )
     traces = TraceStore(db_path)
+    # D-22: la retención NO es config muerta — la purga corre en cada boot (WR-02). Hasta que
+    # exista el scheduler de Fase 4, este es el único punto donde los traces vencidos expiran.
+    traces.purge_older_than(settings.trace_retention_days)
     cost = CostTracker(
         db_path,
         prices=dict(settings.prices),

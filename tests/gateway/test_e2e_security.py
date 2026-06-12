@@ -192,6 +192,49 @@ async def test_budget_exhausted_blocks_pre_call(
     assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
 
 
+async def test_build_gateway_purges_expired_traces(
+    tmp_path: Path, audit: FakeAuditPort
+) -> None:
+    """WR-02: build_gateway purga al boot los traces más viejos que trace_retention_days.
+
+    trace_retention_days (D-22) no es config muerta: el default (90d) borra el trace de
+    200 días y conserva el reciente.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    db_path = tmp_path / "traces.db"
+    store = TraceStore(db_path)
+    old = (datetime.now(UTC) - timedelta(days=200)).isoformat()
+
+    def _write(trace_id: str, task_id: str, created_at: str | None) -> None:
+        store.write(
+            trace_id=trace_id,
+            task_id=task_id,
+            agent_id="a",
+            tier="economico",
+            purpose="general",
+            prompt="p",
+            output="o",
+            tokens_in=1,
+            tokens_out=1,
+            cost_usd=0.0,
+            latency_ms=1,
+            created_at=created_at,
+        )
+
+    _write("viejo", "task-old", old)
+    _write("nuevo", "task-new", None)
+    store.close()
+
+    async with httpx.AsyncClient() as client:
+        build_gateway(_settings(), client=client, audit=audit, data_dir=str(tmp_path))
+
+    survivor = TraceStore(db_path)
+    assert survivor.query_by_task("task-old") == []  # purgado (200d > 90d)
+    assert len(survivor.query_by_task("task-new")) == 1  # conservado
+    survivor.close()
+
+
 def _gateway_with_fake(
     db_path: Path, audit: FakeAuditPort, provider: FakeModelProvider
 ) -> ModelGateway:
