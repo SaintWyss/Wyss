@@ -43,7 +43,8 @@ findings:
   warning: 10
   info: 9
   total: 20
-status: issues_found
+  fixed: 11
+status: fixed
 ---
 
 # Phase 02: Code Review Report — Gateway de Modelos
@@ -64,6 +65,8 @@ Sin embargo, se encontró **1 issue crítico** que viola directamente el invaria
 ## Critical Issues
 
 ### CR-01: Cobertura incompleta de secretos — GOOGLE_API_KEY y OpenAI `sk-proj-` evaden el minimizer y egresan
+
+**Status:** fixed in ae59b10
 
 **File:** `src/gateway/secrets_patterns.py:21-30`, `src/bootstrap/config.py:35`, `config/.env.example:9-13`
 **Issue:** El invariante de fase es "un secreto NUNCA egresa". El propio repo documenta cuatro secretos en `config/.env.example`: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `LITELLM_MASTER_KEY`. Pero:
@@ -92,6 +95,8 @@ Y corregir el trap del test a `sk-proj-` con guión para fijar el formato real.
 
 ### WR-01: `GatewaySettings.env_values` expone los secretos en el `repr()` por default
 
+**Status:** fixed in 653e2fa
+
 **File:** `src/core/domain/config.py:32`
 **Issue:** `GatewaySettings` es un dataclass con repr default. `env_values` contiene los VALORES reales de las API keys cargados al boot. Cualquier `repr(settings)`, `print`, f-string de debugging, mensaje de excepción que incluya el settings, o log estructurado que serialice `WyssSettings` imprime todas las keys en texto plano. Esto es un canal latente que viola "secrets never appear in exceptions/logs" — y es exactamente el tipo de fuga accidental que el diseño dice prevenir.
 **Fix:**
@@ -101,11 +106,15 @@ env_values: tuple[str, ...] = field(default=(), repr=False)
 
 ### WR-02: `trace_retention_days` es config muerta — la purga de 90 días no está cableada en ningún lado
 
+**Status:** fixed in 18a3f51
+
 **File:** `src/core/domain/config.py:31`, `src/bootstrap/gateway.py:34-85`
 **Issue:** `TraceStore.purge_older_than()` existe y está testeado, pero ningún código de runtime lo invoca: `build_gateway` recibe `settings.trace_retention_days` y lo ignora; el `ModelGateway` nunca purga. El invariante D-22 ("traces vencidos se purgan, retención 90d") no se cumple en producción — los prompts/outputs completos se retienen para siempre. El owner que configura `trace_retention_days = 30` obtiene un no-op silencioso (config que miente).
 **Fix:** Invocar la purga en `build_gateway` al boot (o al abrir el `TraceStore`): `traces.purge_older_than(settings.trace_retention_days)`, y documentar que la purga corre por boot hasta que exista el scheduler de Fase 4.
 
 ### WR-03: `timeout_s` (D-25) es config muerta — nunca se aplica al cliente httpx
+
+**Status:** fixed in 811fd0e
 
 **File:** `src/bootstrap/gateway.py:34-51`, `src/core/domain/config.py:30`
 **Issue:** `GatewaySettings.timeout_s` (default 120s, D-25) llega hasta `build_gateway` y se descarta: el docstring delega en "el caller fija timeout", pero nada en el código conecta `settings.timeout_s` con el `httpx.AsyncClient`. Si el caller no lo fija, el default de httpx es **5 segundos**, no 120 — las llamadas a Claude con `max_tokens=4096` van a timeoutear sistemáticamente. La decisión D-25 queda sin enforcement y el valor del TOML es un no-op silencioso.
@@ -113,11 +122,15 @@ env_values: tuple[str, ...] = field(default=(), repr=False)
 
 ### WR-04: Provider de tier no validado — typo en config produce `KeyError` crudo sin auditar
 
+**Status:** fixed in 3674b55
+
 **File:** `src/gateway/gateway.py:174`, `src/bootstrap/config.py:74-81`
 **Issue:** `TierConfigModel.provider` es un `str` libre: `provider = "antropic"` (typo) o `provider = "ollama"` pasan la validación Pydantic al boot. El fallo recién aparece en runtime: `self._providers[provider_name]` en `_complete_with_retry` levanta un `KeyError` pelado — sin excepción de dominio, sin `TASK_FAILED` auditado (viola "nada relevante ocurre sin registro"), después de haber pasado router y minimizer. El sistema es fail-fast en todo lo demás, pero acá es fail-late y sin rastro.
 **Fix:** Validar en `_to_gateway_settings` que `provider` esté en el set conocido (`{"litellm", "anthropic"}`) levantando `ConfigError` al boot; defensivamente, en `_complete_with_retry` convertir el `KeyError` en error de dominio auditado.
 
 ### WR-05: `httpx.ConnectError`/`NetworkError` no se maneja: sin retry y sin auditar
+
+**Status:** fixed in 077be2c
 
 **File:** `src/gateway/gateway.py:184-201`
 **Issue:** El loop de retry captura solo `httpx.HTTPStatusError` y `httpx.TimeoutException`. Un `httpx.ConnectError` (LiteLLM caído en localhost:4000 — escenario frecuente: el owner tiene los Docker apagados por default) o `httpx.RemoteProtocolError` propaga crudo desde `ask()`: no se reintenta (aunque es transiente por naturaleza) y **no se emite `TASK_FAILED`** — el fallo no deja rastro de auditoría, violando el requisito transversal de auditoría.
@@ -125,11 +138,15 @@ env_values: tuple[str, ...] = field(default=(), repr=False)
 
 ### WR-06: TOCTOU en el gate de presupuesto — llamadas concurrentes pueden exceder el budget
 
+**Status:** fixed in 2de205c
+
 **File:** `src/gateway/cost.py:71-83`, `src/gateway/gateway.py:175-197`
 **Issue:** `authorize()` lee el gasto durable y compara, pero no reserva nada. Entre `authorize()` y `record()` hay un `await provider.complete(...)` — punto de suspensión donde otras corutinas corren. N llamadas `ask()` concurrentes con presupuesto restante para 1 sola pasan TODAS el gate (cada una ve el mismo `month_spend()`) y el budget se excede por hasta N-1 llamadas en vuelo. Con el orquestador multi-agente de Fase 5 esto es un escenario real, y "enforced, no advisory" (Pitfall 2) queda debilitado.
 **Fix:** Serializar authorize→record con un `asyncio.Lock` por CostTracker más una tabla de reservas en vuelo (sumar estimados pendientes al `month_spend()` en `authorize`, liberarlos en `record`/fallo), o documentar explícitamente el overshoot acotado como riesgo aceptado.
 
 ### WR-07: Fallo post-provider (record/trace) deja gasto real sin registrar — el gate subcuenta silenciosamente
+
+**Status:** fixed in c3814ba
 
 **File:** `src/gateway/gateway.py:117-139`
 **Issue:** Si `cost.record()` falla (disco lleno, `sqlite3.OperationalError`, o `KeyError` si los prices cambiaron en un reload entre authorize y record), la llamada al provider YA consumió dinero pero el `spend_ledger` no lo registra: todos los `authorize()` futuros subcuentan el gasto real y el presupuesto "enforced" se va corriendo hacia arriba sin que nadie lo sepa. Análogamente, si `traces.write()` falla después de `record`, el caller recibe una excepción y puede reintentar → doble gasto real con una sola respuesta perdida. Ningún fallo en pasos 5-7 se audita.
@@ -137,17 +154,23 @@ env_values: tuple[str, ...] = field(default=(), repr=False)
 
 ### WR-08: `CostTracker` no verifica WAL pese a que su docstring afirma "WAL fail-fast vía apply_schema"
 
+**Status:** fixed in 6de7b26
+
 **File:** `src/gateway/cost.py:49-59`
 **Issue:** El docstring de `__init__` dice "Abre la DB de gateway (WAL fail-fast vía apply_schema)" — es falso: `apply_schema` no verifica nada, y el loop de PRAGMAs en `CostTracker` ejecuta `PRAGMA journal_mode=WAL` sin chequear el resultado (a diferencia de `TraceStore`, que sí fail-fastea). Un `CostTracker` construido standalone (como hacen todos los tests de `test_cost_gate.py`) sobre NTFS/fuseblk degrada silenciosamente la durabilidad del `spend_ledger` — el estado que gobierna el enforcement del presupuesto. Hoy solo funciona porque en `build_gateway` el `TraceStore` se construye antes sobre el mismo archivo.
 **Fix:** Replicar el smoke test WAL de `TraceStore` en `CostTracker` (o extraer un helper compartido `open_gateway_db(path)` que haga connect + chmod + WAL check + apply_schema una sola vez), y corregir el docstring.
 
 ### WR-09: El 0600 de traces.db depende del orden de construcción y los fallos de chmod se suprimen sin rastro
 
+**Status:** fixed in eb2473b
+
 **File:** `src/gateway/traces.py:59-63`, `src/gateway/cost.py:55-58`
 **Issue:** El invariante T-02-trace-file-perms (traces.db 0600) solo se cumple porque `build_gateway` construye `TraceStore` (que hace chmod) ANTES que `CostTracker` (que no lo hace). Si alguien invierte el orden o construye un `CostTracker` standalone primero, la DB con el spend ledger (y luego los prompts) nace con el umask default (típicamente 0644) y nadie la corrige ni lo detecta: el `contextlib.suppress(OSError)` traga cualquier fallo sin loguear. Además hay una ventana entre `sqlite3.connect()` (archivo creado 0644) y el `chmod`.
 **Fix:** Hacer el chmod en el helper compartido de apertura de DB (ver WR-08) para que CUALQUIER camino de creación lo aplique; ante fallo del chmod, emitir al menos un registro (no abortar, pero tampoco silencio total). Idealmente pre-crear el archivo con `os.open(path, os.O_CREAT, 0o600)` antes del connect para eliminar la ventana.
 
 ### WR-10: Nadie carga el `.env` — la capa env-value del minimizer se desactiva silenciosamente
+
+**Status:** fixed in 13e29cd
 
 **File:** `src/bootstrap/config.py:133-141`, `config/.env.example:1-17`
 **Issue:** `_gateway_env_values()` lee `os.environ`, pero ningún código del repo carga `config/.env` (no hay `python-dotenv` ni parsing propio; verificado por grep). Si el owner crea el `.env` como instruye el archivo de ejemplo pero no exporta las variables manualmente, ocurren dos degradaciones silenciosas: (1) la red de alta precisión del minimizer (substring de valores reales) queda vacía — una capa de seguridad entera apagada sin señal alguna; (2) los providers reciben key `""` y todo falla con 401 recién en runtime. Un valor ausente "se omite — no se loguea" es razonable para el VALOR, pero la ausencia total de las dos claves esperadas merece una señal.
