@@ -33,6 +33,7 @@ from core.domain.audit import ActorType, AuditEvent, AuditEventType
 from core.domain.errors import (
     BudgetExceeded,
     ConfigError,
+    CostLedgerError,
     SecretDetected,
     UnknownTier,
 )
@@ -119,48 +120,72 @@ class ModelGateway:
             request, tier_cfg.provider, tier_cfg.model_alias, est_in, est_out, model_request
         )
 
-        # Paso 5: costo LOCAL + record durable (D-24).
-        cost = self._cost.record(
-            request.agent_id,
-            tier_cfg.model_alias,
-            resp.tokens_in,
-            resp.tokens_out,
-            provider_reported_cost=resp.cost_usd or None,
-        )
-
-        # Paso 6: trace consultable, prompt POST-min (D-22).
-        self._traces.write(
-            trace_id=uuid.uuid4().hex,
-            task_id=request.task_id,
-            agent_id=request.agent_id,
-            tier=request.tier,
-            purpose=request.purpose,
-            prompt=clean_prompt,
-            output=resp.text,
-            tokens_in=resp.tokens_in,
-            tokens_out=resp.tokens_out,
-            cost_usd=cost,
-            latency_ms=resp.latency_ms,
-        )
-
-        # Paso 7: auditar el costo registrado (cost.record ya emite COST_RECORDED; este
-        # evento del gateway correlaciona el costo con tier/model/tokens por task_id).
-        self._audit.log(
-            AuditEvent.new(
-                actor_type=ActorType.SYSTEM,
-                actor_id="gateway",
-                event_type=AuditEventType.COST_RECORDED,
-                message=f"llamada completada tier={request.tier}",
-                task_id=request.task_id,
-                payload={
-                    "tier": request.tier,
-                    "model": tier_cfg.model_alias,
-                    "cost_usd": cost,
-                    "tokens_in": resp.tokens_in,
-                    "tokens_out": resp.tokens_out,
-                },
+        # Paso 5: costo LOCAL + record durable (D-24). Un fallo acá es GRAVE (WR-07): el
+        # provider YA consumió dinero y el ledger no lo refleja — el gate subcuenta de ahí
+        # en adelante. Se audita TASK_FAILED y se convierte en CostLedgerError de dominio.
+        try:
+            cost = self._cost.record(
+                request.agent_id,
+                tier_cfg.model_alias,
+                resp.tokens_in,
+                resp.tokens_out,
+                provider_reported_cost=resp.cost_usd or None,
             )
-        )
+        except Exception as exc:
+            self._audit_failed(
+                request,
+                "fallo grave: gasto real del provider SIN registrar en spend_ledger",
+                extra={"error": type(exc).__name__},
+            )
+            raise CostLedgerError(
+                "el gasto real del provider no pudo registrarse en spend_ledger; "
+                "el gate de presupuesto queda subcontando — requiere intervención"
+            ) from exc
+
+        # Pasos 6-7 (WR-07): si el trace/audit falla DESPUÉS del record, el gasto ya quedó
+        # registrado — se audita TASK_FAILED (con task_id correlacionable) y se re-raise:
+        # un retry del caller gastaría dinero real de nuevo, el motivo debe quedar trazado.
+        try:
+            # Paso 6: trace consultable, prompt POST-min (D-22).
+            self._traces.write(
+                trace_id=uuid.uuid4().hex,
+                task_id=request.task_id,
+                agent_id=request.agent_id,
+                tier=request.tier,
+                purpose=request.purpose,
+                prompt=clean_prompt,
+                output=resp.text,
+                tokens_in=resp.tokens_in,
+                tokens_out=resp.tokens_out,
+                cost_usd=cost,
+                latency_ms=resp.latency_ms,
+            )
+
+            # Paso 7: auditar el costo registrado (cost.record ya emite COST_RECORDED; este
+            # evento del gateway correlaciona el costo con tier/model/tokens por task_id).
+            self._audit.log(
+                AuditEvent.new(
+                    actor_type=ActorType.SYSTEM,
+                    actor_id="gateway",
+                    event_type=AuditEventType.COST_RECORDED,
+                    message=f"llamada completada tier={request.tier}",
+                    task_id=request.task_id,
+                    payload={
+                        "tier": request.tier,
+                        "model": tier_cfg.model_alias,
+                        "cost_usd": cost,
+                        "tokens_in": resp.tokens_in,
+                        "tokens_out": resp.tokens_out,
+                    },
+                )
+            )
+        except Exception as exc:
+            self._audit_failed(
+                request,
+                "fallo post-record: trace/audit no escrito (gasto YA registrado)",
+                extra={"error": type(exc).__name__},
+            )
+            raise
 
         # Paso 8: la respuesta lleva el costo LOCAL, no el 0.0 del provider.
         return dataclasses.replace(resp, cost_usd=cost)

@@ -9,6 +9,7 @@ seguridad: el secreto/budget bloquean ANTES de cualquier provider.complete (prov
 
 import asyncio
 import re
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from core.domain.audit import AuditEventType
 from core.domain.errors import (
     BudgetExceeded,
     ConfigError,
+    CostLedgerError,
     SecretDetected,
     UnknownTier,
 )
@@ -276,6 +278,61 @@ async def test_missing_provider_raises_domain_error_audited(
         await gw.ask(req)
 
     assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
+
+
+def _ok_provider() -> FakeModelProvider:
+    return FakeModelProvider(
+        response=ModelResponse(
+            text="ok", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1
+        )
+    )
+
+
+async def test_record_failure_audits_and_raises_ledger_error(
+    traces_db_path: Path, audit: FakeAuditPort, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-07: si cost.record falla post-provider (gasto real YA consumido), se audita
+    TASK_FAILED y se levanta CostLedgerError de dominio — no una excepción genérica."""
+    gw = _build_gateway(db_path=traces_db_path, audit=audit, provider=_ok_provider())
+
+    def _boom(*args: object, **kwargs: object) -> float:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(CostTracker, "record", _boom)
+    req = AgentModelRequest(agent_id="a", task_id="t-8", prompt="hola", tier="economico")
+
+    with pytest.raises(CostLedgerError):
+        await gw.ask(req)
+
+    failed = [e for e in audit.events if e.event_type is AuditEventType.TASK_FAILED]
+    assert failed
+    assert any("spend_ledger" in e.message for e in failed)
+
+
+async def test_trace_failure_after_record_audits_and_propagates(
+    traces_db_path: Path, audit: FakeAuditPort, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-07: si traces.write falla DESPUÉS de record, el gasto queda registrado y el
+    fallo se audita TASK_FAILED antes de propagar (un retry gastaría dinero de nuevo)."""
+    gw = _build_gateway(db_path=traces_db_path, audit=audit, provider=_ok_provider())
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(TraceStore, "write", _boom)
+    req = AgentModelRequest(agent_id="a", task_id="t-9", prompt="hola", tier="economico")
+
+    with pytest.raises(sqlite3.OperationalError):
+        await gw.ask(req)
+
+    assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
+    # el gasto real SÍ quedó en el ledger (record corrió antes del fallo del trace).
+    conn = sqlite3.connect(traces_db_path)
+    try:
+        (count,) = conn.execute("SELECT COUNT(*) FROM spend_ledger").fetchone()
+    finally:
+        conn.close()
+    assert count == 1
 
 
 def test_module_does_not_import_audit_package() -> None:

@@ -42,6 +42,16 @@ class SecretDetected(WyssError):
         self.pattern_name = pattern_name  # nombre del patrón, JAMÁS el secreto
 
 
+class CostLedgerError(WyssError):
+    """El gasto REAL del provider no pudo registrarse en el spend_ledger (WR-07).
+
+    Error grave, no genérico: la llamada YA consumió dinero pero el ledger no lo refleja,
+    así que todo `authorize()` futuro subcuenta el gasto y el presupuesto "enforced" se
+    corre hacia arriba. El gateway lo levanta (auditado como TASK_FAILED) para que el
+    caller NO lo trate como un fallo reintenable más.
+    """
+
+
 class BudgetExceeded(WyssError):
     """Presupuesto (global o por-agente) agotado: la llamada se veta pre-autorización (D-18).
 
