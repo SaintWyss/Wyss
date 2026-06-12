@@ -13,7 +13,12 @@ from core.domain.errors import (
     WyssError,
 )
 from core.domain.execution import ToolResult, Verification
-from core.domain.gateway import AgentModelRequest, ModelRequest, ModelResponse
+from core.domain.gateway import (
+    AgentModelRequest,
+    ModelRequest,
+    ModelResponse,
+    TierConfig,
+)
 from core.domain.knowledge import (
     Chunk,
     ExtractedContent,
@@ -78,6 +83,7 @@ __all__ = [
     # task
     "Task",
     "TaskStatus",
+    "TierConfig",
     # execution
     "ToolResult",
     "UnknownTier",

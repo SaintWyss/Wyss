@@ -13,6 +13,20 @@ class ModelRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class TierConfig:
+    """Resolución de un tier (entidad de dominio): provider + alias de modelo + tope de tokens.
+
+    Vive en `core.domain` (no en `gateway.router`) para que el bootstrap (02-05 GatewaySettings)
+    y el gateway la importen sin ciclo. El `max_tokens` lo fija el tier, NO el caller (Open
+    Question 1 resuelta): el agente solo declara `tier`+`purpose`, la config decide el límite.
+    """
+
+    provider: str  # "litellm" | "anthropic"
+    model_alias: str  # p.ej. "gemini-default", "claude-opus-4-6"
+    max_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
 class ModelResponse:
     """Respuesta de un modelo más métricas de costo y latencia."""
 
