@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-12T00:38:39.179Z"
+last_updated: "2026-06-12T00:46:17.306Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 10
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 02 (gateway-de-modelos) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 
 - **Phase:** 2 of 10 (gateway de modelos)
 - **Status:** Ready to execute
@@ -60,6 +60,10 @@ Plan: 3 of 5
 | 2026-06-12 | `ContextMinimizer.scan` fail-closed de 3 fuentes (env_values + built-in + config) | GATE-03: secreto detectado → `SecretDetected` → la llamada NO sale (D-20); nunca redacta. Spine de seguridad del gateway (02-02) |
 | 2026-06-12 | `BUILTIN_SECRET_PATTERNS` `Final[tuple]` no vaciable; merge aditivo `BUILTIN + config` | D-21: config solo AGREGA patrones; si pudiera vaciarlos la minimización dejaría de ser absoluta editando un archivo. Espejo de `BUILTIN_DENY` (02-02) |
 | 2026-06-12 | `env_values` filtrados a `len>=8`; el valor del secreto jamás entra a la excepción | Evita falsos positivos de strings triviales; el error solo lleva `pattern_name`, nunca el secreto (D-20, V7) (02-02) |
+| 2026-06-12 | `ModelRouter` determinístico `tier->TierConfig` fail-closed | D-16/D-17: lookup puro por config; tier inexistente → `UnknownTier(available)` sin fallback silencioso; espejo del fail-closed de `CognitivePolicyEngine` (02-03) |
+| 2026-06-12 | `TierConfig` frozen en `core.domain.gateway` (no en router.py) | Bootstrap (02-05) y gateway la importan sin ciclo; `max_tokens` lo fija el tier, NO el caller (Open Question 1 resuelta) (02-03) |
+| 2026-06-12 | Providers httpx directo (sin SDK); `cost_usd=0.0` desde el adapter | Anti doble-retry (Pitfall 1, D-25): `raise_for_status` propaga 4xx, retry vive en el gateway; el dict de la API muere en el adapter; el CostTracker calcula el costo (D-24) (02-03) |
+| 2026-06-12 | `OllamaEmbeddingProvider` reusa `EmbeddingProvider` de core/ports/knowledge | No se inventa port nuevo (D-15); embeddings LOCALES vía `/api/embed`; test real opt-in `skipif WYSS_TEST_OLLAMA` (espejo del NTFS) (02-03) |
 
 ## Blockers
 
