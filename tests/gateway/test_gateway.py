@@ -13,7 +13,12 @@ from pathlib import Path
 import pytest
 
 from core.domain.audit import AuditEventType
-from core.domain.errors import BudgetExceeded, SecretDetected, UnknownTier
+from core.domain.errors import (
+    BudgetExceeded,
+    ConfigError,
+    SecretDetected,
+    UnknownTier,
+)
 from core.domain.gateway import (
     AgentModelRequest,
     ModelRequest,
@@ -192,6 +197,33 @@ async def test_unknown_tier_propagates_without_fallback(
         await gw.ask(req)
 
     assert provider.calls == []
+    assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
+
+
+async def test_missing_provider_raises_domain_error_audited(
+    traces_db_path: Path, audit: FakeAuditPort
+) -> None:
+    """WR-04: tier que apunta a un provider no construido → ConfigError de dominio AUDITADO
+    (TASK_FAILED), nunca un KeyError crudo sin rastro."""
+    gw = ModelGateway(
+        router=ModelRouter(_tiers()),
+        minimizer=ContextMinimizer(env_values=frozenset(), config_patterns=()),
+        cost=CostTracker(
+            traces_db_path,
+            prices={"gemini-default": 1.0},
+            global_budget=1000.0,
+            agent_budgets={},
+            audit=audit,
+        ),
+        traces=TraceStore(traces_db_path),
+        providers={},  # cableado a mano sin el provider del tier
+        audit=audit,
+    )
+    req = AgentModelRequest(agent_id="a", task_id="t-7", prompt="hola", tier="economico")
+
+    with pytest.raises(ConfigError, match="litellm"):
+        await gw.ask(req)
+
     assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
 
 

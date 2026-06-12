@@ -30,7 +30,12 @@ from collections.abc import Mapping
 import httpx
 
 from core.domain.audit import ActorType, AuditEvent, AuditEventType
-from core.domain.errors import BudgetExceeded, SecretDetected, UnknownTier
+from core.domain.errors import (
+    BudgetExceeded,
+    ConfigError,
+    SecretDetected,
+    UnknownTier,
+)
 from core.domain.gateway import AgentModelRequest, ModelRequest, ModelResponse
 from core.ports.audit import AuditPort
 from core.ports.gateway import ModelProvider
@@ -170,7 +175,16 @@ class ModelGateway:
         model_request: ModelRequest,
     ) -> ModelResponse:
         """Autoriza+llama con retry transiente (D-25). El gate se re-pasa cada intento."""
-        provider = self._providers[provider_name]
+        # Defensa en profundidad (WR-04): el bootstrap valida los providers al boot, pero si
+        # este gateway se cableó a mano con un provider faltante, el fallo debe ser un error
+        # de dominio AUDITADO, no un KeyError crudo sin rastro.
+        provider = self._providers.get(provider_name)
+        if provider is None:
+            self._audit_failed(request, f"provider no construido: {provider_name}")
+            raise ConfigError(
+                f"provider '{provider_name}' del tier no está construido en el gateway; "
+                f"disponibles: {', '.join(sorted(self._providers)) or '(ninguno)'}"
+            )
         last_exc: httpx.HTTPStatusError | httpx.TimeoutException | None = None
         for attempt in range(self._max_retries + 1):
             # (a) gate pre-autorización RE-PASADO en cada intento (D-18/D-25).

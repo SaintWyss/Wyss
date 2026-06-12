@@ -41,6 +41,11 @@ _GATEWAY_ENV_KEYS: tuple[str, ...] = (
     "OPENAI_API_KEY",
 )
 
+# Providers que `bootstrap.gateway.build_gateway` sabe construir. Un tier que apunte a otro
+# string (typo: "antropic", "ollama") es error de config y debe abortar el BOOT con ConfigError
+# legible — no un KeyError crudo en runtime tras pasar router y minimizer (WR-04).
+_KNOWN_PROVIDERS: frozenset[str] = frozenset({"litellm", "anthropic"})
+
 # Niveles base por action_type (docs/13). Fail-closed: lo desconocido lo resuelve el engine a C.
 _BASE_LEVELS: dict[str, RiskLevel] = {
     "file.read": RiskLevel.A,
@@ -155,6 +160,12 @@ def _to_gateway_settings(model: GatewayConfigModel) -> GatewaySettings:
     legible al boot (fail-fast). Los patrones son ADITIVOS — el GatewaySettings lleva SOLO los
     de config; el merge con `BUILTIN_SECRET_PATTERNS` lo hace el minimizer en runtime (D-21).
     """
+    for tier_name, tier in model.tiers.items():
+        if tier.provider not in _KNOWN_PROVIDERS:
+            raise ConfigError(
+                f"provider desconocido '{tier.provider}' en [gateway.tiers.{tier_name}]; "
+                f"válidos: {', '.join(sorted(_KNOWN_PROVIDERS))}"
+            )
     config_patterns: list[tuple[str, str]] = []
     for sp in model.secret_patterns:
         try:

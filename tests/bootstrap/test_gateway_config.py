@@ -104,6 +104,27 @@ typo_field = "x"
         load_settings(write_config(bad))
 
 
+def test_unknown_tier_provider_rejected_at_boot(
+    write_config: Callable[[str], Path],
+) -> None:
+    """WR-04: un typo en provider ('antropic') aborta el BOOT con ConfigError legible,
+    no un KeyError crudo en runtime tras pasar router y minimizer."""
+    bad = """\
+data_dir = "data"
+audit_db = "data/audit.db"
+
+[gateway]
+global_budget = 10.0
+
+[gateway.tiers.fuerte]
+provider = "antropic"
+model_alias = "claude-opus"
+max_tokens = 512
+"""
+    with pytest.raises(ConfigError, match="antropic"):
+        load_settings(write_config(bad))
+
+
 def test_invalid_regex_in_secret_pattern_fails(
     write_config: Callable[[str], Path],
 ) -> None:
