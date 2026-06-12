@@ -1,5 +1,5 @@
 {
-  "model_profile": "quality",
+  "model_profile": "adaptive",
   "commit_docs": true,
   "parallelization": true,
   "search_gitignored": false,
@@ -70,6 +70,9 @@
   "mode": "yolo",
   "granularity": "fine",
   "model_overrides": {
-    "gsd-verifier": "opus"
+    "gsd-verifier": "sonnet",
+    "gsd-code-fixer": "opus",
+    "gsd-security-auditor": "opus",
+    "gsd-code-reviewer": "sonnet"
   }
 }
