@@ -6,6 +6,8 @@ del request real. El dict del JSON de la API muere dentro del adapter: afuera so
 ModelResponse de dominio. El costo lo calcula CostTracker (D-24), por eso `cost_usd == 0.0`.
 """
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -69,7 +71,7 @@ async def test_anthropic_envia_headers_correctos(
     sent = route.calls.last.request
     assert sent.headers["x-api-key"] == "sk-ant-XYZ"
     assert sent.headers["anthropic-version"] == "2023-06-01"
-    body = httpx._content.json_loads(sent.content)  # type: ignore[attr-defined]
+    body = json.loads(sent.content)
     assert body["model"] == "claude-opus-4-6"
     assert body["max_tokens"] == 42
     assert body["messages"] == [{"role": "user", "content": "ping"}]
