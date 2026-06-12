@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-12T00:33:02.640Z"
+last_updated: "2026-06-12T00:38:39.179Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
   percent: 10
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 02 (gateway-de-modelos) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 - **Phase:** 2 of 10 (gateway de modelos)
-- **Status:** Executing Phase 02
+- **Status:** Ready to execute
 - **Last activity:** 2026-06-12
 
 ## Decisions Log
@@ -57,6 +57,9 @@ Plan: 2 of 5
 | 2026-06-12 | `UnknownTier(tier, *, available)` sin fallback silencioso | D-17: tier desconocido → error explícito con tiers disponibles; el router nunca enruta a un default (02-01) |
 | 2026-06-12 | Re-export de las 3 excepciones desde `core.domain.__init__` | Coherente con PolicyViolation/ConfigError ya re-exportados; replica el patrón existente del repo, no inventa uno nuevo (02-01) |
 | 2026-06-12 | httpx directo (sin SDK anthropic/openai, sin tenacity) | Evita doble-retry; el retry manual centralizado se hace en 02-05 (02-01) |
+| 2026-06-12 | `ContextMinimizer.scan` fail-closed de 3 fuentes (env_values + built-in + config) | GATE-03: secreto detectado → `SecretDetected` → la llamada NO sale (D-20); nunca redacta. Spine de seguridad del gateway (02-02) |
+| 2026-06-12 | `BUILTIN_SECRET_PATTERNS` `Final[tuple]` no vaciable; merge aditivo `BUILTIN + config` | D-21: config solo AGREGA patrones; si pudiera vaciarlos la minimización dejaría de ser absoluta editando un archivo. Espejo de `BUILTIN_DENY` (02-02) |
+| 2026-06-12 | `env_values` filtrados a `len>=8`; el valor del secreto jamás entra a la excepción | Evita falsos positivos de strings triviales; el error solo lleva `pattern_name`, nunca el secreto (D-20, V7) (02-02) |
 
 ## Blockers
 
