@@ -5,6 +5,7 @@ ANTES de cualquier `provider.complete()`. El costo se calcula LOCAL (tokens x pr
 D-24); el costo reportado por el provider NUNCA gobierna el gate.
 """
 
+import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -147,6 +148,17 @@ def test_cost_tracker_standalone_fail_fast_when_journal_not_wal(
     monkeypatch.setattr(mod, "PRAGMAS", ("PRAGMA journal_mode=DELETE",))
     with pytest.raises(TraceIntegrityError):
         _tracker(traces_db_path)
+
+
+def test_cost_tracker_standalone_creates_db_0600(traces_db_path: Path) -> None:
+    """(7b) WR-09: un CostTracker construido PRIMERO (sin TraceStore) también deja la DB
+    en 0600 — el invariante T-02-trace-file-perms no depende del orden de construcción."""
+    ct = _tracker(traces_db_path)
+    try:
+        mode = stat.S_IMODE(traces_db_path.stat().st_mode)
+    finally:
+        ct.close()
+    assert mode == 0o600, f"esperaba 0600, fue {oct(mode)}"
 
 
 def test_inflight_reservation_blocks_concurrent_authorize(traces_db_path: Path) -> None:

@@ -4,7 +4,9 @@ A diferencia de audit (append-only forever), traces NO tiene triggers de inmutab
 soporta purga por retención (default 90d). Replica el patrón SQLite WAL fail-fast de Fase 1.
 """
 
+import os
 import sqlite3
+import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -197,6 +199,17 @@ def test_no_append_only_triggers(traces_db_path: Path) -> None:
     finally:
         conn.close()
     assert count == 0  # a diferencia de audit, el DELETE no abortó
+
+
+def test_preexisting_db_perms_corrected_to_0600(traces_db_path: Path) -> None:
+    """(5) WR-09: un archivo preexistente con 0644 se corrige a 0600 al abrir el store."""
+    traces_db_path.touch()
+    os.chmod(traces_db_path, 0o644)
+
+    TraceStore(traces_db_path).close()
+
+    mode = stat.S_IMODE(traces_db_path.stat().st_mode)
+    assert mode == 0o600, f"esperaba 0600, fue {oct(mode)}"
 
 
 def test_fail_fast_when_journal_not_wal(

@@ -6,19 +6,23 @@ garantías dependían del ORDEN de construcción (WR-08/WR-09): solo `TraceStore
 WAL fail-fast y aplicaba el chmod 0600 — un `CostTracker` standalone degradaba durabilidad
 en silencio. CUALQUIER camino de apertura pasa ahora por `open_gateway_db`:
 
-- chmod 0600 best-effort (traces.db lleva prompts/outputs completos, T-02-trace-file-perms);
+- pre-creación del archivo con 0600 ANTES del connect (sin ventana umask 0644→chmod) y
+  chmod best-effort para archivos preexistentes — los fallos se LOGUEAN, nunca silencio
+  total (WR-09; traces.db lleva prompts/outputs completos, T-02-trace-file-perms);
 - PRAGMAs + smoke test WAL fail-fast (Pitfall 6: sobre NTFS/fuseblk WAL puede degradar y el
   estado que gobierna el presupuesto no puede correr sin durabilidad);
 - `apply_schema` idempotente (traces + spend_ledger).
 """
 
-import contextlib
+import logging
 import os
 import sqlite3
 from pathlib import Path
 
 from core.domain.errors import TraceIntegrityError
 from gateway.traces_schema import PRAGMAS, apply_schema
+
+_log = logging.getLogger(__name__)
 
 
 def open_gateway_db(db_path: Path) -> sqlite3.Connection:
@@ -28,10 +32,18 @@ def open_gateway_db(db_path: Path) -> sqlite3.Connection:
     espejo exacto del smoke test de `SqliteAuditLogger` (Pitfall 6).
     """
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    # Pre-crear con 0600 ANTES del connect (WR-09): elimina la ventana en la que sqlite
+    # crea el archivo con el umask default (típicamente 0644) hasta el chmod posterior.
+    fd = os.open(db_path, os.O_CREAT, 0o600)
+    os.close(fd)
     conn = sqlite3.connect(db_path)
-    # best-effort: en FS sin modos POSIX (NTFS) chmod puede no aplicar, no aborta el boot.
-    with contextlib.suppress(OSError):
+    try:
+        # Corrige perms si el archivo PREEXISTÍA con otro modo. best-effort en FS sin
+        # modos POSIX (NTFS): no aborta el boot, pero el fallo deja rastro (WR-09 —
+        # nunca un suppress silencioso sobre el archivo que guarda los prompts).
         os.chmod(db_path, 0o600)
+    except OSError as exc:
+        _log.warning("no se pudo aplicar 0600 a %s: %s", db_path, exc)
     journal_mode: str | None = None
     for pragma in PRAGMAS:
         row = conn.execute(pragma).fetchone()
