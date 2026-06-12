@@ -14,7 +14,8 @@ Santiago puede encontrar cualquier cosa en sus 2 TB en segundos, delegar tareas 
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] **ORCH-06**: El Model Gateway enruta a ≥ 2 proveedores configurables, registra tokens y costo por llamada — Validated in Phase 2: Gateway de Modelos
+- [x] **ORCH-07**: El Context Minimizer filtra secretos y contexto innecesario antes de toda llamada externa — Validated in Phase 2: Gateway de Modelos (gap conocido CR-01 en 02-REVIEW.md: cobertura de patrones a ampliar antes de producción)
 
 ### Active
 
@@ -29,8 +30,6 @@ Santiago puede encontrar cualquier cosa en sus 2 TB en segundos, delegar tareas 
 - [ ] **ORCH-03**: La política cognitiva aplica los 4 niveles (A ejecuta / B confirma simple / C confirma fuerte / D rechaza absoluto)
 - [ ] **ORCH-04**: Nivel D se rechaza con explicación aunque el owner insista — sin excepciones en código
 - [ ] **ORCH-05**: El orquestador corre como daemon persistente (Unix socket + JSON-RPC)
-- [ ] **ORCH-06**: El Model Gateway enruta a ≥ 2 proveedores configurables, registra tokens y costo por llamada
-- [ ] **ORCH-07**: El Context Minimizer filtra secretos y contexto innecesario antes de toda llamada externa
 - [ ] **AGENT-01**: Los agentes se crean por configuración a partir del modelo base, sin código nuevo
 - [ ] **AGENT-02**: Un agente sin permiso vigente sobre una BC no puede consultar esa BC
 - [ ] **AGENT-03**: Los agentes no se comunican horizontalmente — solo el orquestador divide y consolida
@@ -105,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-10 after initialization*
+*Last updated: 2026-06-12 — Phase 2 (Gateway de Modelos) complete: ModelGateway.ask() único punto de egreso, minimizer fail-closed, cost gate pre-autorizado, traces.db*
