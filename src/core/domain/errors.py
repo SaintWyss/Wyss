@@ -13,6 +13,14 @@ class AuditIntegrityError(WyssError):
     """El log de auditoría no pudo garantizar durabilidad/integridad (ej. WAL falla)."""
 
 
+class TraceIntegrityError(WyssError):
+    """El store de traces no pudo garantizar durabilidad (ej. WAL falla sobre NTFS).
+
+    Análogo a `AuditIntegrityError` pero para `traces.db` (DB separada, D-22). Lo levanta
+    `TraceStore` al construir si `PRAGMA journal_mode` no retorna ``"wal"`` (Pitfall 6).
+    """
+
+
 class ConfigError(WyssError):
     """La configuración de boot no pudo cargarse/validarse (fail-fast con mensaje legible).
 
