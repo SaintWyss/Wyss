@@ -7,9 +7,13 @@ from core.domain.errors import (
     AuditIntegrityError,
     BudgetExceeded,
     ConfigError,
+    ExtractionError,
+    IndexIntegrityError,
     PolicyViolation,
     SecretDetected,
+    SecretFileExcluded,
     UnknownTier,
+    UnsupportedFileError,
     WyssError,
 )
 from core.domain.execution import ToolResult, Verification
@@ -21,9 +25,14 @@ from core.domain.gateway import (
 )
 from core.domain.knowledge import (
     Chunk,
+    EstimateResult,
     ExtractedContent,
+    FileRecord,
+    FileStatus,
     Hit,
     IndexEntry,
+    IngestRunResult,
+    IngestSettings,
     Query,
     SourceFile,
     Vector,
@@ -59,11 +68,23 @@ __all__ = [
     "ConfigError",
     # policy
     "DenyRule",
+    # knowledge (ingest results)
+    "EstimateResult",
     "ExtractedContent",
+    # errors (ingesta)
+    "ExtractionError",
+    # knowledge (ingest records)
+    "FileRecord",
+    "FileStatus",
     # config
     "GatewaySettings",
     "Hit",
+    # errors (ingesta)
+    "IndexIntegrityError",
     "IndexEntry",
+    # knowledge (ingest results)
+    "IngestRunResult",
+    "IngestSettings",
     # gateway
     "ModelRequest",
     "ModelResponse",
@@ -78,6 +99,8 @@ __all__ = [
     # risk
     "RiskLevel",
     "SecretDetected",
+    # errors (ingesta)
+    "SecretFileExcluded",
     "SourceFile",
     "Span",
     # security
@@ -89,6 +112,8 @@ __all__ = [
     # execution
     "ToolResult",
     "UnknownTier",
+    # errors (ingesta)
+    "UnsupportedFileError",
     # knowledge
     "Vector",
     "Verification",

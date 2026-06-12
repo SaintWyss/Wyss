@@ -73,3 +73,51 @@ class UnknownTier(WyssError):
         )
         self.tier = tier
         self.available = available
+
+
+class IndexIntegrityError(WyssError):
+    """La DB de índice (index.db) no pudo garantizar durabilidad/integridad (ej. WAL falla).
+
+    Análogo a `AuditIntegrityError` pero para `index.db` del pipeline de ingesta. Lo levanta
+    `StateStore` al construir si `PRAGMA journal_mode` no retorna ``"wal"`` (Pitfall 3 de RESEARCH).
+    """
+
+
+class ExtractionError(WyssError):
+    """Un extractor no pudo procesar el archivo. El pipeline lo marca 'failed' y continúa (D-36).
+
+    El constructor solo toma el PATH y el TIPO de error (nombre de la excepción/categoría) —
+    NUNCA el contenido del archivo ni el traceback completo (doctrina D-20 extendida).
+    """
+
+    def __init__(self, path: str, error_type: str) -> None:
+        super().__init__(f"extracción fallida en '{path}' ({error_type})")
+        self.path = path
+        self.error_type = error_type  # nombre del tipo de error, no el traceback
+
+
+class UnsupportedFileError(WyssError):
+    """Formato no soportado o PDF encriptado — el pipeline lo marca 'skipped_unsupported' (D-40).
+
+    Solo toma el PATH del archivo; nunca el contenido ni el password intentado.
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__(f"formato no soportado o archivo protegido: '{path}'")
+        self.path = path
+
+
+class SecretFileExcluded(WyssError):
+    """Archivo excluido del índice por detección de secreto (D-27/D-28).
+
+    NUNCA recibe ni loguea el contenido del archivo ni el valor del secreto: el constructor
+    solo toma el NOMBRE del patrón que matcheó y la CAPA de detección (path_denylist,
+    builtin_pattern, entropy). Espejo exacto de la doctrina D-20 de `SecretDetected`.
+    """
+
+    def __init__(self, pattern_name: str, layer: str) -> None:
+        super().__init__(
+            f"archivo excluido: detectado patrón '{pattern_name}' en capa '{layer}'"
+        )
+        self.pattern_name = pattern_name  # nombre del patrón, JAMÁS el secreto
+        self.layer = layer  # "path_denylist" | "builtin_pattern" | "entropy"
