@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-12T00:46:17.306Z"
+last_updated: "2026-06-12T00:52:23.319Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 10
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 02 (gateway-de-modelos) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 - **Phase:** 2 of 10 (gateway de modelos)
 - **Status:** Ready to execute
@@ -64,6 +64,9 @@ Plan: 4 of 5
 | 2026-06-12 | `TierConfig` frozen en `core.domain.gateway` (no en router.py) | Bootstrap (02-05) y gateway la importan sin ciclo; `max_tokens` lo fija el tier, NO el caller (Open Question 1 resuelta) (02-03) |
 | 2026-06-12 | Providers httpx directo (sin SDK); `cost_usd=0.0` desde el adapter | Anti doble-retry (Pitfall 1, D-25): `raise_for_status` propaga 4xx, retry vive en el gateway; el dict de la API muere en el adapter; el CostTracker calcula el costo (D-24) (02-03) |
 | 2026-06-12 | `OllamaEmbeddingProvider` reusa `EmbeddingProvider` de core/ports/knowledge | No se inventa port nuevo (D-15); embeddings LOCALES vía `/api/embed`; test real opt-in `skipif WYSS_TEST_OLLAMA` (espejo del NTFS) (02-03) |
+| 2026-06-12 | `TraceStore` NO append-only: replica el WAL fail-fast de audit pero omite triggers; `purge_older_than(90d)` (D-22) | traces expira por retención, audit es forever; `TraceIntegrityError` nuevo nombra el subsistema correcto (02-04) |
+| 2026-06-12 | `spend_ledger` del gate de costo vive en `traces.db` (una sola DB de gateway, Open Question 3) | `CostTracker` y `TraceStore` comparten la DB; el DDL del ledger lo aporta `traces_schema.apply_schema` idempotente (02-04) |
+| 2026-06-12 | `CostTracker.authorize` veta con `BudgetExceeded` ANTES de la llamada; costo LOCAL gobierna, no el del provider; sin setters de límites | Presupuesto enforced no advisory (Pitfall 2, D-18/D-24); test verifica que el provider nunca se invoca al exceder; destrabe solo por config+reload (D-19) (02-04) |
 
 ## Blockers
 
