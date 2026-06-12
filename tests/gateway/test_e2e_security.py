@@ -121,6 +121,57 @@ async def test_env_value_secret_never_egresses(
     assert any(e.payload.get("pattern") == "env_value" for e in failed)
 
 
+async def test_env_file_value_is_collected_and_blocked_from_egress(
+    tmp_path: Path,
+    audit: FakeAuditPort,
+    respx_mock: respx.MockRouter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WR-10: un valor en un .env real se carga al boot y activa la red env-value."""
+    env_key = "OPENAI_API_KEY"
+    secret = "owner-env-file-secret-9912"
+    monkeypatch.delenv(env_key, raising=False)
+    config_path = tmp_path / "config.toml"
+    (tmp_path / ".env").write_text(f'{env_key}="{secret}"\n', encoding="utf-8")
+    config_path.write_text(
+        'data_dir = "data"\n'
+        'audit_db = "data/audit.db"\n'
+        "\n"
+        "[gateway]\n"
+        "global_budget = 10.0\n"
+        "\n"
+        "[gateway.tiers.economico]\n"
+        'provider = "litellm"\n'
+        'model_alias = "gemini-default"\n'
+        "max_tokens = 64\n"
+        "\n"
+        "[gateway.prices]\n"
+        "gemini-default = 0.001\n",
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path)
+
+    assert secret in settings.gateway.env_values
+    async with httpx.AsyncClient() as client:
+        gw = build_gateway(
+            settings.gateway, client=client, audit=audit, data_dir=str(tmp_path)
+        )
+        req = AgentModelRequest(
+            agent_id="a", task_id="t", prompt=f"la clave es {secret}", tier="economico"
+        )
+        with pytest.raises(SecretDetected):
+            await gw.ask(req)
+
+    assert respx_mock.calls.call_count == 0
+    failed = [e for e in audit.events if e.event_type is AuditEventType.TASK_FAILED]
+    assert failed
+    for e in failed:
+        assert secret not in e.message
+        assert secret not in str(e.payload)
+    assert any(e.payload.get("pattern") == "env_value" for e in failed)
+
+
 @pytest.mark.parametrize("env_key", ["GOOGLE_API_KEY", "OPENAI_API_KEY"])
 async def test_documented_env_key_value_never_egresses(
     env_key: str,

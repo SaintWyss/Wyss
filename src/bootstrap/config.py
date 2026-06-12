@@ -59,6 +59,69 @@ _BASE_LEVELS: dict[str, RiskLevel] = {
 }
 
 
+def _strip_env_comment(value: str) -> str:
+    """Quita comentarios inline no quoteados de un valor .env."""
+    in_single = False
+    in_double = False
+    escaped = False
+    for i, char in enumerate(value):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_double:
+            escaped = True
+            continue
+        if char == "'" and not in_double:
+            in_single = not in_single
+            continue
+        if char == '"' and not in_single:
+            in_double = not in_double
+            continue
+        if char == "#" and not in_single and not in_double and (
+            i == 0 or value[i - 1].isspace()
+        ):
+            return value[:i].rstrip()
+    return value.strip()
+
+
+def _parse_env_value(raw: str) -> str:
+    """Parsea el lado derecho de una línea KEY=VALUE de .env."""
+    value = _strip_env_comment(raw.strip())
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+        if raw.strip().startswith('"'):
+            value = bytes(value, "utf-8").decode("unicode_escape")
+    return value
+
+
+def _load_dotenv(dotenv_path: Path) -> None:
+    """Carga `config/.env` en os.environ antes de convertir settings (WR-10).
+
+    Bootstrap es la frontera de parsing: el core sigue sin IO ni dependencias externas. No
+    pisa variables ya exportadas, para preservar el entorno explícito del proceso.
+    """
+    try:
+        lines = dotenv_path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return
+    except OSError as e:
+        raise ConfigError(f"no se pudo leer el .env: {dotenv_path}") from e
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line.removeprefix("export ").lstrip()
+        if "=" not in line:
+            raise ConfigError(f"línea inválida en {dotenv_path}:{line_no}")
+        key, raw_value = line.split("=", 1)
+        key = key.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise ConfigError(f"clave inválida en {dotenv_path}:{line_no}: {key!r}")
+        os.environ.setdefault(key, _parse_env_value(raw_value))
+
+
 class DenyRuleModel(BaseModel):
     """Una regla de denylist adicional desde config. `extra="forbid"` → typo = boot abortado."""
 
@@ -227,6 +290,8 @@ def load_settings(path: Path) -> WyssSettings:
     modelo Pydantic inválido (typo, tipo incorrecto, clave extra). El mensaje nombra el
     path y, para validación, el campo (loc) de cada error.
     """
+    _load_dotenv(path.with_name(".env"))
+
     try:
         with path.open("rb") as f:
             raw = tomllib.load(f)
