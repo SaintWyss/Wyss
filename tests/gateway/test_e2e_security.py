@@ -192,6 +192,29 @@ async def test_budget_exhausted_blocks_pre_call(
     assert any(e.event_type is AuditEventType.TASK_FAILED for e in audit.events)
 
 
+async def test_build_gateway_applies_timeout_from_settings(
+    tmp_path: Path, audit: FakeAuditPort
+) -> None:
+    """WR-03: build_gateway aplica settings.timeout_s al client httpx (D-25, config gobierna).
+
+    Sin esto el default de httpx es 5s, no los 120s de D-25 — config muerta.
+    """
+    settings = GatewaySettings(
+        tiers={
+            "economico": TierConfig(
+                provider="litellm", model_alias="gemini-default", max_tokens=64
+            )
+        },
+        prices={"gemini-default": 0.001},
+        global_budget=10.0,
+        agent_budgets={},
+        timeout_s=42.5,
+    )
+    async with httpx.AsyncClient() as client:
+        build_gateway(settings, client=client, audit=audit, data_dir=str(tmp_path))
+        assert client.timeout == httpx.Timeout(42.5)
+
+
 async def test_build_gateway_purges_expired_traces(
     tmp_path: Path, audit: FakeAuditPort
 ) -> None:

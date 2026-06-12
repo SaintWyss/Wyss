@@ -40,7 +40,9 @@ def build_gateway(
 ) -> ModelGateway:
     """Arma el ModelGateway completo desde GatewaySettings + deps inyectadas (Pattern 4).
 
-    - `client`: httpx.AsyncClient compartido por los providers (el caller fija timeout).
+    - `client`: httpx.AsyncClient compartido por los providers. El composition root le APLICA
+      `settings.timeout_s` (D-25, WR-03): config gobierna — sin esto el default de httpx es
+      5s y las llamadas largas a Claude timeoutearían sistemáticamente.
     - `audit`: AuditPort concreto inyectado (nunca se importa el paquete audit).
     - `data_dir`: directorio de runtime; la traces.db vive en `{data_dir}/traces.db`.
 
@@ -49,6 +51,9 @@ def build_gateway(
     una llamada real sin clave fallará con 401 (auditado), nunca silenciosamente.
     """
     db_path = Path(data_dir) / "traces.db"
+
+    # D-25 (WR-03): el timeout por llamada del TOML se aplica acá — no es config muerta.
+    client.timeout = httpx.Timeout(settings.timeout_s)
 
     router = ModelRouter(dict(settings.tiers))
     minimizer = ContextMinimizer(
