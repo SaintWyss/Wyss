@@ -9,13 +9,14 @@ lista de AuditEvent y el contextmanager Span, sin IO.
 `RecordingEngine` envuelve un CognitivePolicyEngine real y registra los planes evaluados en
 `.calls`, para que los tests de la segunda muralla (EXEC-04 / D-68) aserten que el re-evaluó.
 
-TODO (plan 02): añadir `journal` fixture (UndoJournal SQLite) cuando la clase exista en
-src/execution/journal.py. No se define aquí — UndoJournal no existe hasta el plan 06-02.
+`journal` fixture añadida en plan 06-02: yields UndoJournal(tmp_path / "journal.db"),
+cierra en finally (espejo de tests/orchestrator/conftest.py fixture pending_store).
 """
 
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +25,7 @@ from core.domain.plan import Plan
 from core.domain.policy import AggregateThresholds, PolicyRules
 from core.domain.risk import RiskLevel
 from core.policy import BUILTIN_DENY, CognitivePolicyEngine
+from execution.journal import UndoJournal
 
 DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
     "file.read": RiskLevel.A,
@@ -85,3 +87,17 @@ class RecordingEngine:
     def evaluate(self, plan: Plan) -> object:
         self.calls.append(plan)
         return self._inner.evaluate(plan)
+
+
+@pytest.fixture
+def journal(tmp_path: Path) -> Iterator[UndoJournal]:
+    """UndoJournal respaldado en tmp_path/journal.db; cierra en finally.
+
+    Espejo del fixture `pending_store` en tests/orchestrator/conftest.py.
+    Plan 06-02 (UndoJournal, D-65).
+    """
+    j = UndoJournal(tmp_path / "journal.db")
+    try:
+        yield j
+    finally:
+        j.close()

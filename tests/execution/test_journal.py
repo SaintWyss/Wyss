@@ -241,11 +241,10 @@ def test_restore_overwrite_from_backup(tmp_path: Path) -> None:
     """restore() rewrites original bytes from data/undo_backups/{entry_id}."""
     db_path = tmp_path / "journal.db"
 
-    # Set up: a file that was overwritten
+    # Set up: a file with original content that will be overwritten
     target_file = tmp_path / "target.txt"
     original_content = b"original content"
     new_content = b"new overwritten content"
-    target_file.write_bytes(new_content)
 
     # The backup dir in journal convention lives at data/undo_backups/
     # For this test we patch the backup_base_dir to tmp_path / "undo_backups"
@@ -254,6 +253,10 @@ def test_restore_overwrite_from_backup(tmp_path: Path) -> None:
 
     journal = UndoJournal(db_path, backup_base_dir=backup_dir)
     try:
+        # Step 1: file exists with original content
+        target_file.write_bytes(original_content)
+
+        # Step 2: record BEFORE mutation (pre-capture)
         entry_id = journal.record(
             task_id="t-write",
             step_index=0,
@@ -263,21 +266,24 @@ def test_restore_overwrite_from_backup(tmp_path: Path) -> None:
             inverse_op={
                 "type": "file.write",
                 "target": str(target_file),
-                "parameters": {"backup_path": str(backup_dir / "PLACEHOLDER")},
+                "parameters": {},
             },
         )
-        # Capture the backup (simulate pre-mutation capture)
+        # Step 3: capture backup while file still has original content
         journal.capture_overwrite_backup(entry_id, target_file)
-        # Replace backup_path in inverse_op with actual backup path
-        # Note: capture_overwrite_backup stores at backup_dir / entry_id
 
+        # Step 4: mutation happens (overwrite with new content)
+        target_file.write_bytes(new_content)
+        assert target_file.read_bytes() == new_content
+
+        # Step 5: restore should revert to original_content
         result = journal.restore(entry_id)
         entry = journal.load(entry_id)
     finally:
         journal.close()
 
     assert result is True
-    assert target_file.read_bytes() == original_content  # will fail until original content is backed up
+    assert target_file.read_bytes() == original_content
     assert entry is not None
     assert entry.status == "rolled_back"
 
