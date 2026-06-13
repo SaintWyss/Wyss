@@ -1,3 +1,23 @@
-# Capa de Ejecución
-# Adaptadores: FileSystemAdapter, ShellAdapter, GitAdapter,
-#              CalendarAdapter, MessagingAdapter, AppAdapter
+"""Capa de Ejecución — re-exportaciones públicas del paquete.
+
+Adapters: FileSystemAdapter, ShellAdapter, GitAdapter
+Journal:  UndoJournal
+Executor: PlanExecutor
+
+Adapters pendientes (deferred, fases futuras):
+  CalendarAdapter, MessagingAdapter, AppAdapter
+"""
+
+from execution.executor import PlanExecutor
+from execution.filesystem import FileSystemAdapter
+from execution.git import GitAdapter
+from execution.journal import UndoJournal
+from execution.shell import ShellAdapter
+
+__all__ = [
+    "FileSystemAdapter",
+    "GitAdapter",
+    "PlanExecutor",
+    "ShellAdapter",
+    "UndoJournal",
+]

@@ -235,7 +235,10 @@ class PlanExecutor:
                     actor_type=ActorType.SYSTEM,
                     actor_id="executor",
                     event_type=AuditEventType.TASK_FAILED,
-                    message=f"ESCALATE: plan {plan.task_id!r} paso {step_index} ({action.type}): {result.detail}",
+                    message=(
+                        f"ESCALATE: plan {plan.task_id!r} "
+                        f"paso {step_index} ({action.type}): {result.detail}"
+                    ),
                     task_id=plan.task_id,
                     payload={"escalate": True, "step": step_index},
                 )

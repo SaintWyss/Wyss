@@ -11,16 +11,14 @@ Cubre:
 asyncio_mode="auto" en pyproject.toml — no necesitan @pytest.mark.asyncio.
 """
 
-from collections.abc import Mapping
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.domain.audit import ActorType, AuditEvent, AuditEventType
+from core.domain.audit import AuditEventType
 from core.domain.execution import ToolResult, Verification
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
-from execution.executor import ExecutorResult, PlanExecutor
-
+from execution.executor import PlanExecutor
 
 # ---------------------------------------------------------------------------
 # Helpers — adaptadores falsos deterministas
@@ -124,10 +122,6 @@ async def test_abort_rolls_back_in_reverse() -> None:
     step1 = Action(type="file.write", target="/a", on_error=ErrorPolicy.ABORT)
     step2 = Action(type="file.write", target="/b", on_error=ErrorPolicy.ABORT)
     plan = _make_plan(step1, step2)
-
-    # Step 1 tiene éxito; step 2 falla
-    filesystem_ok = _ok_adapter(journal_entry_id="entry-1")
-    filesystem_fail = _fail_adapter(journal_entry_id="entry-2")
 
     # El filesystem adapter se llama en orden: primero step1 (ok), luego step2 (fail)
     filesystem = MagicMock()

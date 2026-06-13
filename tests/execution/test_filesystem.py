@@ -15,12 +15,11 @@ from pathlib import Path
 import pytest
 
 from core.domain.execution import ToolResult
-from core.domain.plan import Action, ErrorPolicy
+from core.domain.plan import Action
 from core.policy.engine import CognitivePolicyEngine
 from execution.filesystem import FileSystemAdapter, _sha256
 from execution.journal import UndoJournal
 from tests.execution.conftest import FakeAudit
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -324,12 +323,15 @@ def test_delete_no_unlink_in_source(adapter: FileSystemAdapter, tmp_path: Path) 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
-            if isinstance(func, ast.Attribute):
-                if func.attr == "unlink" and isinstance(func.value, ast.Name):
-                    if func.value.id == "os":
-                        pytest.fail(
-                            "FileSystemAdapter usa os.unlink — debe usar send2trash (D-64)"
-                        )
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "unlink"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "os"
+            ):
+                pytest.fail(
+                    "FileSystemAdapter usa os.unlink — debe usar send2trash (D-64)"
+                )
 
 
 # ---------------------------------------------------------------------------

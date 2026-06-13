@@ -15,6 +15,7 @@ Constraint de imports (import-linter independence):
   PROHIBIDO: orchestrator, agents, knowledge, gateway, audit (no cruzar entre capas)
 """
 
+import contextlib
 import hashlib
 import os
 import shutil
@@ -146,7 +147,10 @@ class FileSystemAdapter:
             return False, resolved_target, reason
 
         if resolved_target != action.target:
-            reason = f"resolved path differs from original (path tricks): {action.target!r} -> {resolved_target!r}"
+            reason = (
+                f"resolved path differs from original (path tricks): "
+                f"{action.target!r} -> {resolved_target!r}"
+            )
             self._audit_blocked(action.target, resolved_target, str(decision.risk_level), reason)
             return False, resolved_target, reason
 
@@ -236,10 +240,8 @@ class FileSystemAdapter:
                 },
             )
             # Capturar backup DESPUÉS de obtener entry_id (necesitamos el id para el nombre)
-            try:
+            with contextlib.suppress(Exception):
                 self._journal.capture_overwrite_backup(entry_id, resolved_path)
-            except Exception:
-                pass  # Si falla el backup, continuamos — la entrada ya está en journal
         else:
             # Archivo nuevo: la inversa es borrarlo
             entry_id = self._journal.record(
@@ -430,7 +432,10 @@ class FileSystemAdapter:
             passed = actual_size == expected_size and actual_hash == expected_hash
             return Verification(
                 passed=passed,
-                detail=f"sha256={'ok' if passed else 'mismatch'} size={'ok' if actual_size == expected_size else 'mismatch'}",
+                detail=(
+                    f"sha256={'ok' if passed else 'mismatch'} "
+                    f"size={'ok' if actual_size == expected_size else 'mismatch'}"
+                ),
             )
 
         if action.type == "file.move":

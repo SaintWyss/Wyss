@@ -12,6 +12,7 @@ Cubre:
 import ast
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -20,6 +21,8 @@ from core.domain.plan import Action
 from core.domain.risk import RiskLevel
 from tests.execution.conftest import FakeAudit
 
+if TYPE_CHECKING:
+    from execution.git import GitAdapter
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,7 +45,7 @@ def _make_adapter(
     audit: FakeAudit,
     repo_path: Path,
     allowed: set[str] | None = None,
-):
+) -> "GitAdapter":
     """Crea GitAdapter con FakeAudit, repo_path y allowlist explícita."""
     from execution.git import GitAdapter
 
@@ -184,7 +187,11 @@ def test_git_adapter_never_uses_shell_equals_true() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             for kw in node.keywords:
-                if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                if (
+                    kw.arg == "shell"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
+                ):
                     violations.append(f"línea {kw.value.lineno}: shell=True en llamada")
 
     assert violations == [], f"shell=True como keyword argument en git.py: {violations}"

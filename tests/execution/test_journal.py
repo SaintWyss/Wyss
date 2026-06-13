@@ -12,7 +12,6 @@ import pytest
 from core.domain.errors import AuditIntegrityError
 from execution.journal import UndoJournal
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -21,11 +20,19 @@ from execution.journal import UndoJournal
 def _action_dict(action_type: str = "file.move") -> dict[str, object]:
     """Builds a minimal inverse_op dict for test records."""
     if action_type == "file.move":
-        return {"type": "file.move", "target": "/tmp/dest.txt", "parameters": {"destination": "/tmp/origin.txt"}}
+        return {
+            "type": "file.move",
+            "target": "/tmp/dest.txt",
+            "parameters": {"destination": "/tmp/origin.txt"},
+        }
     if action_type == "file.delete":
         return {"type": "file.delete", "target": "/tmp/written.txt", "parameters": {}}
     if action_type == "file.write":
-        return {"type": "file.write", "target": "/tmp/origin.txt", "parameters": {"backup_path": "data/undo_backups/placeholder"}}
+        return {
+            "type": "file.write",
+            "target": "/tmp/origin.txt",
+            "parameters": {"backup_path": "data/undo_backups/placeholder"},
+        }
     return {"type": action_type, "target": "/tmp/x.txt", "parameters": {}}
 
 
@@ -145,9 +152,11 @@ def test_constructor_raises_on_non_wal_fs(tmp_path: Path) -> None:
     fake_conn = mock.MagicMock(spec=sqlite3.Connection)
     fake_conn.execute.return_value.fetchone.return_value = fake_row
 
-    with mock.patch("execution.journal.sqlite3.connect", return_value=fake_conn):
-        with pytest.raises(AuditIntegrityError, match="wal"):
-            UndoJournal(db_path)
+    with (
+        mock.patch("execution.journal.sqlite3.connect", return_value=fake_conn),
+        pytest.raises(AuditIntegrityError, match="wal"),
+    ):
+        UndoJournal(db_path)
 
 
 def test_journal_context_manager(tmp_path: Path) -> None:
@@ -209,7 +218,7 @@ def test_record_then_restore_move(tmp_path: Path) -> None:
     assert dest.exists()
     assert not origin.exists()
 
-    inverse_op = {
+    inverse_op: dict[str, object] = {
         "type": "file.move",
         "target": str(dest),
         "parameters": {"destination": str(origin)},
@@ -308,7 +317,7 @@ def test_restore_already_rolled_back_returns_false(tmp_path: Path) -> None:
     origin.write_text("hello")
     shutil.move(str(origin), str(dest))
 
-    inverse_op = {
+    inverse_op: dict[str, object] = {
         "type": "file.move",
         "target": str(dest),
         "parameters": {"destination": str(origin)},

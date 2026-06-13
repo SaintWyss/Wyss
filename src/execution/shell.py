@@ -17,8 +17,9 @@ Importaciones: solo `core.*` + stdlib (invariante de import-linter).
 import asyncio
 import shutil
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Union, cast
+from typing import cast
 
 from core.domain.audit import ActorType, AuditEvent, AuditEventType
 from core.domain.execution import ToolResult, Verification
@@ -43,8 +44,8 @@ class ShellAdapter:
         self,
         audit: AuditPort,
         *,
-        allowed_binaries: Union[set[str], None] = None,
-        config_path: Union[str, Path, None] = None,
+        allowed_binaries: set[str] | None = None,
+        config_path: str | Path | None = None,
         timeout_s: float = 30.0,
     ) -> None:
         self._audit = audit
@@ -119,7 +120,7 @@ class ShellAdapter:
                 detail=str(exc),
                 payload={"returncode": -1, "stdout": "", "stderr": str(exc)},
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult(
                 success=False,
                 detail=f"timeout ({self._timeout_s}s) ejecutando '{binary}'",
@@ -167,7 +168,7 @@ class ShellAdapter:
             stdout_b, stderr_b = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout_s
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.communicate()  # drain para evitar zombie
             raise

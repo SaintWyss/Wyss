@@ -6,16 +6,16 @@ Plan 06-04, Task 1 (TDD RED).
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock
+from typing import TYPE_CHECKING
 
 import pytest
 
-from core.domain.audit import ActorType, AuditEvent, AuditEventType
-from core.domain.execution import ToolResult
 from core.domain.plan import Action, ErrorPolicy
-from core.domain.risk import RiskLevel
 from core.policy.engine import CognitivePolicyEngine
 from tests.execution.conftest import FakeAudit, RecordingEngine
+
+if TYPE_CHECKING:
+    from execution.filesystem import FileSystemAdapter
 
 
 def _make_adapter(
@@ -82,7 +82,7 @@ def test_recording_engine_called_on_execute(
 
     import asyncio
 
-    result = asyncio.run(adapter.execute(action))
+    asyncio.run(adapter.execute(action))
 
     # El engine debe haber sido llamado por la segunda muralla
     assert len(recording.calls) >= 1, "engine.evaluate no fue llamado por la segunda muralla"

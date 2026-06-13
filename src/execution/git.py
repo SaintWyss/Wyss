@@ -17,15 +17,15 @@ Importaciones: solo `core.*` + stdlib (invariante de import-linter).
 import asyncio
 import shutil
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Union, cast
+from typing import cast
 
 from core.domain.audit import ActorType, AuditEvent, AuditEventType
 from core.domain.execution import ToolResult, Verification
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
 from core.ports.audit import AuditPort
-
 
 # Subcomandos git permitidos por defecto (pueden sobreescribirse vía TOML o constructor)
 DEFAULT_ALLOWED_SUBCOMMANDS: frozenset[str] = frozenset(
@@ -47,10 +47,10 @@ class GitAdapter:
     def __init__(
         self,
         audit: AuditPort,
-        repo_path: Union[str, Path],
+        repo_path: str | Path,
         *,
-        allowed_subcommands: Union[set[str], frozenset[str], None] = None,
-        config_path: Union[str, Path, None] = None,
+        allowed_subcommands: set[str] | frozenset[str] | None = None,
+        config_path: str | Path | None = None,
         timeout_s: float = 30.0,
     ) -> None:
         self._audit = audit
@@ -139,7 +139,7 @@ class GitAdapter:
                 args=args,
                 timeout_s=self._timeout_s,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult(
                 success=False,
                 detail=f"timeout ({self._timeout_s}s) ejecutando 'git {subcommand}'",
@@ -187,7 +187,7 @@ class GitAdapter:
             stdout_b, stderr_b = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout_s
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.communicate()  # drain para evitar zombie
             raise

@@ -10,17 +10,18 @@ Cubre:
   - Invariante shell=False: grep en el fuente
 """
 
-import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from core.domain.audit import ActorType, AuditEventType
-from core.domain.execution import ToolResult, Verification
+from core.domain.audit import AuditEventType
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
 from tests.execution.conftest import FakeAudit
 
+if TYPE_CHECKING:
+    from execution.shell import ShellAdapter
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -36,7 +37,7 @@ def _make_action(binary: str, *args: str) -> Action:
     )
 
 
-def _make_adapter(audit: FakeAudit, allowed: set[str] | None = None):
+def _make_adapter(audit: FakeAudit, allowed: set[str] | None = None) -> "ShellAdapter":
     """Crea ShellAdapter con FakeAudit y allowlist explícita (sin TOML)."""
     from execution.shell import ShellAdapter
 
@@ -90,7 +91,7 @@ async def test_allowed_binary_executes() -> None:
 
     assert result.success is True
     assert result.payload["returncode"] == 0
-    assert "hello wyss" in result.payload["stdout"]  # type: ignore[operator]
+    assert "hello wyss" in str(result.payload["stdout"])
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +178,11 @@ def test_shell_adapter_never_uses_shell_equals_true() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             for kw in node.keywords:
-                if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                if (
+                    kw.arg == "shell"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
+                ):
                     violations.append(f"línea {kw.value.lineno}: shell=True en llamada")
 
     assert violations == [], f"shell=True como keyword argument encontrado en: {violations}"
