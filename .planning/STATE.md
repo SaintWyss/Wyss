@@ -9,7 +9,7 @@ progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 18
   percent: 20
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 03 (pipeline-de-ingesta) — EXECUTING
-Plan: 1 of 7
+Plan: 6 of 7 complete
 
 - **Phase:** 3 of 10 (pipeline de ingesta)
-- **Status:** Executing Phase 03
+- **Status:** Executing Phase 03 — Plan 03-06 complete (IngestPipeline); next 03-07 (CLI)
 - **Last activity:** 2026-06-13
 
 ## Decisions Log
@@ -72,6 +72,7 @@ Plan: 1 of 7
 | 2026-06-12 | `build_gateway` es el único composition root del gateway; API keys solo de os.environ | Pattern 4: cablea adapters+application+facade; AuditPort inyectado nunca import audit; keys jamás en config/traces/AuditEvent (V2, Pitfall 4) (02-05) |
 | 2026-06-12 | `traces.db` con chmod 0600 en `TraceStore` (best-effort, suppress OSError) | T-02-trace-file-perms: prompts completos post-min restringidos al owner; cubre toda creación de la DB, tolerante a FS sin modos POSIX (02-05) |
 | 2026-06-12 | `SecretFilter` de 3 capas (env_values + built-in patterns + config), fail-closed, excluye pre-indexado | KNOW-07: chunk con secreto detectado se descarta; el contenido sensible nunca entra al FTS5/vector; puro + inyectado; espejo del ContextMinimizer del gateway (03-03) |
+| 2026-06-12 | `IngestRunResult.warnings` campo aditivo con default `()` | Aviso Ollama-down viaja en el resultado sin romper construcciones existentes (patrón D-26); cross-AI exec (03-06) |
 
 ## Blockers
 
