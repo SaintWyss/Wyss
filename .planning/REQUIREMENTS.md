@@ -64,7 +64,7 @@
 
 ### Execution
 
-- [ ] **EXEC-01**: Adaptadores de ejecución desacoplados (FileSystem, Shell, Git) con allowlist de comandos *(RF-016)*
+- [x] **EXEC-01**: Adaptadores de ejecución desacoplados (FileSystem, Shell, Git) con allowlist de comandos *(RF-016)*
 - [ ] **EXEC-02**: Toda acción modificadora se verifica después de ejecutada (conteos, hashes, estados) *(RF-017)*
 - [x] **EXEC-03**: Operaciones de archivos con undo: papelera en vez de borrado, journal origen→destino con operación inversa *(gap #7)*
 - [ ] **EXEC-04**: El adapter de ejecución re-verifica el nivel de riesgo antes de ejecutar (segunda muralla tras la política)
