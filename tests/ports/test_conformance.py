@@ -8,6 +8,9 @@ from pathlib import Path
 
 from audit import SqliteAuditLogger
 from core.domain import AgentDefinition
+from core.domain.policy import AggregateThresholds, PolicyRules
+from core.domain.risk import RiskLevel
+from core.policy import BUILTIN_DENY, CognitivePolicyEngine
 from core.ports import (
     AgentBase,
     AuditPort,
@@ -106,6 +109,34 @@ def test_model_gateway_conforms() -> None:
 def test_tool_conforms() -> None:
     port: Tool = FakeTool()
     assert port is not None
+
+
+def test_filesystem_adapter_conforms(tmp_path: Path) -> None:
+    """FileSystemAdapter satisface el protocolo Tool (verificado por mypy strict)."""
+    from execution.filesystem import FileSystemAdapter
+    from execution.journal import UndoJournal
+    from tests.execution.conftest import FakeAudit
+
+    _engine = CognitivePolicyEngine(
+        PolicyRules(
+            deny=BUILTIN_DENY,
+            base_levels={
+                "file.write": RiskLevel.C,
+                "file.delete": RiskLevel.C,
+                "file.move": RiskLevel.B,
+            },
+            thresholds=AggregateThresholds(),
+        )
+    )
+    _audit = FakeAudit()
+    _journal = UndoJournal(tmp_path / "conformance_journal.db", backup_base_dir=tmp_path / "bk")
+    try:
+        adapter: Tool = FileSystemAdapter(engine=_engine, audit=_audit, journal=_journal)
+        assert adapter is not None
+        assert adapter.name == "filesystem"
+        assert adapter.max_risk == RiskLevel.C
+    finally:
+        _journal.close()
 
 
 def test_task_repository_conforms() -> None:

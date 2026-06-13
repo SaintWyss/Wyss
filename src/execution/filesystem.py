@@ -277,7 +277,7 @@ class FileSystemAdapter:
         )
 
     async def _execute_move(self, action: Action, resolved_src: Path) -> ToolResult:
-        """file.move: shutil.move (no os.rename — EXDEV en cross-FS), journal antes."""
+        """file.move: shutil.move (EXDEV-safe, cross-FS NTFS↔ext4), journal antes."""
         dest_str = str(action.parameters.get("destination", ""))
         if not dest_str:
             return ToolResult(
