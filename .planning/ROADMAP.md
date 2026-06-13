@@ -116,7 +116,7 @@
 4. El adapter re-verifica el nivel de riesgo antes de ejecutar — un plan adulterado post-política se bloquea
 5. ShellAdapter solo ejecuta comandos de la allowlist
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 
@@ -130,7 +130,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-05-PLAN.md — PlanExecutor: dispatch + on_error ABORT/RETRY/ESCALATE (D-69) + package exports
+- [x] 06-05-PLAN.md — PlanExecutor: dispatch + on_error ABORT/RETRY/ESCALATE (D-69) + package exports
 
 ### Phase 7: Modelo de Agentes
 

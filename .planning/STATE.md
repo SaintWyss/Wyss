@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: executing
-last_updated: "2026-06-13T21:00:00.000Z"
+status: verifying
+last_updated: "2026-06-13T21:11:27.891Z"
 last_activity: 2026-06-13
 progress:
   total_phases: 10
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 32
   completed_plans: 31
-  percent: 43
+  percent: 50
 ---
 
 # Wyss — State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 06 (capa-de-ejecuci-n) — EXECUTING
+Phase: 06 (capa-de-ejecuci-n) — COMPLETE
 Plan: 5 of 5
-Last completed: 06-04 (FileSystemAdapter — second wall + send2trash + verify) — 2026-06-13
+Last completed: 06-05 (PlanExecutor — step loop + on_error enforcement) — 2026-06-13
 
 - **Phase:** 5 of 10 (orquestador daemon)
-- **Status:** Ready to execute
+- **Status:** Phase complete — ready for verification
 - **Last activity:** 2026-06-13
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
@@ -57,6 +57,8 @@ Last completed: 06-04 (FileSystemAdapter — second wall + send2trash + verify) 
 | 2026-06-13 | `shutil.move` prohibido intercambiar con `os.rename`; grep gate enforced (count=0) | EXDEV en cross-FS NTFS↔ext4 — shutil.move es el único camino seguro (06-04) |
 | 2026-06-13 | `_get_str/_get_int` helpers para `Mapping[str, object]` en mypy strict | `int(Mapping.get())` no tiene overload en mypy; helpers con isinstance guards resuelven sin `# type: ignore` (06-04) |
 | 2026-06-13 | trash_path determinado pre-delete via `_expected_trash_path()`; actual re-verificado via `_find_actual_trash_path()` | send2trash puede añadir sufijo numérico en colisiones; dos pasos: journal con expected, verify con actual (06-04) |
+| 2026-06-13 | RETRY pre-ejecutado en run() via _retry_with_backoff: primer intento cuenta en max_attempts — evita N+1 llamadas a execute | PlanExecutor RETRY dispatch inline (06-05) |
+| 2026-06-13 | ExecutorResult dataclass frozen: success, detail, applied_entries tuple, failed_step — informa al caller qué entries quedaron aplicadas | PlanExecutor result type (06-05) |
 
 ## Blockers
 
