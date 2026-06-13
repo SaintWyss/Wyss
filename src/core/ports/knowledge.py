@@ -9,6 +9,7 @@ from core.domain import (
     Hit,
     IndexEntry,
     Query,
+    SearchResult,
     SourceFile,
     Subject,
     Vector,
@@ -59,4 +60,4 @@ class VectorIndex(Protocol):
 class Retrieval(Protocol):
     """Lo que ven agentes/orquestador: resultados ya fusionados y filtrados por permiso. Async."""
 
-    async def search(self, query: Query, subject: Subject) -> Sequence[Hit]: ...
+    async def search(self, query: Query, subject: Subject) -> SearchResult: ...

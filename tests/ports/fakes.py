@@ -26,6 +26,7 @@ from core.domain import (
     Query,
     Report,
     RiskLevel,
+    SearchResult,
     SourceFile,
     Span,
     Subject,
@@ -112,8 +113,8 @@ class FakeVectorIndex:
 
 
 class FakeRetrieval:
-    async def search(self, query: Query, subject: Subject) -> Sequence[Hit]:
-        return []
+    async def search(self, query: Query, subject: Subject) -> SearchResult:
+        return SearchResult(hits=())
 
 
 class FakePermissionStore:

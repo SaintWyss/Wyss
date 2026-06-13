@@ -34,6 +34,7 @@ from core.domain.knowledge import (
     IngestRunResult,
     IngestSettings,
     Query,
+    SearchResult,
     SourceFile,
     Vector,
 )
@@ -85,6 +86,7 @@ __all__ = [
     "Query",
     "Report",
     "RiskLevel",
+    "SearchResult",
     "SecretDetected",
     "SecretFileExcluded",
     "SourceFile",

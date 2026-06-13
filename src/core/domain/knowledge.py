@@ -3,7 +3,7 @@
 Expandir en Fases 3-4 es aditivo, no breaking.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -92,6 +92,16 @@ class Hit:
     score: float
     snippet: str
     source_path: str
+    date: float | None = None  # mtime del archivo de origen (KNOW-05, D-47)
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResult:
+    """Resultado de retrieval con metadata de degradación a nivel consulta."""
+
+    hits: Sequence[Hit]
+    degraded: bool = False  # degraded/reason son propiedades query-level (D-44), no por-Hit
+    reason: str = ""
 
 
 @dataclass(frozen=True, slots=True)

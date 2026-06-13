@@ -7,6 +7,7 @@ La tabla `file_state` permite saltar archivos sin cambios por size+mtime sin rec
 
 import hashlib
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import cast
@@ -18,6 +19,18 @@ _ERROR_MAX_LEN = 500
 _BLOCK_SIZE = 1024 * 1024
 
 _COLUMNS = ("path", "kb_id", "size", "mtime", "sha256", "status", "attempts", "error")
+
+
+@dataclass(frozen=True, slots=True)
+class BcFreshness:
+    """Frescura del índice por base de conocimiento."""
+
+    kb_id: str
+    last_indexed_at: float | None
+    total: int
+    embedded: int
+    pending: int
+    failed: int
 
 
 class StateStore:
@@ -214,6 +227,54 @@ class StateStore:
             (kb_id,),
         ).fetchall()
         return {FileStatus(str(status)): int(count) for status, count in rows}
+
+    def freshness_by_kb(self) -> list[BcFreshness]:
+        """Devuelve frescura y contadores de `file_state`, agrupados por BC."""
+        rows = self._conn.execute(
+            """
+            SELECT
+              kb_id,
+              MAX(indexed_at),
+              COUNT(*),
+              SUM(CASE WHEN status='embedded' THEN 1 ELSE 0 END),
+              SUM(CASE WHEN status IN ('pending','extracted') THEN 1 ELSE 0 END),
+              SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END)
+            FROM file_state
+            GROUP BY kb_id
+            ORDER BY kb_id
+            """
+        ).fetchall()
+        return [
+            BcFreshness(
+                kb_id=str(row[0]),
+                last_indexed_at=None if row[1] is None else self._as_float(row[1]),
+                total=self._as_int(row[2]),
+                embedded=self._as_int(row[3]),
+                pending=self._as_int(row[4]),
+                failed=self._as_int(row[5]),
+            )
+            for row in rows
+        ]
+
+    def list_kb_ids(self) -> list[str]:
+        """Lista BCs distintas presentes en `file_state`, ordenadas por id."""
+        rows = self._conn.execute(
+            "SELECT DISTINCT kb_id FROM file_state ORDER BY kb_id"
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
+    def mtime_by_path(self, source_path: str, kb_id: str) -> float | None:
+        """mtime del archivo de origen para enriquecer Hit.date; None si no está indexado."""
+        row = cast(
+            tuple[object, ...] | None,
+            self._conn.execute(
+                "SELECT mtime FROM file_state WHERE path = ? AND kb_id = ?",
+                (source_path, kb_id),
+            ).fetchone(),
+        )
+        if row is None:
+            return None
+        return self._as_float(row[0])
 
     def get(self, path: Path | str, kb_id: str) -> FileRecord | None:
         """Devuelve una fila de `file_state`; helper útil para tests y pipeline."""

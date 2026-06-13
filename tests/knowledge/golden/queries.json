@@ -1,0 +1,102 @@
+[
+  {
+    "query": "azafran carnaroli",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/risotto_azafran.md"
+  },
+  {
+    "query": "risotto caldo",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/risotto_azafran.md"
+  },
+  {
+    "query": "manteca azafran",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/risotto_azafran.md"
+  },
+  {
+    "query": "focaccia salmuera",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/focaccia_levadura.md"
+  },
+  {
+    "query": "levadura alveolos",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/focaccia_levadura.md"
+  },
+  {
+    "query": "quasar redshift",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/quasar_redshift.md"
+  },
+  {
+    "query": "espectro absorcion",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/quasar_redshift.md"
+  },
+  {
+    "query": "redshift lejano",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/quasar_redshift.md"
+  },
+  {
+    "query": "pulsar magnetar",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/pulsar_magnetar.md"
+  },
+  {
+    "query": "rafagas periodicas",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/pulsar_magnetar.md"
+  },
+  {
+    "query": "arbitraje cupon",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/arbitraje_cupon.md"
+  },
+  {
+    "query": "duration spread",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/arbitraje_cupon.md"
+  },
+  {
+    "query": "bonos escalonado",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/arbitraje_cupon.md"
+  },
+  {
+    "query": "balance dividendos",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/balance_dividendos.md"
+  },
+  {
+    "query": "EBITDA caja",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/balance_dividendos.md"
+  },
+  {
+    "query": "hidroponia perlita",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/hidroponia_perlita.md"
+  },
+  {
+    "query": "nutritiva bandeja",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/hidroponia_perlita.md"
+  },
+  {
+    "query": "perlita lavada",
+    "kb_id": "personal",
+    "expected_source_path": "/golden/personal/hidroponia_perlita.md"
+  },
+  {
+    "query": "compost lombriz",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/compost_lombriz.md"
+  },
+  {
+    "query": "humus tamizado",
+    "kb_id": "ragcorp",
+    "expected_source_path": "/golden/ragcorp/compost_lombriz.md"
+  }
+]
