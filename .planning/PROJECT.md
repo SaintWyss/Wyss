@@ -83,6 +83,7 @@ Santiago puede encontrar cualquier cosa en sus 2 TB en segundos, delegar tareas 
 | uv para deps | Más rápido que pip/poetry, lockfile robusto, estándar 2025 | — Pending |
 | Hexagonal + Plugin Pattern | Extensibilidad sin ruptura — nueva feature = nueva clase | — Pending |
 | Hermes Agent (NousResearch) como cerebro de orquestación — modo híbrido | Evita construir orquestador NL/planes/rutinas de cero (solapa Fases 5 y 9). Hermes corre en container aislado, tools built-in deshabilitadas; toda acción real pasa por MCP server de Wyss → CognitivePolicyEngine + audit gatean cada call fail-closed. Hermes = adapter detrás de OrchestratorPort; reglas inviolables 1-9 se mantienen como garantía determinística. Decidido 2026-06-11 | — Pending |
+| Ruteo de modelos en el desarrollo: **Claude = juicio, Codex = construcción, Gemini = acarreo** | Optimización de tokens Claude. Claude (orquestador/subagentes GSD): discusión, planning, verificación, security, decisiones D-XX — todos los gates de juicio. Codex high (`codex-gsd-exec`): ejecución de planes, debugging profundo, refactors grandes. Gemini (`gemini-gsd-exec`): acarreo — research crudo, docs mecánicos, lecturas masivas (ventana 1M); nunca juicio ni gates. Claude siempre re-verifica la cadena antes de commit (los wrappers no commitean). Decidido 2026-06-13 | — Active |
 
 ---
 

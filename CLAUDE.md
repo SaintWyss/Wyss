@@ -100,7 +100,11 @@ Wyss es un sistema de asistencia operativa personal y empresarial basado en arqu
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+**Ruteo de modelos (convención oficial, 2026-06-13):**
+- **Claude = juicio**: discusión, planning, verificación, security review, decisiones D-XX. Todos los gates quedan en Claude.
+- **Codex = construcción**: ejecución de planes GSD, debugging profundo, refactors grandes — vía `codex-gsd-exec` (stdin prompt → stdout SUMMARY; no commitea, el orquestador commitea).
+- **Gemini = acarreo**: research crudo, drafts de docs, lecturas masivas, ediciones mecánicas — vía `gemini-gsd-exec` (mismo contrato stdin/stdout; `GEMINI_GSD_MODEL` para override). Nunca juicio ni gates.
+- Regla fija: lo que un wrapper externo produce lo re-verifica Claude con la cadena completa (`pytest && mypy && ruff && lint-imports`) antes de commit.
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
