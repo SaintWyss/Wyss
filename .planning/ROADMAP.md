@@ -116,11 +116,11 @@
 4. El adapter re-verifica el nivel de riesgo antes de ejecutar — un plan adulterado post-política se bloquea
 5. ShellAdapter solo ejecuta comandos de la allowlist
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Wave 0: send2trash dep + tests/execution infra + NTFS empirical stub
+- [x] 06-01-PLAN.md — Wave 0: send2trash dep + tests/execution infra + NTFS empirical stub
 - [ ] 06-02-PLAN.md — UndoJournal SQLite-WAL: record/restore inverse ops (D-65)
 - [ ] 06-03-PLAN.md — ShellAdapter + GitAdapter: binary/subcommand allowlist, argv exec (D-66)
 
