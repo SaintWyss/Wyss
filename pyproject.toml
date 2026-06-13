@@ -17,6 +17,9 @@ dependencies = [
     "typer>=0.26.7",
 ]
 
+[project.scripts]
+wyss = "bootstrap.cli:app"
+
 [dependency-groups]
 dev = [
     "pytest>=9",
