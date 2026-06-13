@@ -13,13 +13,13 @@
 - [ ] **KNOW-01**: El owner puede indexar una ruta con `wyss index <ruta>` — escaneo, extracción y indexación híbrida (metadatos + FTS5 + vectores) *(RF-012, RF-013)*
 - [ ] **KNOW-02**: La re-indexación es incremental — size+mtime como filtro rápido, hash solo si cambió; 10 archivos modificados no re-procesan 2 TB *(RF-013)*
 - [ ] **KNOW-03**: El escaneo es reanudable — estado por archivo en SQLite (pending/extracted/embedded/failed); un crash no pierde progreso
-- [ ] **KNOW-04**: El owner puede buscar con `wyss search "<consulta>"` — recuperación híbrida con fusión RRF, < 5 segundos sobre cualquier volumen *(RF-014)*
-- [ ] **KNOW-05**: Cada resultado incluye ruta exacta, extracto relevante, fuente y fecha *(RF-014)*
+- [x] **KNOW-04**: El owner puede buscar con `wyss search "<consulta>"` — recuperación híbrida con fusión RRF, < 5 segundos sobre cualquier volumen *(RF-014)*
+- [x] **KNOW-05**: Cada resultado incluye ruta exacta, extracto relevante, fuente y fecha *(RF-014)*
 - [ ] **KNOW-06**: Extractores para PDF, DOCX, TXT, MD, PY/JS/TS, CSV, XLSX; imágenes y video/audio solo metadatos — registrables sin modificar el pipeline *(RF-012)*
 - [ ] **KNOW-07**: Los secretos (.env, *.key, tokens, contraseñas, alta entropía) se detectan y excluyen ANTES de indexar — verificado con prueba dirigida *(RF-021, regla #8)*
 - [ ] **KNOW-08**: `wyss index --estimate` proyecta chunks y costo de embeddings antes de llamar a la API; `--dry-run` lista qué se indexaría
 - [ ] **KNOW-09**: La indexación muestra progreso visible (archivos procesados / total, ETA) *(gap #5)*
-- [ ] **KNOW-10**: El índice expone su frescura — "indexado al [fecha]" consultable *(gap #6)*
+- [x] **KNOW-10**: El índice expone su frescura — "indexado al [fecha]" consultable *(gap #6)*
 - [ ] **KNOW-11**: Las BC se organizan por contexto (colección separada por BC) — base estructural del aislamiento *(RF-015)*
 
 ### Orchestrator (El Núcleo)
@@ -91,7 +91,7 @@
 
 - [x] **AUD-01**: Toda acción relevante registra: actor, instrucción, plan, decisión de política, confirmación, acciones, resultado, costo — en SQLite *(RF-022, regla #1)*
 - [ ] **AUD-02**: El owner puede consultar el historial de acciones *(RF-023)*
-- [ ] **AUD-03**: Eval set de conocimiento: N consultas doradas con archivo esperado — regresión detectable *(gap #8)*
+- [x] **AUD-03**: Eval set de conocimiento: N consultas doradas con archivo esperado — regresión detectable *(gap #8)*
 
 ---
 
