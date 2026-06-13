@@ -5,10 +5,11 @@ import json
 import sqlite3
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 import typer
@@ -32,7 +33,12 @@ from core.domain.knowledge import (
     Query,
     Vector,
 )
+from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
+from core.domain.policy import PolicyDecision
+from core.domain.risk import Outcome, RiskLevel
 from core.domain.security import Subject
+from core.orchestrator.intent import IntentCategory, IntentClassification
+from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
 from core.ports.knowledge import EmbeddingProvider
 from gateway.providers.ollama import OllamaEmbeddingProvider
@@ -56,6 +62,9 @@ from knowledge.scanner import Scanner
 from knowledge.secret_filter import SecretFilter
 from knowledge.state_store import BcFreshness, StateStore
 from knowledge.vector_index import ChromaVectorIndex, chromadb
+from orchestrator.daemon import run_daemon
+from orchestrator.pending_store import PendingStore
+from orchestrator.plan_renderer import prompt_confirmation
 
 app = typer.Typer(help="Wyss CLI")
 console = Console()
@@ -150,6 +159,51 @@ class _NoopVectorIndex:
 
     def search(self, vector: Vector, kb_ids: frozenset[str], limit: int) -> Sequence[Hit]:
         return ()
+
+
+class _DeterministicOrchestrator:
+    """Fake local de 05-04: Hermes real se conecta en el plan 05-05."""
+
+    async def classify_intent(self, instruction: str) -> IntentClassification:
+        text = instruction.lower()
+        if "algo" in text and "archivo" in text:
+            return IntentClassification(IntentCategory.AMBIGUOUS_REQUEST, 0.4, True)
+        if any(word in text for word in ("formate", "mkfs", "fdisk", "parted")):
+            return IntentClassification(IntentCategory.DANGEROUS_OPERATION, 0.95, False)
+        if any(word in text for word in ("borr", "elimin", "delete")):
+            return IntentClassification(IntentCategory.FILE_OPERATION, 0.9, False)
+        if any(word in text for word in ("mov", "renombr")):
+            return IntentClassification(IntentCategory.FILE_OPERATION, 0.85, False)
+        return IntentClassification(IntentCategory.KNOWLEDGE_QUERY, 0.8, False)
+
+    async def draft_plan(self, instruction: str, intent: IntentClassification) -> Plan:
+        text = instruction.lower()
+        task_id = f"cli-{abs(hash(instruction))}"
+        if intent.category == IntentCategory.DANGEROUS_OPERATION:
+            action = Action("shell.run", "mkfs /dev/sda1")
+        elif any(word in text for word in ("borr", "elimin", "delete")):
+            action = Action("file.delete", "/tmp/wyss-demo.txt", {"to_trash": True})
+        elif any(word in text for word in ("mov", "renombr")):
+            action = Action("file.move", "/tmp/wyss-demo.txt")
+        else:
+            action = Action("file.read", "/tmp/wyss-demo.txt")
+        return Plan(
+            task_id=task_id,
+            summary=instruction,
+            steps=(action,),
+            rationale="fake determinístico hasta integrar Hermes",
+        )
+
+    async def health_check(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class AuditRow:
+    created_at: str
+    actor_id: str
+    event_type: str
+    message: str
 
 
 def build_pipeline(
@@ -279,6 +333,142 @@ def index(
             audit.close()
         if http_client is not None:
             asyncio.run(http_client.aclose())
+
+
+@app.command()
+def start(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Levanta el daemon Wyss sobre Unix socket."""
+    audit: SqliteAuditLogger | None = None
+    pending_store: PendingStore | None = None
+    try:
+        settings = load_settings(config)
+        audit = SqliteAuditLogger(settings.audit_db)
+        pending_store = PendingStore(_pending_db_path(settings))
+        engine = CognitivePolicyEngine(settings.policy)
+        asyncio.run(
+            run_daemon(
+                _socket_path(settings),
+                engine=engine,
+                orchestrator=_DeterministicOrchestrator(),
+                pending_store=pending_store,
+                audit=audit,
+            )
+        )
+    except (ConfigError, AuditIntegrityError) as exc:
+        stderr_console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    finally:
+        if pending_store is not None:
+            pending_store.close()
+        if audit is not None:
+            audit.close()
+
+
+@app.command()
+def ask(
+    instruction: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Envía una instrucción NL al daemon."""
+    try:
+        settings = load_settings(config)
+        result = asyncio.run(
+            _json_rpc_call(
+                _socket_path(settings),
+                "ask",
+                {"instruction": instruction},
+            )
+        )
+        _render_ask_result(result)
+    except FileNotFoundError as exc:
+        stderr_console.print("Daemon no está corriendo. Usar: wyss start", style="red")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, AuditIntegrityError) as exc:
+        stderr_console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error, RuntimeError) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+
+
+@app.command()
+def confirm(
+    pending_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Confirma una propuesta pendiente sin ejecutar en foreground."""
+    pending_store: PendingStore | None = None
+    try:
+        settings = load_settings(config)
+        pending_store = PendingStore(_pending_db_path(settings))
+        proposal = pending_store.load(pending_id)
+        if proposal is None:
+            stderr_console.print("Pending no encontrado.", style="red")
+            raise typer.Exit(code=1)
+        decision = PolicyDecision(
+            task_id=proposal.task_id,
+            risk_level=RiskLevel[proposal.risk_level],
+            outcome=Outcome[proposal.outcome],
+        )
+        accepted = prompt_confirmation(decision, console)
+        response = "CONFIRMAR" if accepted and decision.risk_level == RiskLevel.C else "s"
+        if not accepted:
+            response = ""
+        result = asyncio.run(
+            _json_rpc_call(
+                _socket_path(settings),
+                "confirm",
+                {"pending_id": pending_id, "response": response},
+            )
+        )
+        _render_confirm_result(result)
+    except FileNotFoundError as exc:
+        stderr_console.print("Daemon no está corriendo. Usar: wyss start", style="red")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, AuditIntegrityError) as exc:
+        stderr_console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error, RuntimeError, KeyError) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    finally:
+        if pending_store is not None:
+            pending_store.close()
+
+
+@app.command()
+def audit(
+    since: Annotated[str | None, typer.Option("--since", help="ISO timestamp mínimo.")] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Eventos máximos.")] = 50,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista el historial auditado."""
+    try:
+        settings = load_settings(config)
+        _print_audit_table(query_audit_events(settings.audit_db, since=since, limit=limit))
+    except (ConfigError, AuditIntegrityError) as exc:
+        stderr_console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
@@ -546,10 +736,158 @@ def _format_available_kbs(kb_ids: Sequence[str]) -> str:
     return ", ".join(kb_ids)
 
 
+def _socket_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "wyss.sock"
+
+
+def _pending_db_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "pending.db"
+
+
+async def _json_rpc_call(
+    socket_path: Path, method: str, params: dict[str, object]
+) -> dict[str, Any]:
+    reader, writer = await asyncio.open_unix_connection(str(socket_path))
+    try:
+        writer.write(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": params,
+                    "id": 1,
+                }
+            ).encode()
+            + b"\n"
+        )
+        await writer.drain()
+        response = json.loads(await reader.readline())
+        if "error" in response:
+            error = response["error"]
+            message = error.get("message", "JSON-RPC error") if isinstance(error, dict) else error
+            raise RuntimeError(str(message))
+        result = response.get("result", {})
+        if not isinstance(result, dict):
+            raise RuntimeError("respuesta JSON-RPC inválida")
+        return result
+    finally:
+        writer.close()
+        await writer.wait_closed()
+
+
+def _render_ask_result(result: dict[str, Any]) -> None:
+    outcome = str(result.get("outcome", ""))
+    if outcome == "pending":
+        console.print(
+            Panel(
+                str(result.get("plan", "")),
+                title=f"Pending {result.get('pending_id')}",
+                expand=False,
+            )
+        )
+        return
+    if outcome == "rejected":
+        reasons = "\n".join(str(item) for item in result.get("reasons", []))
+        console.print(Panel(reasons or "Sin detalle.", title="Rechazado", expand=False))
+        return
+    if outcome == "queued":
+        console.print(f"Encolado: {result.get('execution_id')}")
+        return
+    if outcome == "degraded":
+        stderr_console.print(
+            str(result.get("message", "Orquestador no disponible.")),
+            style="yellow",
+        )
+        return
+    console.print(str(result.get("message", result)))
+
+
+def _render_confirm_result(result: dict[str, Any]) -> None:
+    if result.get("accepted"):
+        console.print(f"Encolado: {result.get('execution_id')}")
+        return
+    reason = result.get("reason")
+    console.print(f"No confirmado{f': {reason}' if reason else ''}.")
+
+
+def query_audit_events(
+    db_path: Path, *, since: str | None = None, limit: int = 50
+) -> list[AuditRow]:
+    sql = (
+        "SELECT created_at, actor_id, event_type, message FROM audit_events "
+        f"{'WHERE created_at >= ? ' if since is not None else ''}"
+        "ORDER BY created_at DESC LIMIT ?"
+    )
+    params: tuple[object, ...] = (since, limit) if since is not None else (limit,)
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+    return [
+        AuditRow(
+            created_at=str(row[0]),
+            actor_id=str(row[1]),
+            event_type=str(row[2]),
+            message=str(row[3]),
+        )
+        for row in rows
+    ]
+
+
+def _print_audit_table(rows: Sequence[AuditRow]) -> None:
+    table = Table(title="Auditoría")
+    table.add_column("created_at", no_wrap=True)
+    table.add_column("actor_id")
+    table.add_column("event_type")
+    table.add_column("message")
+    for row in rows:
+        table.add_row(row.created_at, row.actor_id, row.event_type, row.message)
+    console.print(table)
+
+
+def _plan_from_json(raw: str) -> Plan:
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("plan_json inválido")
+    return Plan(
+        task_id=str(data["task_id"]),
+        summary=str(data["summary"]),
+        steps=tuple(_action_from_dict(item) for item in data.get("steps", [])),
+        rationale=str(data["rationale"]),
+        estimated_risk=(
+            RiskLevel[str(data["estimated_risk"])] if data.get("estimated_risk") else None
+        ),
+    )
+
+
+def _action_from_dict(data: object) -> Action:
+    if not isinstance(data, dict):
+        raise ValueError("action inválida")
+    retry_raw = data.get("retry_params")
+    retry_params = None
+    if isinstance(retry_raw, dict):
+        retry_params = RetryParams(
+            max_attempts=int(retry_raw.get("max_attempts", 3)),
+            backoff_base_s=float(retry_raw.get("backoff_base_s", 1.0)),
+            backoff_max_s=float(retry_raw.get("backoff_max_s", 60.0)),
+        )
+    params = data.get("parameters", {})
+    if not isinstance(params, dict):
+        params = {}
+    return Action(
+        type=str(data["type"]),
+        target=str(data["target"]),
+        parameters=params,
+        on_error=ErrorPolicy(str(data.get("on_error", ErrorPolicy.ABORT.value))),
+        retry_params=retry_params,
+    )
+
+
 def _close_pipeline_state_store(pipeline: IngestPipeline) -> None:
     state_store = getattr(pipeline, "_state_store", None)
     if state_store is not None and hasattr(state_store, "close"):
         state_store.close()
 
 
-__all__ = ["app", "build_pipeline", "build_retrieval"]
+__all__ = ["app", "build_pipeline", "build_retrieval", "query_audit_events"]
