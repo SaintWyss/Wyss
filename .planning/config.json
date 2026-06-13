@@ -72,7 +72,7 @@
   "model_overrides": {
     "gsd-verifier": "sonnet",
     "gsd-code-fixer": "opus",
-    "gsd-security-auditor": "opus",
+    "gsd-security-auditor": "fable",
     "gsd-code-reviewer": "sonnet"
   }
 }
