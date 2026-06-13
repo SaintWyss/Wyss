@@ -2,16 +2,18 @@
 
 `engine` replica el fixture de tests/policy/conftest.py (BUILTIN_DENY + DEFAULT_BASE_LEVELS
 + AggregateThresholds()) para los tests que gatean acciones por política. Los fixtures
-`fake_orchestrator`, `pending_store` y `daemon_client` son placeholders marcados skip hasta
-que las clases reales existan (Planes 05-02..05-05): el archivo existe desde Wave 0
-(Nyquist: no MISSING), pero solo se activan cuando hay implementación que verificar.
+`fake_orchestrator` y `daemon_client` siguen como placeholders para planes posteriores.
 """
+
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
 from core.domain.policy import AggregateThresholds, PolicyRules
 from core.domain.risk import RiskLevel
 from core.policy import BUILTIN_DENY, CognitivePolicyEngine
+from orchestrator.pending_store import PendingStore
 
 DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
     "file.read": RiskLevel.A,
@@ -44,9 +46,12 @@ def fake_orchestrator() -> object:
 
 
 @pytest.fixture
-def pending_store(tmp_path: object) -> object:
-    """Placeholder: PendingStore SQLite sobre tmp_path (ext4) — Plan 05-03."""
-    pytest.skip("Wave 1: 05-03 implementa PendingStore")
+def pending_store(tmp_path: Path) -> Iterator[PendingStore]:
+    store = PendingStore(tmp_path / "pending.db")
+    try:
+        yield store
+    finally:
+        store.close()
 
 
 @pytest.fixture
