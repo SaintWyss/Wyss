@@ -137,3 +137,4 @@ class IngestRunResult:
     excluded_secret: int
     skipped: int
     run_id: str
+    warnings: tuple[str, ...] = ()
