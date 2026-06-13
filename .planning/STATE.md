@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: En ejecución — 05-01/02/03/04 verdes y commiteados; 05-05 diferido
-last_updated: "2026-06-13T16:50:20.009Z"
+status: executing
+last_updated: "2026-06-13T20:17:12.252Z"
 last_activity: 2026-06-13
 progress:
   total_phases: 10
   completed_phases: 4
-  total_plans: 27
+  total_plans: 32
   completed_plans: 26
   percent: 40
 ---
@@ -28,7 +28,7 @@ Phase: 05 (orquestador-daemon) — 4/5 planes COMPLETE, 05-05 BLOQUEADO
 Plan: 05-05 (Hermes adapter + MCP server) — BLOQUEADO por A2
 
 - **Phase:** 5 of 10 (orquestador daemon)
-- **Status:** En ejecución — 05-01/02/03/04 verdes y commiteados; 05-05 diferido
+- **Status:** Ready to execute
 - **Last activity:** 2026-06-13
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
