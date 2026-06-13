@@ -2,8 +2,26 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from core.domain.risk import RiskLevel
+
+
+class ErrorPolicy(StrEnum):
+    """Política declarativa ante fallo de un paso del Plan (D-62)."""
+
+    RETRY = "retry"
+    ESCALATE = "escalate"
+    ABORT = "abort"
+
+
+@dataclass(frozen=True, slots=True)
+class RetryParams:
+    """Parámetros de retry declarados en el Plan; el enforcement vive en Fase 6."""
+
+    max_attempts: int = 3
+    backoff_base_s: float = 1.0
+    backoff_max_s: float = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +36,8 @@ class Action:
     type: str
     target: str
     parameters: Mapping[str, object] = field(default_factory=dict)
+    on_error: ErrorPolicy = ErrorPolicy.ABORT
+    retry_params: RetryParams | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,6 +13,7 @@ from core.ports.knowledge import (
     Retrieval,
     VectorIndex,
 )
+from core.ports.orchestrator import OrchestratorPort
 from core.ports.persistence import TaskRepository
 from core.ports.security import PermissionStore
 
@@ -26,6 +27,7 @@ __all__ = [
     "FullTextIndex",
     "ModelGatewayPort",
     "ModelProvider",
+    "OrchestratorPort",
     "PermissionStore",
     "Retrieval",
     "TaskRepository",

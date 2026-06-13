@@ -30,6 +30,10 @@ class ConfigError(WyssError):
     """
 
 
+class OrchestratorUnavailable(WyssError):
+    """El cerebro de orquestación externo no está disponible (degradación D-60)."""
+
+
 class SecretDetected(WyssError):
     """Payload bloqueado: matcheó un patrón de secreto. La llamada NO sale (fail-closed, D-20).
 
