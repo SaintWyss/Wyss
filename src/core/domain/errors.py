@@ -125,3 +125,18 @@ class SecretFileExcluded(WyssError):
         )
         self.pattern_name = pattern_name  # nombre del patrón, JAMÁS el secreto
         self.layer = layer  # "path_denylist" | "builtin_pattern" | "entropy"
+
+
+class AllowlistViolation(WyssError):
+    """Binario o subcomando rechazado por no estar en el allowlist (D-66, fail-closed).
+
+    El ShellAdapter y GitAdapter la levantan internamente cuando `binary ∉ allowed_binaries`
+    o `subcommand ∉ allowed_subcommands`. El constructor solo toma el nombre del binario/
+    subcomando ofensor — nunca los argumentos completos (que podrían contener datos sensibles).
+    El adapter loguea un AuditEvent antes de retornar ToolResult(success=False) sin spawnar
+    ningún proceso.
+    """
+
+    def __init__(self, binary: str) -> None:
+        super().__init__(f"binario/subcomando fuera del allowlist: '{binary}'")
+        self.binary = binary  # nombre del binario o subcomando, nunca los args

@@ -158,17 +158,29 @@ async def test_verify_fails_when_blocked() -> None:
 
 
 def test_shell_adapter_never_uses_shell_equals_true() -> None:
-    """Ninguna línea no-comentario en shell.py debe contener 'shell=True'."""
+    """Ningún argumento de keyword `shell=True` debe aparecer en código ejecutable de shell.py.
+
+    El grep excluye líneas que son solo comentarios (`#`) o docstrings/strings (`\"\"\"`, `#`).
+    La invariante D-66 se verifica a nivel AST: `shell=True` como keyword argument en una
+    llamada es la firma del riesgo de injection. Las menciones en strings/docstrings son
+    documentación, no código ejecutable.
+    """
+    import ast
+
     src = Path("src/execution/shell.py")
     if not src.exists():
         pytest.skip("shell.py aún no existe (fase RED)")
 
-    violations = [
-        line
-        for line in src.read_text().splitlines()
-        if not line.lstrip().startswith("#") and "shell=True" in line
-    ]
-    assert violations == [], f"shell=True encontrado en: {violations}"
+    tree = ast.parse(src.read_text())
+    violations: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                    violations.append(f"línea {kw.value.lineno}: shell=True en llamada")
+
+    assert violations == [], f"shell=True como keyword argument encontrado en: {violations}"
 
 
 # ---------------------------------------------------------------------------
