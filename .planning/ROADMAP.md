@@ -116,7 +116,7 @@
 4. El adapter re-verifica el nivel de riesgo antes de ejecutar — un plan adulterado post-política se bloquea
 5. ShellAdapter solo ejecuta comandos de la allowlist
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 Plans:
 **Wave 1**
 
@@ -126,7 +126,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-04-PLAN.md — FileSystemAdapter: second wall (D-68) + per-type verify (D-67) + send2trash/journal
+- [x] 06-04-PLAN.md — FileSystemAdapter: second wall (D-68) + per-type verify (D-67) + send2trash/journal
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

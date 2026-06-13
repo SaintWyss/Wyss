@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-13T22:00:00.000Z"
+last_updated: "2026-06-13T21:00:00.000Z"
 last_activity: 2026-06-13
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 32
-  completed_plans: 30
-  percent: 42
+  completed_plans: 31
+  percent: 43
 ---
 
 # Wyss — State
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 06 (capa-de-ejecuci-n) — EXECUTING
-Plan: 4 of 5
-Last completed: 06-03 (ShellAdapter + GitAdapter) — 2026-06-13
+Plan: 5 of 5
+Last completed: 06-04 (FileSystemAdapter — second wall + send2trash + verify) — 2026-06-13
 
 - **Phase:** 5 of 10 (orquestador daemon)
 - **Status:** Ready to execute
@@ -54,6 +54,9 @@ Last completed: 06-03 (ShellAdapter + GitAdapter) — 2026-06-13
 | 2026-06-13 | `action.target` = binario/subcomando; `action.parameters['args']` = lista de argumentos | Taxonomía Action para ShellAdapter + GitAdapter (06-03) |
 | 2026-06-13 | AllowlistViolation capturada internamente; caller recibe ToolResult(success=False) sin try/except | Interfaz limpia — el bloqueo es un resultado, no una excepción propagada (06-03) |
 | 2026-06-13 | Test shell=True usa AST (ast.walk sobre ast.Call) en lugar de grep de texto | Evita falsos positivos en docstrings que mencionan el término como documentación (06-03) |
+| 2026-06-13 | `shutil.move` prohibido intercambiar con `os.rename`; grep gate enforced (count=0) | EXDEV en cross-FS NTFS↔ext4 — shutil.move es el único camino seguro (06-04) |
+| 2026-06-13 | `_get_str/_get_int` helpers para `Mapping[str, object]` en mypy strict | `int(Mapping.get())` no tiene overload en mypy; helpers con isinstance guards resuelven sin `# type: ignore` (06-04) |
+| 2026-06-13 | trash_path determinado pre-delete via `_expected_trash_path()`; actual re-verificado via `_find_actual_trash_path()` | send2trash puede añadir sufijo numérico en colisiones; dos pasos: journal con expected, verify con actual (06-04) |
 
 ## Blockers
 
