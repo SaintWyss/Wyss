@@ -77,3 +77,10 @@ htmlcov/
 # Datos de runtime (DB, índices, logs)
 data/*
 !data/.gitkeep
+
+# config personal y datos de runtime (nunca al repo)
+config/config.toml
+config/.env
+data/*.db
+data/*.db-*
+data/chroma/
