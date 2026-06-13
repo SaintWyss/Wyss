@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-12T23:46:53.886Z"
+last_updated: "2026-06-12T23:59:00.000Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 10
   completed_phases: 2
   total_plans: 18
-  completed_plans: 12
-  percent: 20
+  completed_plans: 13
+  percent: 22
 ---
 
 # Wyss — State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 03 (pipeline-de-ingesta) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 
 - **Phase:** 3 of 10 (pipeline de ingesta)
-- **Status:** Executing Phase 03 — Plan 1 complete
+- **Status:** Executing Phase 03 — Plan 3 complete (03-03: SecretFilter)
 - **Last activity:** 2026-06-12
 
 ## Decisions Log
@@ -71,6 +71,7 @@ Plan: 2 of 7
 | 2026-06-12 | `GatewaySettings` frozen con default vacío en `WyssSettings` | No rompe configs de Fase 1 sin sección [gateway]; sección presente se valida fail-closed (extra=forbid) (02-05) |
 | 2026-06-12 | `build_gateway` es el único composition root del gateway; API keys solo de os.environ | Pattern 4: cablea adapters+application+facade; AuditPort inyectado nunca import audit; keys jamás en config/traces/AuditEvent (V2, Pitfall 4) (02-05) |
 | 2026-06-12 | `traces.db` con chmod 0600 en `TraceStore` (best-effort, suppress OSError) | T-02-trace-file-perms: prompts completos post-min restringidos al owner; cubre toda creación de la DB, tolerante a FS sin modos POSIX (02-05) |
+| 2026-06-12 | `SecretFilter` de 3 capas (env_values + built-in patterns + config), fail-closed, excluye pre-indexado | KNOW-07: chunk con secreto detectado se descarta; el contenido sensible nunca entra al FTS5/vector; puro + inyectado; espejo del ContextMinimizer del gateway (03-03) |
 
 ## Blockers
 
