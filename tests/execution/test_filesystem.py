@@ -9,6 +9,8 @@ NUNCA usar /tmp directamente: sticky-bit levanta TrashPermissionError.
 import asyncio
 import hashlib
 import os
+import shutil
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -384,28 +386,38 @@ def test_send2trash_on_ntfs_mount(
     fake_audit: FakeAudit,
     tmp_path: Path,
 ) -> None:
-    """send2trash en /mnt/hdd crea entrada en .Trash-1000/files/ (sin EXDEV).
+    """send2trash sobre el mount NTFS/fuseblk real crea entrada en .Trash sin EXDEV.
 
-    Usa data/trash_test_sentinel.txt — fuera de src/ y tests/.
+    El sentinel se crea en un tempdir sobre el MISMO mount que el repo (para ejercer
+    send2trash en fuseblk, no en /tmp ext4), pero FUERA de ``wyss/data`` y ``wyss/config``:
+    la denylist ``wyss-self-modify`` (``**/wyss/data/**``) bloquearía cualquier
+    ``file.*`` ahí y send2trash nunca correría (la segunda muralla vetaría antes del I/O).
     """
-    repo_root = Path(__file__).resolve().parents[2]
-    test_file = repo_root / "data" / "trash_test_sentinel.txt"
-    test_file.parent.mkdir(parents=True, exist_ok=True)
-    test_file.write_text("ntfs trash test sentinel", encoding="utf-8")
+    # Mountpoint del repo: subir hasta el primer os.path.ismount (machine-agnostic).
+    mount_point = Path(__file__).resolve()
+    while not os.path.ismount(mount_point) and mount_point != mount_point.parent:
+        mount_point = mount_point.parent
 
-    ntfs_journal = UndoJournal(
-        repo_root / "data" / "trash_journal_test.db",
-        backup_base_dir=repo_root / "data" / "backups",
-    )
-    ntfs_adapter = FileSystemAdapter(engine=engine, audit=fake_audit, journal=ntfs_journal)
+    work_dir = Path(tempfile.mkdtemp(prefix="wyss-ntfs-test-", dir=str(mount_point)))
+    try:
+        test_file = work_dir / "sentinel.txt"
+        test_file.write_text("ntfs trash test sentinel", encoding="utf-8")
 
-    action = Action(
-        type="file.delete",
-        target=str(test_file),
-        parameters={},
-    )
-    result = asyncio.run(ntfs_adapter.execute(action))
-    ntfs_journal.close()
+        ntfs_journal = UndoJournal(
+            work_dir / "journal.db",
+            backup_base_dir=work_dir / "backups",
+        )
+        ntfs_adapter = FileSystemAdapter(engine=engine, audit=fake_audit, journal=ntfs_journal)
 
-    assert result.success, f"NTFS delete failed: {result.detail}"
-    assert not test_file.exists()
+        action = Action(
+            type="file.delete",
+            target=str(test_file),
+            parameters={},
+        )
+        result = asyncio.run(ntfs_adapter.execute(action))
+        ntfs_journal.close()
+
+        assert result.success, f"NTFS delete failed: {result.detail}"
+        assert not test_file.exists()
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
