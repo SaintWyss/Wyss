@@ -67,10 +67,10 @@
 4. Toda consulta queda auditada
 5. El eval set dorado (N consultas → archivo esperado) corre en CI y pasa
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 - [x] 04-01-PLAN.md — base pura: rrf_merge + Hit.date + frescura StateStore + corpus dorado N=20 + scaffolds de test (Wave 0)
 - [x] 04-02-PLAN.md — HybridRetrieval: fusión RRF + degradación D-44 + auditoría + date(mtime) (KNOW-04/05)
-- [ ] 04-03-PLAN.md — CLI search/status: salida Rich/JSON (D-43) + banner degradado (D-44) + footer/status (D-47) + gate dorado hit@1 (AUD-03)
+- [x] 04-03-PLAN.md — CLI search/status: salida Rich/JSON (D-43) + banner degradado (D-44) + footer/status (D-47) + gate dorado hit@1 (AUD-03)
 
 ### Phase 5: Orquestador Daemon
 **Goal:** Proceso persistente que recibe lenguaje natural, clasifica intención, genera planes y gestiona confirmaciones — política cognitiva operativa de punta a punta.
