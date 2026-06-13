@@ -83,12 +83,12 @@
 5. El eval del clasificador de política corre en CI — un falso-A rompe el build
 6. `wyss audit` permite al owner consultar el historial
 
-**Plans:** 5 plans
-- [ ] 05-01-PLAN.md — Wave 0: verificación empírica Hermes/MCP/Docker/FastMCP + scaffolding de tests (stop-and-revise)
-- [ ] 05-02-PLAN.md — dominio puro: Action.on_error + OrchestratorPort + IntentClassification + gate dorado POL-06
-- [ ] 05-03-PLAN.md — PendingStore SQLite + plan_renderer (B/C) + ttl_reaper (ORCH-05/06)
-- [ ] 05-04-PLAN.md — daemon asyncio + dispatcher fail-closed + CLI start/ask/confirm/audit (ORCH-01/02, AUD-02)
-- [ ] 05-05-PLAN.md — HermesOrchestrator adapter + IntentRouter + MCP server gateado (ORCH-03/04, D-59)
+**Plans:** 5 plans (4/5 complete; 05-05 BLOQUEADO por A2)
+- [x] 05-01-PLAN.md — Wave 0: verificación empírica Hermes/MCP/Docker/FastMCP + scaffolding de tests (VEREDICTO STOP-PARCIAL: A1 PASS, A2 FAIL, A3/A4 parcial)
+- [x] 05-02-PLAN.md — dominio puro: Action.on_error + OrchestratorPort + IntentClassification + gate dorado POL-06
+- [x] 05-03-PLAN.md — PendingStore SQLite + plan_renderer (B/C) + ttl_reaper (ORCH-05/06)
+- [x] 05-04-PLAN.md — daemon asyncio + dispatcher fail-closed + CLI start/ask/confirm/audit (ORCH-01/02, AUD-02)
+- [ ] 05-05-PLAN.md — HermesOrchestrator adapter + IntentRouter + MCP server gateado (ORCH-03/04, D-59) — **BLOQUEADO**: A2 FAIL (no hay imagen Hermes publicada; requiere clonar+`docker build` + cerrar A3 disabled_toolsets + regla UFW). Ver 05-EMPIRICAL.md §revisiones.
 
 ### Phase 6: Capa de Ejecución
 **Goal:** Acciones reales sobre el entorno (archivos, shell, git) con verificación posterior, undo y segunda muralla de riesgo.

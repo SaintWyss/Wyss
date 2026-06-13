@@ -8,8 +8,8 @@ last_activity: 2026-06-13
 progress:
   total_phases: 10
   completed_phases: 4
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 27
+  completed_plans: 26
   percent: 40
 ---
 
@@ -24,12 +24,14 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 03 (pipeline-de-ingesta) — COMPLETE
-Plan: Not started
+Phase: 05 (orquestador-daemon) — 4/5 planes COMPLETE, 05-05 BLOQUEADO
+Plan: 05-05 (Hermes adapter + MCP server) — BLOQUEADO por A2
 
 - **Phase:** 5 of 10 (orquestador daemon)
-- **Status:** Ready to plan
+- **Status:** En ejecución — 05-01/02/03/04 verdes y commiteados; 05-05 diferido
 - **Last activity:** 2026-06-13
+- **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
+- **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
 
 ## Decisions Log
 
