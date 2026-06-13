@@ -99,6 +99,13 @@
 3. Borrar = papelera; el journal registra origen→destino con operación inversa aplicable
 4. El adapter re-verifica el nivel de riesgo antes de ejecutar — un plan adulterado post-política se bloquea
 5. ShellAdapter solo ejecuta comandos de la allowlist
+**Plans:** 5 plans
+Plans:
+- [ ] 06-01-PLAN.md — Wave 0: send2trash dep + tests/execution infra + NTFS empirical stub
+- [ ] 06-02-PLAN.md — UndoJournal SQLite-WAL: record/restore inverse ops (D-65)
+- [ ] 06-03-PLAN.md — ShellAdapter + GitAdapter: binary/subcommand allowlist, argv exec (D-66)
+- [ ] 06-04-PLAN.md — FileSystemAdapter: second wall (D-68) + per-type verify (D-67) + send2trash/journal
+- [ ] 06-05-PLAN.md — PlanExecutor: dispatch + on_error ABORT/RETRY/ESCALATE (D-69) + package exports
 
 ### Phase 7: Modelo de Agentes
 **Goal:** AgentBase + registro config-driven + permisos estructurales — la maquinaria para instanciar agentes sin código nuevo.
