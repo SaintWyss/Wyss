@@ -82,7 +82,7 @@ def test_recording_engine_called_on_execute(
 
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(adapter.execute(action))
+    result = asyncio.run(adapter.execute(action))
 
     # El engine debe haber sido llamado por la segunda muralla
     assert len(recording.calls) >= 1, "engine.evaluate no fue llamado por la segunda muralla"
@@ -119,7 +119,7 @@ def test_tampered_path_blocked(
 
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(adapter.execute(action))
+    result = asyncio.run(adapter.execute(action))
 
     # DEBE bloquearse porque resolved != original target
     assert result.success is False, (
@@ -165,7 +165,7 @@ def test_resolved_path_above_max_risk_blocked(
 
     import asyncio
 
-    result = asyncio.get_event_loop().run_until_complete(adapter.execute(action))
+    result = asyncio.run(adapter.execute(action))
 
     # ~/.ssh está en denylist → la segunda muralla DEBE bloquear
     assert result.success is False, (
