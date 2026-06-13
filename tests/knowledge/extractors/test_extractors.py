@@ -1,5 +1,6 @@
 """Tests de registry y extractores concretos."""
 
+import re
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -14,12 +15,17 @@ from PIL import Image
 from core.domain.errors import ExtractionError, UnsupportedFileError
 from core.domain.knowledge import ExtractedContent, SourceFile
 from knowledge.extractors.docx import DocxExtractor
+from knowledge.extractors.html import HtmlExtractor
 from knowledge.extractors.image import ImageExtractor
 from knowledge.extractors.pdf import PdfExtractor
 from knowledge.extractors.registry import ExtractorRegistry
+from knowledge.extractors.rtf import RtfExtractor
 from knowledge.extractors.spreadsheet import SpreadsheetExtractor
 from knowledge.extractors.text import TextExtractor
 from knowledge.extractors.video import VideoExtractor
+from knowledge.secret_filter import SecretFilter
+
+_TEST_PATTERNS = (("anthropic_key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")),)
 
 
 def _source(path: Path, media_type: str) -> SourceFile:
@@ -30,6 +36,10 @@ def _source(path: Path, media_type: str) -> SourceFile:
         size=stat.st_size,
         mtime=stat.st_mtime,
     )
+
+
+def _secret_filter() -> SecretFilter:
+    return SecretFilter(builtin_patterns=_TEST_PATTERNS)
 
 
 class FakePrefixExtractor:
@@ -143,6 +153,84 @@ def test_text_extractor_reads_utf8_with_replacement(tmp_path: Path) -> None:
 
     assert "print('hola')" in content.text
     assert "\ufffd" in content.text
+
+
+def test_html_data_uri_not_flagged(tmp_path: Path) -> None:
+    path = tmp_path / "sample.html"
+    blob = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=" * 3
+    raw = f"""
+    <html>
+      <head>
+        <style>.hidden {{ background-image: url(data:image/png;base64,{blob}); }}</style>
+        <script>const inlineImage = "data:image/png;base64,{blob}";</script>
+      </head>
+      <body>
+        <h1>Curso de barista</h1>
+        <img src="data:image/png;base64,{blob}" alt="inline">
+        <p>Texto visible para indexar.</p>
+      </body>
+    </html>
+    """
+    path.write_text(raw, encoding="utf-8")
+    secret_filter = _secret_filter()
+
+    assert secret_filter.check_content(raw, str(path)) == ("high_entropy", "entropy")
+
+    content = HtmlExtractor().extract(_source(path, "text/html"))
+
+    assert "Curso de barista" in content.text
+    assert "Texto visible para indexar." in content.text
+    assert blob not in content.text
+    assert secret_filter.check_content(content.text, str(path)) is None
+
+
+def test_rtf_hex_blob_not_flagged(tmp_path: Path) -> None:
+    path = tmp_path / "sample.rtf"
+    hex_blob = "0123456789abcdef" * 16
+    raw = r"{\rtf1\ansi Visible RTF text {\pict\pngblip " + hex_blob + r"} after image}"
+    path.write_text(raw, encoding="utf-8")
+    secret_filter = _secret_filter()
+
+    assert secret_filter.check_content(raw, str(path)) == ("high_entropy", "entropy")
+
+    content = RtfExtractor().extract(_source(path, "text/rtf"))
+
+    assert "Visible RTF text" in content.text
+    assert "after image" in content.text
+    assert hex_blob not in content.text
+    assert secret_filter.check_content(content.text, str(path)) is None
+
+
+def test_html_real_secret_still_detected(tmp_path: Path) -> None:
+    path = tmp_path / "secret.html"
+    secret = "sk-ant-api03-FAKE_KEY_FOR_TEST_abc123def456"
+    path.write_text(f"<html><body><p>token visible: {secret}</p></body></html>", encoding="utf-8")
+
+    content = HtmlExtractor().extract(_source(path, "text/html"))
+
+    assert secret in content.text
+    assert _secret_filter().check_content(content.text, str(path)) == (
+        "anthropic_key",
+        "builtin_pattern",
+    )
+
+
+def test_html_secret_in_comment_detected(tmp_path: Path) -> None:
+    path = tmp_path / "secret-comment.html"
+    secret = "sk-ant-api03-FAKE_KEY_FOR_TEST_abc123def456"
+    path.write_text(
+        f"<html><body><!-- {secret} --><p>texto publico</p></body></html>",
+        encoding="utf-8",
+    )
+
+    content = HtmlExtractor().extract(_source(path, "text/html"))
+
+    assert secret in content.text
+    assert content.metadata["comments_included"] is True
+    assert _secret_filter().check_content(content.text, str(path)) == (
+        "anthropic_key",
+        "builtin_pattern",
+    )
 
 
 def test_spreadsheet_extractor_reads_csv(tmp_path: Path) -> None:

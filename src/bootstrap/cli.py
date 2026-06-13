@@ -37,8 +37,10 @@ from knowledge.chunker import TokenChunker
 from knowledge.extractors import (
     DocxExtractor,
     ExtractorRegistry,
+    HtmlExtractor,
     ImageExtractor,
     PdfExtractor,
+    RtfExtractor,
     SpreadsheetExtractor,
     TextExtractor,
     VideoExtractor,
@@ -256,6 +258,8 @@ def _build_registry() -> ExtractorRegistry:
     registry = ExtractorRegistry()
     registry.register(PdfExtractor())
     registry.register(DocxExtractor())
+    registry.register(HtmlExtractor())
+    registry.register(RtfExtractor())
     registry.register(TextExtractor())
     registry.register(SpreadsheetExtractor())
     registry.register(ImageExtractor())
