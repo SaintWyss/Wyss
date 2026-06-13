@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-13T20:38:13.603Z"
+last_updated: "2026-06-13T21:20:00.000Z"
 last_activity: 2026-06-13
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 32
-  completed_plans: 27
-  percent: 40
+  completed_plans: 29
+  percent: 42
 ---
 
 # Wyss — State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 ## Current Position
 
 Phase: 06 (capa-de-ejecuci-n) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 - **Phase:** 5 of 10 (orquestador daemon)
 - **Status:** Ready to execute
@@ -48,6 +48,8 @@ Plan: 2 of 5
 | 2026-06-12 | `IngestRunResult.warnings` campo aditivo con default `()` | Aviso Ollama-down viaja en el resultado sin romper construcciones existentes (patrón D-26); cross-AI exec (03-06) |
 | 2026-06-13 | send2trash sin type stubs → `# type: ignore[import-untyped]` | Mismo patrón que openpyxl en tests/knowledge/; no bloquea mypy strict (06-01) |
 | 2026-06-13 | RecordingEngine.evaluate retorna `object` | Mantiene conftest genérico sin importar PolicyDecision; mypy strict OK (06-01) |
+| 2026-06-13 | `backup_base_dir` inyectable en UndoJournal constructor | Tests usan `tmp_path`, prod usa `data/undo_backups` (06-02) |
+| 2026-06-13 | `restore()` retorna False (no raise) para entry_id missing o status != 'pending' | Safe no-op para doble-restore o rollback parcial (06-02) |
 
 ## Blockers
 
