@@ -146,6 +146,15 @@ class FileSystemAdapter:
             self._audit_blocked(action.target, resolved_target, str(decision.risk_level), reason)
             return False, resolved_target, reason
 
+        # NOTA (deuda conocida F3, audit fase 6): esta comparación es contra el
+        # target CRUDO, no contra el path normalizado por el engine (que solo hace
+        # expanduser). Por eso CUALQUIER target con `~`, ruta relativa o symlink
+        # difiere de resolved_target y se bloquea — incluido el benigno `~/Data`
+        # (que es symlink → /mnt/hdd/Data en este entorno). Hoy los callers (tests)
+        # pasan paths absolutos ya resueltos, así que no molesta. Cuando fase 7
+        # (agents) genere acciones con `~`, comparar contra el path expanduser del
+        # engine para disparar SOLO en el delta de resolve() (el vector real de
+        # path-tricks/symlink), no en expansión benigna.
         if resolved_target != action.target:
             reason = (
                 f"resolved path differs from original (path tricks): "
@@ -267,7 +276,9 @@ class FileSystemAdapter:
         size = resolved_path.stat().st_size
         sha256 = _sha256(resolved_path)
 
-        self._journal.mark_applied(entry_id)
+        # El PlanExecutor es dueño del lifecycle del journal: marca 'applied' al
+        # completar todo el plan y llama restore() en ABORT (la entrada queda
+        # 'pending' hasta entonces). Afloramos el entry_id para que pueda hacerlo.
         return ToolResult(
             success=True,
             detail=f"wrote {size} bytes to {resolved_path}",
@@ -275,6 +286,7 @@ class FileSystemAdapter:
                 "resolved_target": str(resolved_path),
                 "size": size,
                 "sha256": sha256,
+                "journal_entry_id": entry_id,
             },
         )
 
@@ -307,11 +319,13 @@ class FileSystemAdapter:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(resolved_src), str(dest_path))
 
-        self._journal.mark_applied(entry_id)
         return ToolResult(
             success=True,
             detail=f"moved {resolved_src} -> {dest_path}",
-            payload={"resolved_target": str(dest_path)},
+            payload={
+                "resolved_target": str(dest_path),
+                "journal_entry_id": entry_id,
+            },
         )
 
     async def _execute_delete(self, action: Action, resolved_path: Path) -> ToolResult:
@@ -351,13 +365,13 @@ class FileSystemAdapter:
         # send2trash puede elegir el nombre final (añade sufijo si colisión)
         actual_trash_path = self._find_actual_trash_path(resolved_path)
 
-        self._journal.mark_applied(entry_id)
         return ToolResult(
             success=True,
             detail=f"trashed {resolved_path}",
             payload={
                 "resolved_target": str(resolved_path),
                 "trash_path": str(actual_trash_path or trash_path),
+                "journal_entry_id": entry_id,
             },
         )
 
