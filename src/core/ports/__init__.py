@@ -1,9 +1,9 @@
-"""Los 14 contratos del núcleo (13 Protocols + AgentBase) — definidos antes que las impls (D-11)."""
+"""Los 15 contratos del núcleo (14 Protocols + AgentBase) — definidos antes que las impls (D-11)."""
 
 from core.ports.agent import AgentBase
 from core.ports.audit import AuditPort
 from core.ports.config import ConfigStore
-from core.ports.execution import Tool
+from core.ports.execution import PlanRunner, Tool
 from core.ports.gateway import ModelGatewayPort, ModelProvider
 from core.ports.knowledge import (
     Chunker,
@@ -29,6 +29,7 @@ __all__ = [
     "ModelProvider",
     "OrchestratorPort",
     "PermissionStore",
+    "PlanRunner",
     "Retrieval",
     "TaskRepository",
     "Tool",
