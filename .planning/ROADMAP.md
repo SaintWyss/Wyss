@@ -145,6 +145,25 @@ Plans:
 5. El contenido recuperado se marca como dato no confiable y un documento con instrucciones inyectadas no altera el plan (test anti-injection)
 6. La memoria del agente persiste preferencias y solo el owner/extracción supervisada la escribe
 
+**Plans:** 5 plans
+
+**Wave 0** (test scaffold + frontera arquitectónica)
+
+- [ ] 07-01-PLAN.md — PlanRunner port + scaffold tests/agents/ + fixture dorado injection (Nyquist RED)
+
+**Wave 1** (componentes ortogonales — files disjuntos)
+
+- [ ] 07-02-PLAN.md — AgentMemory (D-71) + SQLitePermissionStore + ScopedRetrieval pre-retrieval sin cache (D-72, AGENT-03/04/08)
+- [ ] 07-03-PLAN.md — bootstrap AgentConfigModel extra=forbid + WyssSettings.agents (D-73, AGENT-02)
+
+**Wave 2** (núcleo)
+
+- [ ] 07-04-PLAN.md — ConfiguredAgent: ciclo _run sin recursión + anti-injection untrusted_content + segunda muralla + test dorado (AGENT-01/05/06, POL-07/D-70)
+
+**Wave 3** (ensamblaje + gate)
+
+- [ ] 07-05-PLAN.md — AgentRegistry config-driven + conformance + exports + full suite gate (AGENT-02)
+
 ### Phase 8: Belgrano
 
 **Goal:** Primer agente real operando en el dominio estudio del owner — validación end-to-end de toda la maquinaria.
