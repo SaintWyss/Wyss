@@ -40,7 +40,7 @@
 - [x] **POL-04**: La clasificación D es determinística (denylist de operaciones); el LLM puede subir el riesgo estimado, nunca bajarlo
 - [x] **POL-05**: La política evalúa el plan completo + agregados (cantidad de archivos, directorios tocados) — sin bypass por composición de pasos menores
 - [ ] **POL-06**: Eval set del clasificador de política: planes dorados con nivel esperado; un falso-A (ejecutar lo que debía confirmar) se detecta en CI *(gap #8)*
-- [ ] **POL-07**: El contenido recuperado de BC se trata como dato no confiable — jamás como instrucción; nunca eleva el nivel de un plan aprobado *(gap #10)*
+- [x] **POL-07**: El contenido recuperado de BC se trata como dato no confiable — jamás como instrucción; nunca eleva el nivel de un plan aprobado *(gap #10)*
 
 ### Gateway (Modelos externos)
 
@@ -52,14 +52,14 @@
 
 ### Agents
 
-- [ ] **AGENT-01**: AgentBase define el contrato: recibir tarea → consultar BC habilitada → generar plan → ejecutar → reportar *(RF-008, RF-010)*
-- [ ] **AGENT-02**: Crear un agente nuevo = entrada en config (identidad, dominio, herramientas, BC, modelo, presupuesto) — sin código nuevo *(RF-008)*
-- [ ] **AGENT-03**: Un agente sin permiso vigente no puede consultar una BC — filtro estructural ANTES del retrieval; intento sin permiso → bloqueado + auditado *(RF-009, RF-015, regla #3)*
-- [ ] **AGENT-04**: La revocación de permisos tiene efecto inmediato — verificación por query, sin cache *(RF-015)*
-- [ ] **AGENT-05**: Los agentes no se comunican entre sí — solo el orquestador delega y consolida *(RF-011, regla #5)*
-- [ ] **AGENT-06**: Ningún agente puede alterar su propia config, permisos o presupuesto *(regla #6)*
+- [x] **AGENT-01**: AgentBase define el contrato: recibir tarea → consultar BC habilitada → generar plan → ejecutar → reportar *(RF-008, RF-010)*
+- [x] **AGENT-02**: Crear un agente nuevo = entrada en config (identidad, dominio, herramientas, BC, modelo, presupuesto) — sin código nuevo *(RF-008)*
+- [x] **AGENT-03**: Un agente sin permiso vigente no puede consultar una BC — filtro estructural ANTES del retrieval; intento sin permiso → bloqueado + auditado *(RF-009, RF-015, regla #3)*
+- [x] **AGENT-04**: La revocación de permisos tiene efecto inmediato — verificación por query, sin cache *(RF-015)*
+- [x] **AGENT-05**: Los agentes no se comunican entre sí — solo el orquestador delega y consolida *(RF-011, regla #5)*
+- [x] **AGENT-06**: Ningún agente puede alterar su propia config, permisos o presupuesto *(regla #6)*
 - [ ] **AGENT-07**: Cada agente respeta su presupuesto de modelos configurado
-- [ ] **AGENT-08**: Memoria operativa por agente (patrón MEMORY.md): persiste preferencias del owner en su dominio; solo el owner o extracción supervisada escribe en ella — contenido de BC jamás escribe memoria directamente *(gap #1)*
+- [x] **AGENT-08**: Memoria operativa por agente (patrón MEMORY.md): persiste preferencias del owner en su dominio; solo el owner o extracción supervisada escribe en ella — contenido de BC jamás escribe memoria directamente *(gap #1)*
 - [ ] **AGENT-09**: Belgrano (dominio estudio) completa ≥ 3 tareas reales de punta a punta, reportando al orquestador
 
 ### Execution

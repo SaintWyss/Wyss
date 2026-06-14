@@ -145,11 +145,11 @@ Plans:
 5. El contenido recuperado se marca como dato no confiable y un documento con instrucciones inyectadas no altera el plan (test anti-injection)
 6. La memoria del agente persiste preferencias y solo el owner/extracción supervisada la escribe
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 **Wave 0** (test scaffold + frontera arquitectónica)
 
-- [ ] 07-01-PLAN.md — PlanRunner port + scaffold tests/agents/ + fixture dorado injection (Nyquist RED)
+- [x] 07-01-PLAN.md — PlanRunner port + scaffold tests/agents/ + fixture dorado injection (Nyquist RED)
 
 **Wave 1** (componentes ortogonales — files disjuntos)
 
