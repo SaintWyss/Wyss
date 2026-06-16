@@ -9,7 +9,6 @@ Wave 0 — RED: AgentConfigModel y el campo agents en WyssSettings aún no exist
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,6 @@ from pydantic import BaseModel
 from bootstrap.config import load_settings
 from core.domain.agent import AgentDefinition
 from core.domain.errors import ConfigError
-
 
 # TOML base con un [[agents]] válido
 _VALID_AGENT_TOML = """\

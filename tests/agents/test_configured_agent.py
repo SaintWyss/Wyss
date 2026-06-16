@@ -18,20 +18,22 @@ from tests.agents.conftest import FakeAudit, FakePlanRunner
 
 if TYPE_CHECKING:
     from agents.configured_agent import ConfiguredAgent
+
     from core.policy.engine import CognitivePolicyEngine
-    from tests.ports.fakes import FakePermissionStore, FakeRetrieval
+    from tests.ports.fakes import FakeRetrieval
 
 
 def _make_agent(
-    engine: "CognitivePolicyEngine",
+    engine: CognitivePolicyEngine,
     fake_audit: FakeAudit,
-    fake_retrieval: "FakeRetrieval",
+    fake_retrieval: FakeRetrieval,
     fake_plan_runner: FakePlanRunner,
     sample_definition: AgentDefinition,
     tmp_path: Path,
-) -> "ConfiguredAgent":
+) -> ConfiguredAgent:
     """Factory de ConfiguredAgent con todos los fakes inyectados."""
     from agents.configured_agent import ConfiguredAgent
+
     from agents.memory import AgentMemory
 
     memory = AgentMemory(agent_id=sample_definition.agent_id, data_dir=tmp_path)
@@ -54,7 +56,6 @@ def test_no_agent_to_agent_import() -> None:
     porque está garantizado por la ausencia de imports (import-linter).
     Este test verifica la ausencia usando ast.walk sobre el módulo.
     """
-    import importlib
     import inspect
 
     import agents.configured_agent as module
@@ -89,9 +90,9 @@ def test_definition_is_frozen(sample_definition: AgentDefinition) -> None:
 
 
 def test_prompt_wraps_untrusted_content(
-    engine: "CognitivePolicyEngine",
+    engine: CognitivePolicyEngine,
     fake_audit: FakeAudit,
-    fake_retrieval: "FakeRetrieval",
+    fake_retrieval: FakeRetrieval,
     fake_plan_runner: FakePlanRunner,
     sample_definition: AgentDefinition,
     tmp_path: Path,
@@ -132,9 +133,9 @@ def test_prompt_wraps_untrusted_content(
 
 
 def test_run_delegates_to_plan_runner_not_execute(
-    engine: "CognitivePolicyEngine",
+    engine: CognitivePolicyEngine,
     fake_audit: FakeAudit,
-    fake_retrieval: "FakeRetrieval",
+    fake_retrieval: FakeRetrieval,
     fake_plan_runner: FakePlanRunner,
     sample_definition: AgentDefinition,
     tmp_path: Path,
@@ -144,7 +145,6 @@ def test_run_delegates_to_plan_runner_not_execute(
     AgentBase.execute() llama self._run(). Si _run() llamara self.execute() → bucle infinito.
     El test verifica que fake_plan_runner.last_plan está poblado tras la ejecución.
     """
-    import asyncio
 
     from core.domain.plan import Action, Plan
 

@@ -8,12 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from core.domain import AuditEventType, Outcome, RiskLevel
+from core.domain import Outcome, RiskLevel
 from core.domain.plan import Action, Plan
 from core.policy.engine import CognitivePolicyEngine
-from tests.agents.conftest import FakeAudit, FakePlanRunner, RecordingEngine
+from tests.agents.conftest import FakeAudit, RecordingEngine
 
 
 def test_injection_attempt_results_in_blocked_plan(

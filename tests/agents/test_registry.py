@@ -20,10 +20,11 @@ def _make_registry(
     fake_retrieval: FakeRetrieval,
     fake_plan_runner: FakePlanRunner,
     tmp_path: Path,
-) -> "object":
+) -> object:
     """Factory que instancia AgentRegistry con fakes inyectados."""
-    from agents.memory import AgentMemory
     from agents.registry import AgentRegistry
+
+    from agents.memory import AgentMemory
 
     def scoped_retrieval_factory(agent_id: str) -> FakeRetrieval:
         return fake_retrieval
