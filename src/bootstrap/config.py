@@ -22,6 +22,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from core.domain.agent import AgentDefinition
 from core.domain.config import GatewaySettings, WyssSettings
 from core.domain.errors import ConfigError
 from core.domain.gateway import TierConfig
@@ -213,6 +214,23 @@ class IngestConfigModel(BaseModel):
     max_attempts: int = 3  # D-39: reintentos automáticos antes de --retry-failed
 
 
+class AgentConfigModel(BaseModel):
+    """Entrada [[agents]]: configuración declarativa de agentes (D-73).
+
+    `extra="forbid"` fail-closed: un typo en la config de un agente aborta el boot con
+    ConfigError legible. Mapea a `AgentDefinition` frozen en `_to_agent_definition`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str
+    name: str
+    domain: str
+    knowledge_bases: list[str] = []
+    model_tier: str = "economico"
+    budget_usd: float = 0.0
+
+
 class WyssConfigModel(BaseModel):
     """Raíz del config.toml validado. `frozen=True` + `extra="forbid"` (fail-closed total)."""
 
@@ -223,6 +241,7 @@ class WyssConfigModel(BaseModel):
     policy: PolicyConfigModel = PolicyConfigModel()
     gateway: GatewayConfigModel = GatewayConfigModel()
     ingest: IngestConfigModel = IngestConfigModel()
+    agents: list[AgentConfigModel] = []
 
 
 def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
@@ -303,6 +322,18 @@ def _to_ingest_settings(model: IngestConfigModel) -> IngestSettings:
     )
 
 
+def _to_agent_definition(model: AgentConfigModel) -> AgentDefinition:
+    """Mapea una entrada [[agents]] Pydantic → AgentDefinition frozen (Pydantic muere acá)."""
+    return AgentDefinition(
+        agent_id=model.agent_id,
+        name=model.name,
+        domain=model.domain,
+        kb_ids=frozenset(model.knowledge_bases),
+        model_alias=model.model_tier,
+        budget_usd=model.budget_usd,
+    )
+
+
 def _to_settings(model: WyssConfigModel) -> WyssSettings:
     """Construye el WyssSettings de dominio desde el modelo Pydantic validado.
 
@@ -329,6 +360,7 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         policy=policy,
         gateway=_to_gateway_settings(model.gateway),
         ingest=_to_ingest_settings(model.ingest),
+        agents=tuple(_to_agent_definition(agent) for agent in model.agents),
     )
 
 
