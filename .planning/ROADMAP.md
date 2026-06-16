@@ -166,7 +166,8 @@ Plans:
 
 ### Phase 8: Primer Agente de Dominio (Finanzas) — Pellegrini, coach + ledger
 
-**Goal:** Primer agente real (Pellegrini, dominio finanzas) operando E2E como **coach de finanzas personales**. MVP vertical: incluye una capacidad nueva —un *ledger* de transacciones (ingreso/gasto) en SQLite tras un port— más el agente que lo lee y asesora. El owner no tiene documentos para indexar: el dato real se carga al ledger (CLI + conversacional). Belgrano/estudio queda como agente posterior, mismo molde config-driven. Decisiones en `phases/08-primer-agente-de-dominio-finanzas/08-CONTEXT.md`.
+**Goal:** As a owner, I want to cargar mis ingresos y gastos (CLI y conversacional) y que Pellegrini los analice, so that sepa a dónde se va mi plata y pueda ser económicamente estable.
+**Mode:** mvp
 **Requirements:** AGENT-07, AGENT-09
 **Success Criteria**:
 
