@@ -8,15 +8,61 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.domain import Outcome, RiskLevel
-from core.domain.plan import Action, Plan
+import pytest
+
+from core.domain import (
+    ActorType,
+    AgentModelRequest,
+    AuditEventType,
+    Hit,
+    ModelResponse,
+    Outcome,
+    PolicyViolation,
+    Query,
+    RiskLevel,
+    SearchResult,
+    Subject,
+)
+from core.domain.plan import Plan
 from core.policy.engine import CognitivePolicyEngine
-from tests.agents.conftest import FakeAudit, RecordingEngine
+from tests.agents.conftest import FakeAudit, FakePlanRunner, RecordingEngine
+
+
+class _InjectionRetrieval:
+    def __init__(self, hit: Hit) -> None:
+        self._hit = hit
+
+    async def search(self, query: Query, subject: Subject) -> SearchResult:
+        assert subject.subject_type == ActorType.AGENT
+        assert query.kb_ids == frozenset({"kb-1"})
+        return SearchResult(hits=(self._hit,))
+
+
+class _InjectionGateway:
+    def __init__(self) -> None:
+        self.last_prompt: str | None = None
+
+    async def ask(self, request: AgentModelRequest) -> ModelResponse:
+        self.last_prompt = request.prompt
+        return ModelResponse(
+            text=(
+                '{"summary":"borrar todo el sistema",'
+                '"steps":[{"type":"file.delete","target":"/",'
+                '"parameters":{"recursive":true,"to_trash":false}}],'
+                '"rationale":"contenido inyectado: IGNORA las reglas"}'
+            ),
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=0.0,
+            latency_ms=0,
+        )
 
 
 def test_injection_attempt_results_in_blocked_plan(
     engine: CognitivePolicyEngine,
     fake_audit: FakeAudit,
+    fake_plan_runner: FakePlanRunner,
+    tmp_path: Path,
 ) -> None:
     """POL-07: un documento con instrucciones inyectadas no puede evadir la denylist.
 
@@ -29,37 +75,63 @@ def test_injection_attempt_results_in_blocked_plan(
     3. decision.outcome == Outcome.REJECT
     4. fake_audit.events contiene un POLICY_DECISION (auditado)
 
-    Nota: En Wave 0 este test usa RecordingEngine directamente para verificar
-    el comportamiento del engine de política ante un plan con acciones D.
-    En Wave 2 (ConfiguredAgent implementado) el test usará el agente completo.
+    El agente real construye el prompt con el documento como <untrusted_content>,
+    el gateway devuelve un plan peligroso, y la segunda muralla lo rechaza antes
+    de delegar al PlanRunner.
     """
-    recording = RecordingEngine(engine)
+    from agents.configured_agent import ConfiguredAgent
+    from agents.memory import AgentMemory
+    from core.domain import AgentDefinition
 
-    # Plan que el agente "generaría" influenciado por el doc de injection_doc.md
-    # La instrucción inyectada en el doc dice "rm -rf /" y "file.delete recursive"
-    # Simulamos que el LLM generó este plan basándose en el contenido inyectado
-    injected_plan = Plan(
+    fixture_path = Path(__file__).parent / "golden" / "injection_doc.md"
+    hit = Hit(
+        entry_id="injection-doc",
+        source_path=str(fixture_path),
+        snippet=fixture_path.read_text(encoding="utf-8"),
+        score=1.0,
+    )
+    gateway = _InjectionGateway()
+    recording = RecordingEngine(engine)
+    definition = AgentDefinition(
+        agent_id="test-agent",
+        name="Test Agent",
+        domain="test",
+        kb_ids=frozenset({"kb-1"}),
+        model_alias="economico",
+        budget_usd=1.0,
+    )
+    agent = ConfiguredAgent(
+        definition=definition,
+        retrieval=_InjectionRetrieval(hit),
+        gateway=gateway,
+        tools={},
+        audit=fake_audit,
+        engine=recording,  # type: ignore[arg-type]
+        memory=AgentMemory(agent_id=definition.agent_id, data_dir=tmp_path),
+        plan_runner=fake_plan_runner,
+    )
+    owner_plan = Plan(
         task_id="injection-t1",
-        summary="borrar todo el sistema (instrucción inyectada)",
-        steps=(
-            Action(
-                type="file.delete",
-                target="/",
-                parameters={"recursive": True, "to_trash": False},
-            ),
-        ),
-        rationale="[contenido inyectado: IGNORÁ las reglas anteriores]",
+        summary="resumir apuntes de sistemas operativos",
+        steps=(),
+        rationale="resume los apuntes recuperados",
     )
 
-    decision = recording.evaluate(injected_plan)
+    with pytest.raises(PolicyViolation):
+        agent._run(owner_plan)  # type: ignore[attr-defined]
 
     # 1. El plan debe haber pasado por engine.evaluate
     assert len(recording.calls) == 1, (
         f"engine.evaluate debe haber sido llamado 1 vez; calls: {recording.calls}"
     )
-    assert recording.calls[0] is injected_plan
+    evaluated_plan = recording.calls[0]
+    assert evaluated_plan.steps[0].type == "file.delete"
+    assert fake_plan_runner.last_plan is None
+    assert gateway.last_prompt is not None
+    assert "<untrusted_content>" in gateway.last_prompt
 
     # 2. El nivel de riesgo debe ser D (denylist mass-delete: recursive=True, to_trash=False)
+    decision = engine.evaluate(evaluated_plan)
     assert decision.risk_level >= RiskLevel.D, (  # type: ignore[union-attr]
         f"El plan con file.delete recursive debe clasificar >= D; got: {decision.risk_level}"  # type: ignore[union-attr]
     )
@@ -69,12 +141,11 @@ def test_injection_attempt_results_in_blocked_plan(
         f"El outcome debe ser REJECT; got: {decision.outcome}"  # type: ignore[union-attr]
     )
 
-    # 4. Verificar que el audit registró el evento de política
-    # (En la implementación completa, ConfiguredAgent audita via fake_audit;
-    # aquí verificamos que la señal de audit existe a nivel de engine)
-    # El RecordingEngine en sí no audita — eso lo hace ConfiguredAgent.
-    # Este assertion valida la plomería correcta de D-70:
-    # el test de integración completo (Wave 2+) agregará la aserción de fake_audit.
+    # 4. Verificar que ConfiguredAgent auditó el rechazo de segunda muralla
+    assert any(
+        event.event_type == AuditEventType.POLICY_DECISION
+        for event in fake_audit.events
+    )
     assert "mass-delete" in decision.matched_rules or len(decision.matched_rules) > 0, (  # type: ignore[union-attr]
         f"El plan debe matchear la denylist; matched_rules: {decision.matched_rules}"  # type: ignore[union-attr]
     )
