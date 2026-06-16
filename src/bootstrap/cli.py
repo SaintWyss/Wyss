@@ -4,7 +4,7 @@ import asyncio
 import json
 import sqlite3
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +20,7 @@ from rich.table import Table
 
 from audit.sqlite_logger import SqliteAuditLogger
 from bootstrap.config import load_settings
+from core.domain import TipoTransaccion, Transaccion
 from core.domain.audit import ActorType, AuditEvent, Span
 from core.domain.config import WyssSettings
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
@@ -62,11 +63,14 @@ from knowledge.scanner import Scanner
 from knowledge.secret_filter import SecretFilter
 from knowledge.state_store import BcFreshness, StateStore
 from knowledge.vector_index import ChromaVectorIndex, chromadb
+from ledger.sqlite_store import SqliteLedgerStore
 from orchestrator.daemon import run_daemon
 from orchestrator.pending_store import PendingStore
 from orchestrator.plan_renderer import prompt_confirmation
 
 app = typer.Typer(help="Wyss CLI")
+fin_app = typer.Typer(help="Ledger de finanzas")
+app.add_typer(fin_app, name="fin")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -563,6 +567,172 @@ def status(
     finally:
         if state_store is not None:
             state_store.close()
+
+
+def _ledger_db_path(settings: WyssSettings) -> Path:
+    """Archivo propio del ledger (NO audit.db/pending.db — AI-SPEC §4 State Management)."""
+    return settings.data_dir / "ledger.db"
+
+
+def _today_iso() -> str:
+    return datetime.now(UTC).date().isoformat()
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _validate_monto(monto: float) -> None:
+    """Rechaza montos no positivos en la frontera CLI (RESEARCH Pitfall 5, T-08-06)."""
+    if monto <= 0:
+        console.print(
+            f"Error: el monto debe ser positivo (recibido {monto}).", style="red"
+        )
+        raise typer.Exit(code=1)
+
+
+@fin_app.command("add-ingreso")
+def fin_add_ingreso(
+    monto: float,
+    fuente: str,
+    fecha: Annotated[
+        str | None,
+        typer.Option("--fecha", help="Fecha ISO YYYY-MM-DD (default hoy UTC)."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Registra un ingreso en el ledger (escritura determinística, sin IA — D-84)."""
+    store: SqliteLedgerStore | None = None
+    try:
+        _validate_monto(monto)
+        settings = load_settings(config)
+        store = SqliteLedgerStore(_ledger_db_path(settings))
+        transaccion = Transaccion(
+            tipo=TipoTransaccion.INGRESO,
+            monto=monto,
+            fecha=fecha or _today_iso(),
+            fuente=fuente,
+            categoria=None,
+            created_at=_now_iso(),
+        )
+        store.record(transaccion)
+        console.print(
+            f"Ingreso registrado: ${monto:.2f} de '{fuente}' ({transaccion.fecha}).",
+            style="green",
+        )
+    except (ConfigError, AuditIntegrityError) as exc:
+        console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    finally:
+        if store is not None:
+            store.close()
+
+
+@fin_app.command("add-gasto")
+def fin_add_gasto(
+    monto: float,
+    categoria: str,
+    fecha: Annotated[
+        str | None,
+        typer.Option("--fecha", help="Fecha ISO YYYY-MM-DD (default hoy UTC)."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Registra un gasto en el ledger (escritura determinística, sin IA — D-84)."""
+    store: SqliteLedgerStore | None = None
+    try:
+        _validate_monto(monto)
+        settings = load_settings(config)
+        store = SqliteLedgerStore(_ledger_db_path(settings))
+        transaccion = Transaccion(
+            tipo=TipoTransaccion.GASTO,
+            monto=monto,
+            fecha=fecha or _today_iso(),
+            fuente=None,
+            categoria=categoria,
+            created_at=_now_iso(),
+        )
+        store.record(transaccion)
+        console.print(
+            f"Gasto registrado: ${monto:.2f} en '{categoria}' ({transaccion.fecha}).",
+            style="green",
+        )
+    except (ConfigError, AuditIntegrityError) as exc:
+        console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    finally:
+        if store is not None:
+            store.close()
+
+
+@fin_app.command("ver")
+def fin_ver(
+    desde: Annotated[
+        str | None,
+        typer.Option("--desde", help="Inicio de ventana ISO (default 0001-01-01)."),
+    ] = None,
+    hasta: Annotated[
+        str | None,
+        typer.Option("--hasta", help="Fin de ventana ISO (default 9999-12-31)."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Muestra gastos por categoría, balance y superávit (solo lectura, agregaciones SQL)."""
+    store: SqliteLedgerStore | None = None
+    try:
+        settings = load_settings(config)
+        store = SqliteLedgerStore(_ledger_db_path(settings))
+        ventana_desde = desde or "0001-01-01"
+        ventana_hasta = hasta or "9999-12-31"
+        gastos_por_categoria = store.query_by_category(ventana_desde, ventana_hasta)
+        ingresos, gastos = store.balance(ventana_desde, ventana_hasta)
+        superavit = ingresos - gastos
+        _print_ledger_table(gastos_por_categoria, ingresos, gastos, superavit)
+    except (ConfigError, AuditIntegrityError) as exc:
+        console.print(f"Error: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    finally:
+        if store is not None:
+            store.close()
+
+
+def _print_ledger_table(
+    gastos_por_categoria: Mapping[str, float],
+    ingresos: float,
+    gastos: float,
+    superavit: float,
+) -> None:
+    table = Table(title="Ledger de finanzas")
+    table.add_column("Categoría (gasto)")
+    table.add_column("Total", justify="right")
+    if gastos_por_categoria:
+        for categoria, total in sorted(gastos_por_categoria.items()):
+            table.add_row(categoria, f"${total:.2f}")
+    else:
+        table.add_row("(sin gastos)", "$0.00")
+    console.print(table)
+    console.print(f"Ingresos: ${ingresos:.2f}")
+    console.print(f"Gastos:   ${gastos:.2f}")
+    style = "green" if superavit >= 0 else "red"
+    console.print(f"Superávit: ${superavit:.2f}", style=style)
 
 
 def _build_registry() -> ExtractorRegistry:
