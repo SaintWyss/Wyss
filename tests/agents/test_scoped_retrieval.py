@@ -24,7 +24,7 @@ def _make_scoped(
     fake_retrieval: FakeRetrieval,
     permission_store: FakePermissionStore,
     fake_audit: FakeAudit,
-) -> "object":
+) -> object:
     """Factory de ScopedRetrieval con fakes."""
     from agents.scoped_retrieval import ScopedRetrieval
 
@@ -41,7 +41,7 @@ async def test_unauthorized_blocked(
     fake_retrieval: FakeRetrieval,
     fake_audit: FakeAudit,
 ) -> None:
-    """AGENT-03: consultar una BC sin permiso vigente levanta PermissionDenied + audita ANTES del retrieval.
+    """AGENT-03: BC sin permiso vigente levanta PermissionDenied + audita pre-retrieval.
 
     El filtro es estructural (capability-based): la inner Retrieval nunca es llamada
     cuando el agente no tiene permiso sobre la BC consultada.
