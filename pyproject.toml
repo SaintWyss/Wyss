@@ -48,6 +48,7 @@ packages = [
   "src/execution",
   "src/audit",
   "src/bootstrap",
+  "src/ledger",
 ]
 
 [tool.pytest.ini_options]
@@ -57,6 +58,7 @@ markers = [
   "ntfs: tests que corren sobre el mount NTFS/fuseblk real (solo con WYSS_TEST_NTFS=1)",
   "integration: tests contra servicios reales (opt-in por env var)",
   "gateway: tests del gateway de modelos (providers, router, minimizer, cost, traces)",
+  "llm_judge: low-ceremony LLM-judge eval, opt-in only (consumes agent budget)",
 ]
 
 [tool.mypy]
@@ -84,6 +86,7 @@ root_packages = [
   "execution",
   "audit",
   "bootstrap",
+  "ledger",
 ]
 
 [[tool.importlinter.contracts]]
@@ -99,6 +102,7 @@ forbidden_modules = [
   "execution",
   "audit",
   "bootstrap",
+  "ledger",
 ]
 
 [[tool.importlinter.contracts]]
@@ -111,4 +115,5 @@ modules = [
   "gateway",
   "execution",
   "audit",
+  "ledger",
 ]
