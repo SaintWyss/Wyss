@@ -145,7 +145,7 @@ Plans:
 5. El contenido recuperado se marca como dato no confiable y un documento con instrucciones inyectadas no altera el plan (test anti-injection)
 6. La memoria del agente persiste preferencias y solo el owner/extracción supervisada la escribe
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 **Wave 0** (test scaffold + frontera arquitectónica)
 
@@ -162,7 +162,7 @@ Plans:
 
 **Wave 3** (ensamblaje + gate)
 
-- [ ] 07-05-PLAN.md — AgentRegistry config-driven + conformance + exports + full suite gate (AGENT-02)
+- [x] 07-05-PLAN.md — AgentRegistry config-driven + conformance + exports + full suite gate (AGENT-02)
 
 ### Phase 8: Belgrano
 
