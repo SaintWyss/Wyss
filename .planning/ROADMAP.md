@@ -145,7 +145,7 @@ Plans:
 5. El contenido recuperado se marca como dato no confiable y un documento con instrucciones inyectadas no altera el plan (test anti-injection)
 6. La memoria del agente persiste preferencias y solo el owner/extracción supervisada la escribe
 
-**Plans:** 2/5 plans executed
+**Plans:** 3/5 plans executed
 
 **Wave 0** (test scaffold + frontera arquitectónica)
 
@@ -154,7 +154,7 @@ Plans:
 **Wave 1** (componentes ortogonales — files disjuntos)
 
 - [x] 07-02-PLAN.md — AgentMemory (D-71) + SQLitePermissionStore + ScopedRetrieval pre-retrieval sin cache (D-72, AGENT-03/04/08)
-- [ ] 07-03-PLAN.md — bootstrap AgentConfigModel extra=forbid + WyssSettings.agents (D-73, AGENT-02)
+- [x] 07-03-PLAN.md — bootstrap AgentConfigModel extra=forbid + WyssSettings.agents (D-73, AGENT-02)
 
 **Wave 2** (núcleo)
 
