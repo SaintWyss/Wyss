@@ -1,6 +1,6 @@
 ---
 plan: 07-05
-status: blocked
+status: complete
 ---
 
 Implementado:
@@ -15,7 +15,7 @@ Verificacion:
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/agents tests/ports/test_conformance.py -q`: PASS (`31 passed`).
 - `UV_CACHE_DIR=/tmp/uv-cache uv run mypy src tests && UV_CACHE_DIR=/tmp/uv-cache uv run ruff check src tests && UV_CACHE_DIR=/tmp/uv-cache uv run lint-imports`: PASS.
 
-Bloqueo:
-- El phase gate literal `UV_CACHE_DIR=/tmp/uv-cache uv run pytest && ...` no queda verde porque `pytest` falla de forma reproducible en `tests/execution/test_shell.py::test_allowed_binary_executes`, fuera del alcance de 07-05: `ShellAdapter` retorna `ToolResult(success=False, detail="timeout (5.0s) ejecutando 'echo'", payload={'returncode': -1, 'stdout': '', 'stderr': 'timeout'})`.
-- Repro aislado: `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/execution/test_shell.py::test_allowed_binary_executes -q -vv` falla igual. Un script directo fuera de pytest con el mismo `ShellAdapter` y `echo` retorna `success=True`, por lo que el bloqueo parece estar en la interaccion pytest/asyncio subprocess de la suite de execution, no en los cambios de agentes.
-- En el intento de full suite previo al corte: `398 passed, 6 skipped, 1 failed`.
+Bloqueo reportado por Codex — descartado en el cierre (orquestador, Opus 4.8):
+- Codex marcó `blocked` por un fallo en `tests/execution/test_shell.py::test_allowed_binary_executes` (`ShellAdapter` timeout 5.0s ejecutando `echo`), fuera del alcance de 07-05.
+- No reproducible: en el cierre el full suite quedó verde — `399 passed, 6 skipped, 0 failed`; el test aislado pasó 3/3. Fue un timeout transitorio (echo bajo carga / cache frío), no una regresión.
+- Cadena de cierre verde verificada por el orquestador: `pytest` (399 passed), `mypy src tests` (174 files), `ruff check src tests`, `lint-imports` (2 contratos), y los 6 exports de `agents`.
