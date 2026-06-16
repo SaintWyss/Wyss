@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: executing
-last_updated: "2026-06-14T01:03:23.446Z"
-last_activity: 2026-06-14
+status: planning
+last_updated: "2026-06-16T15:54:38.545Z"
+last_activity: 2026-06-16
 progress:
   total_phases: 10
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 37
-  completed_plans: 32
-  percent: 50
+  completed_plans: 36
+  percent: 60
 ---
 
 # Wyss — State
@@ -20,17 +20,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** Encontrar cualquier cosa en 2 TB en segundos + delegar tareas a agentes con control total y auditoría de todo.
-**Current focus:** Phase 07 — modelo-de-agentes
+**Current focus:** Phase 8 — primer agente de dominio (finanzas)
 
 ## Current Position
 
-Phase: 07 (modelo-de-agentes) — EXECUTING
-Plan: 2 of 5
-Last completed: 06-05 (PlanExecutor — step loop + on_error enforcement) — 2026-06-13
+Phase: 08 (primer agente de dominio — finanzas) — READY TO DISCUSS
+Plan: Not started
+Last completed: 07-05 (AgentRegistry config-driven + conformance + exports) — 2026-06-16
 
-- **Phase:** 5 of 10 (orquestador daemon)
-- **Status:** Ready to execute
-- **Last activity:** 2026-06-14
+- **Phase:** 8 of 10 (primer agente — finanzas)
+- **Status:** Ready to discuss
+- **Last activity:** 2026-06-16
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
 
@@ -69,3 +69,9 @@ Last completed: 06-05 (PlanExecutor — step loop + on_error enforcement) — 20
 - STACK.md y PITFALLS.md del research escritos inline (límite de sesión cortó los agentes) — versiones de libs a confirmar con `uv add` en Fase 1
 - Los stubs existentes en `src/` son placeholders del init original — la Fase 1 define la estructura real (`core/ports/` etc.)
 - Research flags: Fases 3-4 (chunking/embeddings a escala), 7 (memoria + anti-injection) y 10 (canal mensajería) necesitarán research adicional al planificarlas
+
+## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 8 edited: retargeted Belgrano/estudio -> agente de finanzas (owner decision); Belgrano queda posterior

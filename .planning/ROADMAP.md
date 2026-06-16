@@ -164,14 +164,14 @@ Plans:
 
 - [x] 07-05-PLAN.md — AgentRegistry config-driven + conformance + exports + full suite gate (AGENT-02)
 
-### Phase 8: Belgrano
+### Phase 8: Primer Agente de Dominio (Finanzas)
 
-**Goal:** Primer agente real operando en el dominio estudio del owner — validación end-to-end de toda la maquinaria.
+**Goal:** Primer agente real operando en el dominio finanzas del owner — validación end-to-end de toda la maquinaria. (El owner eligió arrancar con finanzas; Belgrano/estudio queda como agente posterior, mismo molde config-driven.)
 **Requirements:** AGENT-07, AGENT-09
 **Success Criteria**:
 
-1. Belgrano existe solo como config (identidad, dominio estudio, BC habilitada, modelo, presupuesto)
-2. Completa ≥ 3 tareas reales de su dominio de punta a punta ("organizá el material del parcial", "resumí los apuntes de X")
+1. El agente de finanzas existe solo como config (identidad —nombre concreto a definir en discuss—, dominio finanzas, BC habilitada, modelo, presupuesto)
+2. Completa ≥ 3 tareas reales de su dominio de punta a punta (ej.: "consolidá los gastos del mes", "resumí el estado de cuenta de X", "armá el detalle de movimientos de la BC habilitada")
 3. Reporta resultados al orquestador y todo queda auditado
 4. Agotado su presupuesto, sus llamadas se bloquean (gate verificado)
 
