@@ -176,13 +176,13 @@ Plans:
 3. Completa ≥ 3 tareas reales de asesoría E2E ("¿dónde se me va la plata?", "armá mi presupuesto mensual", "¿cuánto puedo ahorrar?"), reportando al orquestador (daemon dispatcher + FakeOrchestrator) y todo queda auditado.
 4. Agotado su presupuesto de IA, sus llamadas se bloquean (gate per-agente de `gateway/cost.py` cableado desde config y verificado).
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 **Wave 1**
 - [x] 08-01-PLAN.md — Wave 0: scaffolds RED (7 tests) + plumbing (llm_judge marker, import-linter `ledger`, config/config.toml con Pellegrini + budget cableado)
 
 **Wave 2** *(blocked on Wave 1)*
-- [ ] 08-02-PLAN.md — ledger: Transaccion (dominio) + LedgerPort (Protocol) + SqliteLedgerStore (WAL NORMAL, agregaciones SQL deterministas) (AGENT-09)
+- [x] 08-02-PLAN.md — ledger: Transaccion (dominio) + LedgerPort (Protocol) + SqliteLedgerStore (WAL NORMAL, agregaciones SQL deterministas) (AGENT-09)
 
 **Wave 3** *(blocked on Wave 2)*
 - [ ] 08-03-PLAN.md — CLI `wyss fin add-ingreso/add-gasto/ver` determinístico + finance.* en _BASE_LEVELS + budget cableado desde [[agents]] al cost gate (AGENT-07/criterio #1/#4)

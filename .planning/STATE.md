@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 0 done)
-Plan: 08-01 complete (1 of 4)
-Last completed: 08-01 (RED scaffold + phase plumbing: llm_judge marker, ledger import-linter package, Pellegrini config wiring, 7 RED test files) — 2026-06-16
+Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 1 done)
+Plan: 08-02 complete (2 of 4)
+Last completed: 08-02 (ledger domain + store: core.domain.ledger.Transaccion/TipoTransaccion + core.ports.ledger.LedgerPort + ledger.sqlite_store.SqliteLedgerStore WAL fail-fast, SQL-side aggregations; 6 ledger tests RED→GREEN) — 2026-06-16
 
 - **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical)
-- **Status:** Executing — 08-02 next (ledger adapter: core.domain.ledger + core.ports.ledger.LedgerPort + ledger.sqlite_store.SqliteLedgerStore)
+- **Status:** Executing — 08-03 next (agents.pellegrini: build_pellegrini/handle_task/advise/propuesta_presupuesto + finance.query/finance.record base levels — 10 RED tests pending)
 - **Last activity:** 2026-06-16
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
