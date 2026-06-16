@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-16T21:07:22.168Z"
+last_updated: "2026-06-16T21:20:21.161Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 41
-  completed_plans: 37
-  percent: 62
+  completed_plans: 39
+  percent: 60
 ---
 
 # Wyss — State
@@ -24,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 1 done)
-Plan: 08-02 complete (2 of 4)
-Last completed: 08-02 (ledger domain + store: core.domain.ledger.Transaccion/TipoTransaccion + core.ports.ledger.LedgerPort + ledger.sqlite_store.SqliteLedgerStore WAL fail-fast, SQL-side aggregations; 6 ledger tests RED→GREEN) — 2026-06-16
+Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 3 done)
+Plan: 08-03 complete (3 of 4)
+Last completed: 08-03 (CLI ledger path + AGENT-07 budget wiring: finance.query=A/finance.record=B in _BASE_LEVELS; agent_budgets derived from [[agents]].budget_usd closing RESEARCH Pitfall 1, explicit gateway value wins; wyss fin add-ingreso/add-gasto/ver deterministic against ledger.db; full 4-tool gate green — only the 10 agents.pellegrini RED tests remain for 08-04) — 2026-06-16
 
 - **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical)
-- **Status:** Executing — 08-03 next (agents.pellegrini: build_pellegrini/handle_task/advise/propuesta_presupuesto + finance.query/finance.record base levels — 10 RED tests pending)
+- **Status:** Executing — 08-04 pending (Pellegrini agent E2E)
 - **Last activity:** 2026-06-16
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
-- **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
+- **Next:** ejecutar 08-04 — construir `agents.pellegrini` (build_pellegrini/handle_task/advise/propuesta_presupuesto) y cerrar los 10 RED tests (second-wall agent, no-fabrication, 3 tareas D-87 E2E vía dispatcher+FakeOrchestrator) + AGENT-07 budget cutoff E2E.
 
 ## Decisions Log
 
@@ -40,6 +40,7 @@ Last completed: 08-02 (ledger domain + store: core.domain.ledger.Transaccion/Tip
 |------|----------|---------|
 | 2026-06-11 | **Fase 1 (resumen):** 12 decisiones — fail-closed D por valor+isinstance, agregados nivel-plan anti-bypass, BUILTIN_DENY no vaciable, WAL fail-fast, ConfigError en dominio | Detalle: `phases/01-fundaciones/01-DECISIONS.md` |
 | 2026-06-12 | **Fase 2 (resumen):** 19 decisiones — gateway fail-closed (SecretDetected sin valor, BUILTIN_SECRET_PATTERNS no vaciable, UnknownTier sin fallback), httpx sin SDK, retry solo en gateway, CostTracker veta pre-llamada, traces.db 0600/90d | Detalle: `phases/02-gateway-de-modelos/02-DECISIONS.md` |
+| 2026-06-16 | **08-03:** `agent_budgets` se DERIVA de `[[agents]].budget_usd` (Opción b, cierra RESEARCH Pitfall 1); el valor explícito de `[gateway.agent_budgets]` tiene precedencia. `finance.query=A`/`finance.record=B` (docs/10 §7: no son nivel D). `wyss fin add-ingreso/add-gasto/ver` determinístico contra `ledger.db` propio. | `cost.py` intacto (D-85); el gate ya enforce, solo se cableó |
 | 2026-06-10 | Roadmap de 10 fases por build order técnico, no las 5 fases del prompt | Dependencias reales: gateway antes que indexación (embeddings), fundaciones antes que todo |
 | 2026-06-10 | Las 10 features gap del research incluidas en v1 | Table stakes — se insertan en fases existentes |
 | 2026-06-10 | pymupdf primario para PDF (no PyPDF2) | PyPDF2 deprecado; throughput crítico a 2TB |
