@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-16T19:40:19.788Z"
+last_updated: "2026-06-16T21:07:22.168Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 41
-  completed_plans: 36
-  percent: 60
+  completed_plans: 37
+  percent: 62
 ---
 
 # Wyss — State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 08 (primer agente de dominio — finanzas) — DISCUSSED, ready to plan (MVP)
-Plan: Not started
-Last completed: 07-05 (AgentRegistry config-driven + conformance + exports) — 2026-06-16
+Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 0 done)
+Plan: 08-01 complete (1 of 4)
+Last completed: 08-01 (RED scaffold + phase plumbing: llm_judge marker, ledger import-linter package, Pellegrini config wiring, 7 RED test files) — 2026-06-16
 
 - **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical)
-- **Status:** Ready to execute
+- **Status:** Executing — 08-02 next (ledger adapter: core.domain.ledger + core.ports.ledger.LedgerPort + ledger.sqlite_store.SqliteLedgerStore)
 - **Last activity:** 2026-06-16
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.

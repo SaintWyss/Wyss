@@ -58,9 +58,9 @@
 - [x] **AGENT-04**: La revocación de permisos tiene efecto inmediato — verificación por query, sin cache *(RF-015)*
 - [x] **AGENT-05**: Los agentes no se comunican entre sí — solo el orquestador delega y consolida *(RF-011, regla #5)*
 - [x] **AGENT-06**: Ningún agente puede alterar su propia config, permisos o presupuesto *(regla #6)*
-- [ ] **AGENT-07**: Cada agente respeta su presupuesto de modelos configurado
+- [x] **AGENT-07**: Cada agente respeta su presupuesto de modelos configurado
 - [x] **AGENT-08**: Memoria operativa por agente (patrón MEMORY.md): persiste preferencias del owner en su dominio; solo el owner o extracción supervisada escribe en ella — contenido de BC jamás escribe memoria directamente *(gap #1)*
-- [ ] **AGENT-09**: Belgrano (dominio estudio) completa ≥ 3 tareas reales de punta a punta, reportando al orquestador
+- [x] **AGENT-09**: Belgrano (dominio estudio) completa ≥ 3 tareas reales de punta a punta, reportando al orquestador
 
 ### Execution
 
