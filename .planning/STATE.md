@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: planning
-last_updated: "2026-06-16T15:54:38.545Z"
+status: Ready to plan
+last_updated: "2026-06-16T17:00:47.888Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 10
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 08 (primer agente de dominio — finanzas) — READY TO DISCUSS
+Phase: 08 (primer agente de dominio — finanzas) — DISCUSSED, ready to plan (MVP)
 Plan: Not started
 Last completed: 07-05 (AgentRegistry config-driven + conformance + exports) — 2026-06-16
 
-- **Phase:** 8 of 10 (primer agente — finanzas)
-- **Status:** Ready to discuss
+- **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical)
+- **Status:** Context gathered (08-CONTEXT.md) — ready for /gsd-mvp-phase 8
 - **Last activity:** 2026-06-16
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
@@ -75,3 +75,4 @@ Last completed: 07-05 (AgentRegistry config-driven + conformance + exports) — 
 ### Roadmap Evolution
 
 - Phase 8 edited: retargeted Belgrano/estudio -> agente de finanzas (owner decision); Belgrano queda posterior
+- Phase 8 re-scoped (discuss): de "agente sobre BC" a MVP vertical "Pellegrini coach de finanzas + ledger SQLite". Owner no tiene docs para indexar; quiere registrar ingresos/gastos y ser asesorado. Capacidad nueva (ledger). Carga híbrida CLI+conversacional. AGENT-07 ya casi hecho en gateway/cost.py
