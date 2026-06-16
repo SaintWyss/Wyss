@@ -110,7 +110,7 @@ class Query:
 
     text: str
     kb_ids: frozenset[str]
-    limit: int
+    limit: int = 5
 
 
 @dataclass(frozen=True, slots=True)
