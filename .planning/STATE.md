@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-06-16T17:00:47.888Z"
+status: executing
+last_updated: "2026-06-16T19:40:19.788Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 10
   completed_phases: 6
-  total_plans: 37
+  total_plans: 41
   completed_plans: 36
   percent: 60
 ---
@@ -29,7 +29,7 @@ Plan: Not started
 Last completed: 07-05 (AgentRegistry config-driven + conformance + exports) — 2026-06-16
 
 - **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical)
-- **Status:** Context gathered (08-CONTEXT.md) — ready for /gsd-mvp-phase 8
+- **Status:** Ready to execute
 - **Last activity:** 2026-06-16
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
 - **Next:** revisar/re-planear 05-05 con build-local de Hermes (clonar NousResearch/hermes-agent, buildear, cerrar A3), luego ejecutar. Resto de la fase punta a punta con FakeOrchestrator.
