@@ -58,6 +58,11 @@ _BASE_LEVELS: dict[str, RiskLevel] = {
     "file.write": RiskLevel.C,
     "file.delete": RiskLevel.C,
     "shell.run": RiskLevel.C,
+    # Acciones de dominio financiero (Fase 8). Confirmado contra docs/10 §7: ninguna
+    # escritura financiera es nivel D (§7 enumera las prohibiciones D y no las incluye).
+    # query = lectura → A; record = mutación owner-instruida → B (segunda muralla, no D).
+    "finance.query": RiskLevel.A,
+    "finance.record": RiskLevel.B,
 }
 
 
@@ -266,12 +271,38 @@ def _gateway_env_values() -> tuple[str, ...]:
     )
 
 
-def _to_gateway_settings(model: GatewayConfigModel) -> GatewaySettings:
+def _derive_agent_budgets(
+    explicit: dict[str, float], agents: list[AgentConfigModel]
+) -> dict[str, float]:
+    """Cierra RESEARCH Pitfall 1: deriva el tope del gate desde `[[agents]].budget_usd`.
+
+    El gate (`CostTracker.authorize`) solo lee `agent_budgets[agent_id]`; `[[agents]].budget_usd`
+    era informativo y dejaba el tope sin cablear (footgun para todo agente futuro). Acá cada
+    entrada `[[agents]]` con `budget_usd > 0` puebla `agent_budgets[agent_id]` SI NO fue seteado
+    explícitamente en `[gateway.agent_budgets]`.
+
+    Precedencia (decisión de diseño, Open Question 2 / Opción b): el valor explícito de
+    `[gateway.agent_budgets]` GANA sobre el derivado de `[[agents]].budget_usd` — sin override
+    silencioso. `budget_usd == 0.0` (default) no deriva nada (0 = "sin tope por-agente").
+    """
+    derived = dict(explicit)
+    for agent in agents:
+        if agent.budget_usd > 0.0 and agent.agent_id not in derived:
+            derived[agent.agent_id] = agent.budget_usd
+    return derived
+
+
+def _to_gateway_settings(
+    model: GatewayConfigModel, agents: list[AgentConfigModel]
+) -> GatewaySettings:
     """Mapea la sección [gateway] Pydantic → GatewaySettings frozen (Pydantic muere acá).
 
     Los regex de secret_patterns se compilan/validan acá: un regex inválido → ConfigError
     legible al boot (fail-fast). Los patrones son ADITIVOS — el GatewaySettings lleva SOLO los
     de config; el merge con `BUILTIN_SECRET_PATTERNS` lo hace el minimizer en runtime (D-21).
+
+    `agent_budgets` se deriva de `[[agents]].budget_usd` (Pitfall 1) con `_derive_agent_budgets`;
+    el valor explícito de `[gateway.agent_budgets]` tiene precedencia.
     """
     for tier_name, tier in model.tiers.items():
         if tier.provider not in _KNOWN_PROVIDERS:
@@ -297,7 +328,7 @@ def _to_gateway_settings(model: GatewayConfigModel) -> GatewaySettings:
         },
         prices=dict(model.prices),
         global_budget=model.global_budget,
-        agent_budgets=dict(model.agent_budgets),
+        agent_budgets=_derive_agent_budgets(dict(model.agent_budgets), agents),
         timeout_s=model.timeout_s,
         trace_retention_days=model.trace_retention_days,
         env_values=_gateway_env_values(),
@@ -358,7 +389,7 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         data_dir=model.data_dir,
         audit_db=model.audit_db,
         policy=policy,
-        gateway=_to_gateway_settings(model.gateway),
+        gateway=_to_gateway_settings(model.gateway, model.agents),
         ingest=_to_ingest_settings(model.ingest),
         agents=tuple(_to_agent_definition(agent) for agent in model.agents),
     )
