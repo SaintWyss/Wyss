@@ -164,16 +164,16 @@ Plans:
 
 - [x] 07-05-PLAN.md — AgentRegistry config-driven + conformance + exports + full suite gate (AGENT-02)
 
-### Phase 8: Primer Agente de Dominio (Finanzas)
+### Phase 8: Primer Agente de Dominio (Finanzas) — Pellegrini, coach + ledger
 
-**Goal:** Primer agente real operando en el dominio finanzas del owner — validación end-to-end de toda la maquinaria. (El owner eligió arrancar con finanzas; Belgrano/estudio queda como agente posterior, mismo molde config-driven.)
+**Goal:** Primer agente real (Pellegrini, dominio finanzas) operando E2E como **coach de finanzas personales**. MVP vertical: incluye una capacidad nueva —un *ledger* de transacciones (ingreso/gasto) en SQLite tras un port— más el agente que lo lee y asesora. El owner no tiene documentos para indexar: el dato real se carga al ledger (CLI + conversacional). Belgrano/estudio queda como agente posterior, mismo molde config-driven. Decisiones en `phases/08-primer-agente-de-dominio-finanzas/08-CONTEXT.md`.
 **Requirements:** AGENT-07, AGENT-09
 **Success Criteria**:
 
-1. El agente de finanzas existe solo como config (identidad —nombre concreto a definir en discuss—, dominio finanzas, BC habilitada, modelo, presupuesto)
-2. Completa ≥ 3 tareas reales de su dominio de punta a punta (ej.: "consolidá los gastos del mes", "resumí el estado de cuenta de X", "armá el detalle de movimientos de la BC habilitada")
-3. Reporta resultados al orquestador y todo queda auditado
-4. Agotado su presupuesto, sus llamadas se bloquean (gate verificado)
+1. El owner carga ingresos/gastos al ledger por dos vías (comando CLI determinístico + acción conversacional owner-instruida que pasa por el policy engine); persisten en SQLite.
+2. Pellegrini existe como config (`[[agents]]`: identidad pellegrini, dominio finanzas, modelo económico, presupuesto $5) y lee el ledger — cero código de agente nuevo (D-73).
+3. Completa ≥ 3 tareas reales de asesoría E2E ("¿dónde se me va la plata?", "armá mi presupuesto mensual", "¿cuánto puedo ahorrar?"), reportando al orquestador (daemon dispatcher + FakeOrchestrator) y todo queda auditado.
+4. Agotado su presupuesto de IA, sus llamadas se bloquean (gate per-agente de `gateway/cost.py` cableado desde config y verificado).
 
 ### Phase 9: Multi-agente y Rutinas
 
