@@ -13,6 +13,7 @@ from core.ports.knowledge import (
     Retrieval,
     VectorIndex,
 )
+from core.ports.ledger import LedgerPort
 from core.ports.orchestrator import OrchestratorPort
 from core.ports.persistence import TaskRepository
 from core.ports.security import PermissionStore
@@ -25,6 +26,7 @@ __all__ = [
     "EmbeddingProvider",
     "Extractor",
     "FullTextIndex",
+    "LedgerPort",
     "ModelGatewayPort",
     "ModelProvider",
     "OrchestratorPort",

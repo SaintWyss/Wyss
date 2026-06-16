@@ -39,6 +39,7 @@ from core.domain.knowledge import (
     SourceFile,
     Vector,
 )
+from core.domain.ledger import TipoTransaccion, Transaccion
 from core.domain.plan import Action, Plan
 from core.domain.policy import (
     DEFAULT_SENSITIVE_DIRS,
@@ -97,7 +98,9 @@ __all__ = [
     "Task",
     "TaskStatus",
     "TierConfig",
+    "TipoTransaccion",
     "ToolResult",
+    "Transaccion",
     "UnknownTier",
     "UnsupportedFileError",
     "Vector",
