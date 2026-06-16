@@ -145,7 +145,7 @@ Plans:
 5. El contenido recuperado se marca como dato no confiable y un documento con instrucciones inyectadas no altera el plan (test anti-injection)
 6. La memoria del agente persiste preferencias y solo el owner/extracción supervisada la escribe
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 **Wave 0** (test scaffold + frontera arquitectónica)
 
@@ -158,7 +158,7 @@ Plans:
 
 **Wave 2** (núcleo)
 
-- [ ] 07-04-PLAN.md — ConfiguredAgent: ciclo _run sin recursión + anti-injection untrusted_content + segunda muralla + test dorado (AGENT-01/05/06, POL-07/D-70)
+- [x] 07-04-PLAN.md — ConfiguredAgent: ciclo _run sin recursión + anti-injection untrusted_content + segunda muralla + test dorado (AGENT-01/05/06, POL-07/D-70)
 
 **Wave 3** (ensamblaje + gate)
 
