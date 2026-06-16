@@ -85,12 +85,31 @@ deepseek-default = 0.0003
 qwen-default = 0.0004
 claude-opus-4-6 = 0.015
 
-# Límite opcional por agente (USD/mes). Prepara AGENT-02 (presupuesto por agente).
+# Límite opcional por agente (USD/mes). Es el campo que `CostTracker.authorize`
+# realmente lee para vetar (D-18): `[[agents]].budget_usd` por sí solo NO cablea el gate
+# (RESEARCH Pitfall 1). Pellegrini lleva tope chico a propósito (D-81/D-85, $5).
 [gateway.agent_budgets]
 belgrano = 10.0
+pellegrini = 5.0
 
 # Patrones de secreto ADICIONALES (D-21): se AGREGAN a los built-in (sk-ant-, AKIA,
 # ghp_, JWT, PEM...), nunca los vacían. Útil para formatos internos del owner.
 # [[gateway.secret_patterns]]
 # name = "token_interno_wyss"
 # regex = "WYSS-[A-Z0-9]{16}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Agentes declarativos (Fase 7+, D-73): cada [[agents]] se valida al boot y se
+# convierte en un AgentDefinition frozen. Agregar un agente NO toca código (regla de
+# extensibilidad). `model_tier` referencia un tier de [gateway.tiers]; `budget_usd` es
+# informativo — el tope REAL del gate vive en [gateway.agent_budgets] (Pitfall 1).
+
+# Pellegrini — coach de finanzas personal (D-80/D-81). Modelo económico, sin BC
+# (no indexa documentos: opera sobre el ledger), presupuesto $5/mes.
+[[agents]]
+agent_id = "pellegrini"
+name = "Pellegrini"
+domain = "finanzas"
+knowledge_bases = []
+model_tier = "economico"
+budget_usd = 5.0
