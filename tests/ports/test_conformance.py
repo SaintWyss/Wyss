@@ -56,6 +56,14 @@ def test_sqlite_audit_logger_conforms(tmp_path: Path) -> None:
     assert logger is not None
 
 
+def test_sqlite_permission_store_conforms(tmp_path: Path) -> None:
+    # Pattern 5: mypy verifica que el adapter real cumple PermissionStore.
+    from agents.permission_store import SQLitePermissionStore
+
+    store: PermissionStore = SQLitePermissionStore(tmp_path / "perm.db")
+    assert store is not None
+
+
 def test_config_store_conforms() -> None:
     port: ConfigStore = FakeConfigStore()
     assert port is not None
@@ -88,6 +96,18 @@ def test_vector_index_conforms() -> None:
 
 def test_retrieval_conforms() -> None:
     port: Retrieval = FakeRetrieval()
+    assert port is not None
+
+
+def test_scoped_retrieval_conforms() -> None:
+    from agents.scoped_retrieval import ScopedRetrieval
+
+    port: Retrieval = ScopedRetrieval(
+        inner=FakeRetrieval(),
+        permission_store=FakePermissionStore(),
+        audit=FakeAuditPort(),
+        agent_id="belgrano",
+    )
     assert port is not None
 
 

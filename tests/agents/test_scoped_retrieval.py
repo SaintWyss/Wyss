@@ -5,6 +5,7 @@ Wave 0 — RED: ScopedRetrieval y PermissionDenied aún no existen.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,7 @@ from tests.agents.conftest import FakeAudit
 from tests.ports.fakes import FakePermissionStore, FakeRetrieval
 
 if TYPE_CHECKING:
-    pass
+    from agents.scoped_retrieval import ScopedRetrieval
 
 
 def _make_scoped(
@@ -24,7 +25,7 @@ def _make_scoped(
     fake_retrieval: FakeRetrieval,
     permission_store: FakePermissionStore,
     fake_audit: FakeAudit,
-) -> object:
+) -> ScopedRetrieval:
     """Factory de ScopedRetrieval con fakes."""
     from agents.scoped_retrieval import ScopedRetrieval
 
@@ -56,7 +57,7 @@ async def test_unauthorized_blocked(
     query = Query(text="datos importantes", kb_ids=frozenset({"kb-restringida"}))
 
     with pytest.raises(PermissionDenied):
-        await scoped.search(query, subject)  # type: ignore[attr-defined, union-attr]
+        await scoped.search(query, subject)
 
     # El evento de auditoría debe haberse registrado ANTES de que inner sea llamado
     assert len(fake_audit.events) >= 1, (
@@ -92,7 +93,7 @@ async def test_revoked_permission_denied(
     )
 
     class StoreConRevocado(FakePermissionStore):
-        def grants_for(self, subject: Subject):  # type: ignore[override]
+        def grants_for(self, subject: Subject) -> Sequence[Permission]:
             return [revoked_permission]
 
     store = StoreConRevocado()
@@ -103,7 +104,7 @@ async def test_revoked_permission_denied(
 
     # El permiso existe pero está revocado — debe bloquear
     with pytest.raises(PermissionDenied):
-        await scoped.search(query, subject)  # type: ignore[attr-defined, union-attr]
+        await scoped.search(query, subject)
 
     # Verificar que no hubo cache — la verificación ocurrió en esta query
     assert len(fake_audit.events) >= 1, (

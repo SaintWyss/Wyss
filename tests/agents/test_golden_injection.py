@@ -118,7 +118,7 @@ def test_injection_attempt_results_in_blocked_plan(
     )
 
     with pytest.raises(PolicyViolation):
-        agent._run(owner_plan)  # type: ignore[attr-defined]
+        agent._run(owner_plan)
 
     # 1. El plan debe haber pasado por engine.evaluate
     assert len(recording.calls) == 1, (
@@ -132,13 +132,13 @@ def test_injection_attempt_results_in_blocked_plan(
 
     # 2. El nivel de riesgo debe ser D (denylist mass-delete: recursive=True, to_trash=False)
     decision = engine.evaluate(evaluated_plan)
-    assert decision.risk_level >= RiskLevel.D, (  # type: ignore[union-attr]
-        f"El plan con file.delete recursive debe clasificar >= D; got: {decision.risk_level}"  # type: ignore[union-attr]
+    assert decision.risk_level >= RiskLevel.D, (
+        f"El plan con file.delete recursive debe clasificar >= D; got: {decision.risk_level}"
     )
 
     # 3. El outcome debe ser REJECT
-    assert decision.outcome == Outcome.REJECT, (  # type: ignore[union-attr]
-        f"El outcome debe ser REJECT; got: {decision.outcome}"  # type: ignore[union-attr]
+    assert decision.outcome == Outcome.REJECT, (
+        f"El outcome debe ser REJECT; got: {decision.outcome}"
     )
 
     # 4. Verificar que ConfiguredAgent auditó el rechazo de segunda muralla
@@ -146,8 +146,8 @@ def test_injection_attempt_results_in_blocked_plan(
         event.event_type == AuditEventType.POLICY_DECISION
         for event in fake_audit.events
     )
-    assert "mass-delete" in decision.matched_rules or len(decision.matched_rules) > 0, (  # type: ignore[union-attr]
-        f"El plan debe matchear la denylist; matched_rules: {decision.matched_rules}"  # type: ignore[union-attr]
+    assert "mass-delete" in decision.matched_rules or len(decision.matched_rules) > 0, (
+        f"El plan debe matchear la denylist; matched_rules: {decision.matched_rules}"
     )
 
 

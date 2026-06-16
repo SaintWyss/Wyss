@@ -6,12 +6,16 @@ Wave 0 — RED: AgentRegistry aún no existe; los tests fallan por ImportError.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from core.domain import AgentDefinition
 from tests.agents.conftest import FakeAudit, FakePlanRunner
 from tests.ports.fakes import FakeModelGatewayPort, FakeRetrieval
+
+if TYPE_CHECKING:
+    from agents.registry import AgentRegistry
 
 
 def _make_registry(
@@ -20,11 +24,10 @@ def _make_registry(
     fake_retrieval: FakeRetrieval,
     fake_plan_runner: FakePlanRunner,
     tmp_path: Path,
-) -> object:
+) -> AgentRegistry:
     """Factory que instancia AgentRegistry con fakes inyectados."""
-    from agents.registry import AgentRegistry
-
     from agents.memory import AgentMemory
+    from agents.registry import AgentRegistry
 
     def scoped_retrieval_factory(agent_id: str) -> FakeRetrieval:
         return fake_retrieval
@@ -60,11 +63,11 @@ def test_registry_instantiates_from_definition(
     definitions = {sample_definition.agent_id: sample_definition}
     registry = _make_registry(definitions, fake_audit, fake_retrieval, fake_plan_runner, tmp_path)
 
-    agent = registry.get(sample_definition.agent_id)  # type: ignore[attr-defined]
+    agent = registry.get(sample_definition.agent_id)
     assert isinstance(agent, ConfiguredAgent), (
         f"El registry debe retornar una instancia de ConfiguredAgent, got: {type(agent)}"
     )
-    assert agent._definition.agent_id == sample_definition.agent_id  # type: ignore[attr-defined]
+    assert agent._definition.agent_id == sample_definition.agent_id
 
 
 def test_get_unknown_raises_keyerror(
@@ -77,4 +80,4 @@ def test_get_unknown_raises_keyerror(
     registry = _make_registry({}, fake_audit, fake_retrieval, fake_plan_runner, tmp_path)
 
     with pytest.raises(KeyError, match="no-existe"):
-        registry.get("no-existe")  # type: ignore[attr-defined]
+        registry.get("no-existe")

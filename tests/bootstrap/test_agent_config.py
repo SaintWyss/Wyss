@@ -76,10 +76,10 @@ def test_agents_become_definitions(tmp_path: Path) -> None:
     assert hasattr(settings, "agents"), (
         "WyssSettings debe tener el campo 'agents'"
     )
-    assert len(settings.agents) == 1, (  # type: ignore[attr-defined]
-        f"Debe haber 1 agente en settings.agents; got: {settings.agents}"  # type: ignore[attr-defined]
+    assert len(settings.agents) == 1, (
+        f"Debe haber 1 agente en settings.agents; got: {settings.agents}"
     )
-    agent_def = settings.agents[0]  # type: ignore[attr-defined]
+    agent_def = settings.agents[0]
     assert isinstance(agent_def, AgentDefinition), (
         f"settings.agents[0] debe ser AgentDefinition, got: {type(agent_def)}"
     )
