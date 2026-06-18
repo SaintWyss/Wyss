@@ -20,7 +20,9 @@ from core.domain.gateway import ModelResponse
 from tests.ledger.conftest import HECHOS_VERIFICADOS
 
 # Regex de montos en dólares: $1.234,56 / $1234.56 / $1,234 / $800 — captura el numeral crudo.
-_MONTO_RE = re.compile(r"\$\s*([\d][\d.,]*)")
+# El numeral no puede TERMINAR en separador (`.`/`,`): así no se traga el punto final de
+# oración en "...te sobran $1200.00." (capturaría "1200.00." e impediría el parse a float).
+_MONTO_RE = re.compile(r"\$\s*(\d[\d.,]*\d|\d)")
 
 
 def _to_float(raw: str) -> float:
