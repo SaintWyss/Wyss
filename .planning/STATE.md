@@ -24,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 3 done)
-Plan: 08-03 complete (3 of 4)
-Last completed: 08-03 (CLI ledger path + AGENT-07 budget wiring: finance.query=A/finance.record=B in _BASE_LEVELS; agent_budgets derived from [[agents]].budget_usd closing RESEARCH Pitfall 1, explicit gateway value wins; wyss fin add-ingreso/add-gasto/ver deterministic against ledger.db; full 4-tool gate green — only the 10 agents.pellegrini RED tests remain for 08-04) — 2026-06-16
+Phase: 08 (primer agente de dominio — finanzas) — EXECUTING (Wave 4 código GREEN, checkpoint owner pendiente)
+Plan: 08-04 código completo (Tareas 1+2 de 3); Tarea 3 = checkpoint owner BLOCKING
+Last completed: 08-04 Tareas 1+2 (LedgerRetrieval adapter del puerto Retrieval sobre LedgerPort — hechos pre-agregados como Hits, hook scoped_retrieval_factory, cero código de agente D-73; agents.pellegrini config-only: advise/handle_task/propuesta_presupuesto/build_pellegrini/judge_advisory_quality; 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher+FakeOrchestrator auditadas + budget cutoff GREEN; gate 424 passed/6 skipped, mypy/ruff/lint-imports verde; ConfiguredAgent/AgentRegistry/cost.py/gateway.py/dispatcher.py INTACTOS) — 2026-06-17
 
 - **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical)
-- **Status:** Executing — 08-04 pending (Pellegrini agent E2E)
-- **Last activity:** 2026-06-16
+- **Status:** Executing — 08-04 código GREEN; **CHECKPOINT OWNER pendiente** (Tarea 3, gate=blocking): aprobar calidad advisory (D3/D6, owner es calibrador final). NO auto-aprobable.
+- **Last activity:** 2026-06-17
 - **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
-- **Next:** ejecutar 08-04 — construir `agents.pellegrini` (build_pellegrini/handle_task/advise/propuesta_presupuesto) y cerrar los 10 RED tests (second-wall agent, no-fabrication, 3 tareas D-87 E2E vía dispatcher+FakeOrchestrator) + AGENT-07 budget cutoff E2E.
+- **Next:** checkpoint owner 08-04 — correr `uv run pytest -m llm_judge -k pellegrini` y/o probar las 3 preguntas D-87 en vivo; aprobar ("approved") o pedir ajuste de prompt/few-shot. Tras aprobar: marcar AGENT-07/AGENT-09 complete + cerrar fase (review Gemini → verifier → push).
 
 ## Decisions Log
 
@@ -40,6 +40,7 @@ Last completed: 08-03 (CLI ledger path + AGENT-07 budget wiring: finance.query=A
 |------|----------|---------|
 | 2026-06-11 | **Fase 1 (resumen):** 12 decisiones — fail-closed D por valor+isinstance, agregados nivel-plan anti-bypass, BUILTIN_DENY no vaciable, WAL fail-fast, ConfigError en dominio | Detalle: `phases/01-fundaciones/01-DECISIONS.md` |
 | 2026-06-12 | **Fase 2 (resumen):** 19 decisiones — gateway fail-closed (SecretDetected sin valor, BUILTIN_SECRET_PATTERNS no vaciable, UnknownTier sin fallback), httpx sin SDK, retry solo en gateway, CostTracker veta pre-llamada, traces.db 0600/90d | Detalle: `phases/02-gateway-de-modelos/02-DECISIONS.md` |
+| 2026-06-17 | **08-04:** Pellegrini lee el ledger via `LedgerRetrieval` (adapter del puerto `Retrieval` sobre `LedgerPort`) inyectado por el hook `scoped_retrieval_factory` — CERO código de agente nuevo en los protegidos (D-73). `agents.pellegrini` es archivo NUEVO de infra (no modifica ConfiguredAgent/AgentRegistry). Hechos pre-agregados SQL como `Hit.snippet` (único canal sin tocar el agente; tradeoff AI-SPEC §4 documentado, deuda diferida). `propuesta_presupuesto = min(gastos, ingresos)` (≤ ingresos, D3). Fix: regex de montos del test RED se tragaba el punto de oración (`$1200.00.`). | Protegidos UNCHANGED (cost.py/gateway.py/dispatcher.py/configured_agent.py/registry.py); gate 424 passed |
 | 2026-06-16 | **08-03:** `agent_budgets` se DERIVA de `[[agents]].budget_usd` (Opción b, cierra RESEARCH Pitfall 1); el valor explícito de `[gateway.agent_budgets]` tiene precedencia. `finance.query=A`/`finance.record=B` (docs/10 §7: no son nivel D). `wyss fin add-ingreso/add-gasto/ver` determinístico contra `ledger.db` propio. | `cost.py` intacto (D-85); el gate ya enforce, solo se cableó |
 | 2026-06-10 | Roadmap de 10 fases por build order técnico, no las 5 fases del prompt | Dependencias reales: gateway antes que indexación (embeddings), fundaciones antes que todo |
 | 2026-06-10 | Las 10 features gap del research incluidas en v1 | Table stakes — se insertan en fases existentes |

@@ -188,7 +188,7 @@ Plans:
 - [x] 08-03-PLAN.md — CLI `wyss fin add-ingreso/add-gasto/ver` determinístico + finance.* en _BASE_LEVELS + budget cableado desde [[agents]] al cost gate (AGENT-07/criterio #1/#4)
 
 **Wave 4** *(blocked on Wave 3)*
-- [ ] 08-04-PLAN.md — LedgerRetrieval (adapter del port Retrieval, cero código de agente) + 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher + budget cutoff + checkpoint owner (AGENT-07/AGENT-09/criterios #2/#3)
+- [~] 08-04-PLAN.md — LedgerRetrieval (adapter del port Retrieval, cero código de agente) + 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher + budget cutoff (AGENT-07/AGENT-09/criterios #2/#3) — **código GREEN (gate 424 passed); pendiente checkpoint owner (calibración de calidad advisory D3/D6)**
 
 ### Phase 9: Multi-agente y Rutinas
 
