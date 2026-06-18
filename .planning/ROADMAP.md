@@ -176,7 +176,7 @@ Plans:
 3. Completa ≥ 3 tareas reales de asesoría E2E ("¿dónde se me va la plata?", "armá mi presupuesto mensual", "¿cuánto puedo ahorrar?"), reportando al orquestador (daemon dispatcher + FakeOrchestrator) y todo queda auditado.
 4. Agotado su presupuesto de IA, sus llamadas se bloquean (gate per-agente de `gateway/cost.py` cableado desde config y verificado).
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans executed
 
 **Wave 1**
 - [x] 08-01-PLAN.md — Wave 0: scaffolds RED (7 tests) + plumbing (llm_judge marker, import-linter `ledger`, config/config.toml con Pellegrini + budget cableado)
@@ -188,7 +188,7 @@ Plans:
 - [x] 08-03-PLAN.md — CLI `wyss fin add-ingreso/add-gasto/ver` determinístico + finance.* en _BASE_LEVELS + budget cableado desde [[agents]] al cost gate (AGENT-07/criterio #1/#4)
 
 **Wave 4** *(blocked on Wave 3)*
-- [~] 08-04-PLAN.md — LedgerRetrieval (adapter del port Retrieval, cero código de agente) + 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher + budget cutoff (AGENT-07/AGENT-09/criterios #2/#3) — **código GREEN (gate 424 passed); pendiente checkpoint owner (calibración de calidad advisory D3/D6)**
+- [x] 08-04-PLAN.md — LedgerRetrieval (adapter del port Retrieval, cero código de agente) + 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher + budget cutoff (AGENT-07/AGENT-09/criterios #2/#3) — **código GREEN (gate 424 passed); checkpoint owner APROBADO 2026-06-17 sobre evidencia determinística** (`fin` en vivo: superávit $120k correcto, agregación SQL por categoría exacta). **Deuda diferida:** calibración de prosa advisory (D3/D6) pendiente — requiere LiteLLM :4000 levantado + `config/.env` (hoy down por perf-tuning) o el daemon Hermes real (plan 05-05, BLOCKED). `judge_advisory_quality` usa rúbrica determinística de respaldo, no LLM real.
 
 ### Phase 9: Multi-agente y Rutinas
 
