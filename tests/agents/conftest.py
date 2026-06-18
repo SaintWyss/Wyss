@@ -12,14 +12,18 @@ Sigue el mismo molde que tests/execution/conftest.py y tests/orchestrator/confte
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
+from agents.ledger_retrieval import LedgerRetrieval
 from core.domain import AgentDefinition, AuditEvent, Span
 from core.domain.plan import Plan
 from core.domain.policy import AggregateThresholds, PolicyRules
 from core.domain.risk import RiskLevel
 from core.policy import BUILTIN_DENY, CognitivePolicyEngine
+from ledger.sqlite_store import SqliteLedgerStore
+from tests.ledger.conftest import DESDE, HASTA, TxSpec, build_transaccion
 from tests.ports.fakes import FakePermissionStore, FakeRetrieval
 
 DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
@@ -138,3 +142,49 @@ def sample_definition() -> AgentDefinition:
         model_alias="economico",
         budget_usd=1.0,
     )
+
+
+@pytest.fixture
+def pellegrini_definition() -> AgentDefinition:
+    """Definición declarativa de Pellegrini (config-only, AGENT-09 / D-73)."""
+    return AgentDefinition(
+        agent_id="pellegrini",
+        name="Pellegrini",
+        domain="finanzas",
+        kb_ids=frozenset(),
+        model_alias="economico",
+        budget_usd=5.0,
+    )
+
+
+# Espejo del SET RICO de tests/ledger/conftest.py — sembrado del ledger para LedgerRetrieval.
+# (transacciones_ricas es un fixture; acá replicamos su contenido para sembrar el store sin
+# depender de la inyección cruzada de fixtures entre suites.)
+_TRANSACCIONES_RICAS: list[TxSpec] = [
+    ("INGRESO", 3000.00, "2026-05-01", "sueldo", None),
+    ("INGRESO", 500.00, "2026-05-10", "freelance", None),
+    ("GASTO", 800.00, "2026-05-02", None, "supermercado"),
+    ("GASTO", 200.00, "2026-05-15", None, "supermercado"),
+    ("GASTO", 450.00, "2026-05-05", None, "delivery"),
+    ("GASTO", 150.00, "2026-05-20", None, "delivery"),
+    ("GASTO", 600.00, "2026-05-03", None, "alquiler"),
+    ("GASTO", 100.00, "2026-05-08", None, "transporte"),
+    ("GASTO", 999.00, "2026-04-28", None, "delivery"),  # fuera de ventana
+    ("INGRESO", 999.00, "2026-06-01", "sueldo", None),  # fuera de ventana
+]
+
+
+@pytest.fixture
+def ledger_retrieval(tmp_path: Path) -> Iterator[LedgerRetrieval]:
+    """`LedgerRetrieval` sobre un `SqliteLedgerStore` tmp sembrado con el SET RICO (mayo 2026).
+
+    La ventana se fija a `DESDE..HASTA` (2026-05) para que los hechos coincidan con el ground
+    truth de tests/ledger/conftest.py (HECHOS_VERIFICADOS) — sin fuga de período.
+    """
+    store = SqliteLedgerStore(tmp_path / "ledger.db")
+    try:
+        for spec in _TRANSACCIONES_RICAS:
+            store.record(build_transaccion(spec))
+        yield LedgerRetrieval(store, desde=DESDE, hasta=HASTA)
+    finally:
+        store.close()

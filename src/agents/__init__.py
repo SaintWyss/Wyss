@@ -2,6 +2,7 @@
 # Componentes: AgentBase, AgentRegistry, AgentRuntime
 
 from agents.configured_agent import ConfiguredAgent
+from agents.ledger_retrieval import LedgerRetrieval
 from agents.memory import AgentMemory
 from agents.permission_store import SQLitePermissionStore
 from agents.registry import AgentRegistry
@@ -11,6 +12,7 @@ __all__ = [
     "AgentMemory",
     "AgentRegistry",
     "ConfiguredAgent",
+    "LedgerRetrieval",
     "PermissionDenied",
     "SQLitePermissionStore",
     "ScopedRetrieval",
