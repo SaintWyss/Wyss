@@ -6,9 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "chromadb>=1.5.9",
     "exifread>=3.5.1",
-    "fastmcp>=2.14,<3",
     "httpx>=0.28.1",
-    "mcp>=1.27,<2",
     "openpyxl>=3.1.5",
     "pillow>=12.2.0",
     "pydantic>=2.13",
