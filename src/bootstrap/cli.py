@@ -19,7 +19,9 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRe
 from rich.table import Table
 
 from audit.sqlite_logger import SqliteAuditLogger
+from bootstrap.config import WyssSettings as BootstrapWyssSettings
 from bootstrap.config import load_settings
+from bootstrap.gateway import build_gateway
 from core.domain import TipoTransaccion, Transaccion
 from core.domain.audit import ActorType, AuditEvent, Span
 from core.domain.config import WyssSettings
@@ -65,6 +67,7 @@ from knowledge.state_store import BcFreshness, StateStore
 from knowledge.vector_index import ChromaVectorIndex, chromadb
 from ledger.sqlite_store import SqliteLedgerStore
 from orchestrator.daemon import run_daemon
+from orchestrator.llm_orchestrator import LLMOrchestrator
 from orchestrator.pending_store import PendingStore
 from orchestrator.plan_renderer import prompt_confirmation
 
@@ -354,15 +357,7 @@ def start(
         audit = SqliteAuditLogger(settings.audit_db)
         pending_store = PendingStore(_pending_db_path(settings))
         engine = CognitivePolicyEngine(settings.policy)
-        asyncio.run(
-            run_daemon(
-                _socket_path(settings),
-                engine=engine,
-                orchestrator=_DeterministicOrchestrator(),
-                pending_store=pending_store,
-                audit=audit,
-            )
-        )
+        asyncio.run(_run_start_daemon(settings, engine, pending_store, audit))
     except (ConfigError, AuditIntegrityError) as exc:
         stderr_console.print(f"Error: {exc}", style="red")
         raise typer.Exit(code=1) from exc
@@ -374,6 +369,38 @@ def start(
             pending_store.close()
         if audit is not None:
             audit.close()
+
+
+async def _run_start_daemon(
+    settings: BootstrapWyssSettings,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    audit: SqliteAuditLogger,
+) -> None:
+    if settings.orchestrator.mode == "deterministic":
+        await run_daemon(
+            _socket_path(settings),
+            engine=engine,
+            orchestrator=_DeterministicOrchestrator(),
+            pending_store=pending_store,
+            audit=audit,
+        )
+        return
+
+    async with httpx.AsyncClient() as client:
+        gateway = build_gateway(
+            settings.gateway,
+            client=client,
+            audit=audit,
+            data_dir=str(settings.data_dir),
+        )
+        await run_daemon(
+            _socket_path(settings),
+            engine=engine,
+            orchestrator=LLMOrchestrator(gateway, tier=settings.orchestrator.tier),
+            pending_store=pending_store,
+            audit=audit,
+        )
 
 
 @app.command()

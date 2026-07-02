@@ -1,5 +1,12 @@
 # PR-06 — LLMOrchestrator: conversación real detrás del policy engine
 
+> **EJECUTADO 2026-07-02** (decisión F4 del owner: opción A — adapter vía gateway; Hermes queda como
+> adapter opcional futuro). Construcción: Codex (`codex-gsd-exec`); verificación y commit: Claude.
+> Desvío menor aceptado: `bootstrap.config` expone `WyssSettings` como subclase frozen del tipo de
+> dominio (agrega `orchestrator`) para no tocar `core/domain` — Liskov-compatible, mypy strict OK.
+> Gate: 435 passed / mypy 0 / ruff / import-linter 2/2 kept. **Pendiente §11 (verificación manual
+> con LLM real): requiere config/.env + LiteLLM up — cierra junto con la calibración advisory (F6).**
+
 ## 1. Objective
 Cablear el path conversacional del daemon con un LLM real: `wyss ask` → `LLMOrchestrator` (adapter de `OrchestratorPort` que usa el gateway existente) → `Plan` tipado → `CognitivePolicyEngine` → ejecución/bandeja/rechazo.
 

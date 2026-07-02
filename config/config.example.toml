@@ -99,6 +99,18 @@ pellegrini = 5.0
 # regex = "WYSS-[A-Z0-9]{16}"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Orquestador conversacional.
+[orchestrator]
+# Default: fake determinístico local para desarrollo y pruebas sin red.
+# "llm" usa el gateway real: requiere config/.env y proveedor alcanzable.
+mode = "deterministic"
+# Tier que usará el orquestador cuando mode = "llm".
+tier = "economico"
+# Tope opcional por-agente para el agente interno "orchestrator".
+# Si [gateway.agent_budgets].orchestrator existe, ese valor explícito gana.
+# budget_usd = 2.0
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Agentes declarativos (Fase 7+, D-73): cada [[agents]] se valida al boot y se
 # convierte en un AgentDefinition frozen. Agregar un agente NO toca código (regla de
 # extensibilidad). `model_tier` referencia un tier de [gateway.tiers]; `budget_usd` es

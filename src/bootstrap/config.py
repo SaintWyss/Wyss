@@ -18,12 +18,15 @@ de modo que el comportamiento sea testeable con `pytest.raises` sin matar el pro
 import os
 import re
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from core.domain.agent import AgentDefinition
-from core.domain.config import GatewaySettings, WyssSettings
+from core.domain.config import GatewaySettings
+from core.domain.config import WyssSettings as DomainWyssSettings
 from core.domain.errors import ConfigError
 from core.domain.gateway import TierConfig
 from core.domain.knowledge import IngestSettings
@@ -236,6 +239,16 @@ class AgentConfigModel(BaseModel):
     budget_usd: float = 0.0
 
 
+class OrchestratorConfigModel(BaseModel):
+    """Sección [orchestrator]: modo del planner y tope opcional del agente interno."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["deterministic", "llm"] = "deterministic"
+    tier: str = "economico"
+    budget_usd: float | None = None
+
+
 class WyssConfigModel(BaseModel):
     """Raíz del config.toml validado. `frozen=True` + `extra="forbid"` (fail-closed total)."""
 
@@ -246,7 +259,24 @@ class WyssConfigModel(BaseModel):
     policy: PolicyConfigModel = PolicyConfigModel()
     gateway: GatewayConfigModel = GatewayConfigModel()
     ingest: IngestConfigModel = IngestConfigModel()
+    orchestrator: OrchestratorConfigModel = OrchestratorConfigModel()
     agents: list[AgentConfigModel] = []
+
+
+@dataclass(frozen=True, slots=True)
+class OrchestratorSettings:
+    """Config del orquestador usada por bootstrap sin ampliar el dominio protegido."""
+
+    mode: Literal["deterministic", "llm"] = "deterministic"
+    tier: str = "economico"
+    budget_usd: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WyssSettings(DomainWyssSettings):
+    """WyssSettings extendido por bootstrap; sigue siendo instancia del tipo de dominio."""
+
+    orchestrator: OrchestratorSettings = field(default_factory=OrchestratorSettings)
 
 
 def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
@@ -272,7 +302,9 @@ def _gateway_env_values() -> tuple[str, ...]:
 
 
 def _derive_agent_budgets(
-    explicit: dict[str, float], agents: list[AgentConfigModel]
+    explicit: dict[str, float],
+    agents: list[AgentConfigModel],
+    orchestrator: OrchestratorConfigModel,
 ) -> dict[str, float]:
     """Cierra RESEARCH Pitfall 1: deriva el tope del gate desde `[[agents]].budget_usd`.
 
@@ -289,11 +321,15 @@ def _derive_agent_budgets(
     for agent in agents:
         if agent.budget_usd > 0.0 and agent.agent_id not in derived:
             derived[agent.agent_id] = agent.budget_usd
+    if orchestrator.budget_usd is not None and "orchestrator" not in derived:
+        derived["orchestrator"] = orchestrator.budget_usd
     return derived
 
 
 def _to_gateway_settings(
-    model: GatewayConfigModel, agents: list[AgentConfigModel]
+    model: GatewayConfigModel,
+    agents: list[AgentConfigModel],
+    orchestrator: OrchestratorConfigModel,
 ) -> GatewaySettings:
     """Mapea la sección [gateway] Pydantic → GatewaySettings frozen (Pydantic muere acá).
 
@@ -301,8 +337,9 @@ def _to_gateway_settings(
     legible al boot (fail-fast). Los patrones son ADITIVOS — el GatewaySettings lleva SOLO los
     de config; el merge con `BUILTIN_SECRET_PATTERNS` lo hace el minimizer en runtime (D-21).
 
-    `agent_budgets` se deriva de `[[agents]].budget_usd` (Pitfall 1) con `_derive_agent_budgets`;
-    el valor explícito de `[gateway.agent_budgets]` tiene precedencia.
+    `agent_budgets` se deriva de `[[agents]].budget_usd` (Pitfall 1) y de
+    `[orchestrator].budget_usd` con `_derive_agent_budgets`; el valor explícito de
+    `[gateway.agent_budgets]` tiene precedencia.
     """
     for tier_name, tier in model.tiers.items():
         if tier.provider not in _KNOWN_PROVIDERS:
@@ -328,7 +365,11 @@ def _to_gateway_settings(
         },
         prices=dict(model.prices),
         global_budget=model.global_budget,
-        agent_budgets=_derive_agent_budgets(dict(model.agent_budgets), agents),
+        agent_budgets=_derive_agent_budgets(
+            dict(model.agent_budgets),
+            agents,
+            orchestrator,
+        ),
         timeout_s=model.timeout_s,
         trace_retention_days=model.trace_retention_days,
         env_values=_gateway_env_values(),
@@ -365,6 +406,15 @@ def _to_agent_definition(model: AgentConfigModel) -> AgentDefinition:
     )
 
 
+def _to_orchestrator_settings(model: OrchestratorConfigModel) -> OrchestratorSettings:
+    """Mapea [orchestrator] Pydantic → OrchestratorSettings frozen."""
+    return OrchestratorSettings(
+        mode=model.mode,
+        tier=model.tier,
+        budget_usd=model.budget_usd,
+    )
+
+
 def _to_settings(model: WyssConfigModel) -> WyssSettings:
     """Construye el WyssSettings de dominio desde el modelo Pydantic validado.
 
@@ -389,8 +439,9 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         data_dir=model.data_dir,
         audit_db=model.audit_db,
         policy=policy,
-        gateway=_to_gateway_settings(model.gateway, model.agents),
+        gateway=_to_gateway_settings(model.gateway, model.agents, model.orchestrator),
         ingest=_to_ingest_settings(model.ingest),
+        orchestrator=_to_orchestrator_settings(model.orchestrator),
         agents=tuple(_to_agent_definition(agent) for agent in model.agents),
     )
 
