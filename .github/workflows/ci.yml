@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # python-magic requiere libmagic del sistema (detección de tipo real de archivo)
+      - name: Instalar libmagic
+        run: sudo apt-get update && sudo apt-get install -y libmagic1
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: uv sync
+
+      - name: Tests
+        run: uv run pytest -q
+
+      - name: Types (mypy strict)
+        run: uv run mypy
+
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
+      - name: Contratos hexagonales (import-linter)
+        run: uv run lint-imports

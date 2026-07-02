@@ -93,6 +93,7 @@ uv run pytest && uv run mypy && uv run ruff check src tests && uv run lint-impor
 
 `mypy` corre en modo strict sobre `src` y `tests`; `import-linter` (`lint-imports`) verifica
 los contratos hexagonales (núcleo puro stdlib-only, capas independientes entre sí).
+Esta cadena corre automáticamente en CI (GitHub Actions) en cada push a `main` y en cada PR.
 
 ## Principios
 
