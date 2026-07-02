@@ -5,7 +5,7 @@
 Sistema de asistencia operativa multi-agente, humano primero.
 
 **Autor:** Santiago Wyss  
-**Estado:** Fase 0 — Diseño  
+**Estado:** v0.1 en construcción — 8 de 10 fases completas (estado real: `.planning/ROADMAP.md` y `.planning/STATE.md`)  
 **Versión:** 0.1
 
 ---
@@ -36,48 +36,54 @@ OWNER
 | C | Alto impacto | Confirmación fuerte del owner |
 | D | Destructivo / inválido | Rechazo absoluto |
 
-## Roadmap
+## Qué funciona hoy / qué falta
 
-| Fase | Entregable |
-|------|-----------|
-| 0 | Diseño completo (actual) |
-| 1 | El Índice — BC Personal indexada, consulta en segundos |
-| 2 | El Orquestador — núcleo funcional con política A–D |
-| 3 | El Primer Agente — modelo base instanciable |
-| 4 | Multi-agente + Rutinas |
-| 5 | Modo Equipo (trabajadores) |
-| 6 | Producto Replicable |
-| 7 | Expansión (móvil, modelos locales, marketplace) |
+| Capacidad | Estado |
+|---|---|
+| Índice + búsqueda híbrida (FTS5 + vectores, fusión RRF) — `wyss index` / `wyss search` | **Funciona** (fases 3-4) |
+| Política A-D + auditoría + undo journal + allowlists de ejecución | **Funciona y testeado** (fases 1, 6) |
+| Daemon con bandeja de confirmaciones B/C — `wyss start` / `ask` / `confirm` | **Funciona** (fase 5) |
+| Agentes config-driven + ledger de finanzas (Pellegrini) — `wyss fin` | **Funciona** (fases 7-8) |
+| Conversación con LLM real (`[orchestrator] mode = "llm"`) | **Cableado, opt-in** — pendiente verificación manual con proveedor real |
+| Multi-agente + rutinas (fase 9) · Modo Equipo (fase 10) | **No empezadas** |
+
+El roadmap vigente (10 fases por build order técnico) vive en `.planning/ROADMAP.md`.
+La auditoría C-Level 2026-07-02, la arquitectura objetivo y los planes de reparación viven en
+`docs/audit/`, `docs/architecture/` y `docs/plans/`.
 
 ## Estructura del repositorio
 
 ```
 wyss/
-├── docs/              Documentación fundacional (18 documentos)
+├── docs/                  Documentación: fundacional (00-18, histórica) + audit/ + architecture/ + plans/
 ├── src/
-│   ├── core/          Núcleo hexagonal puro (stdlib only, mypy strict)
-│   │   ├── domain/    Entidades frozen (Task, Plan, Action, RiskLevel, AuditEvent…) — sin infra
-│   │   ├── ports/     Los 14 contratos (13 typing.Protocol + AgentBase ABC) — D-11
-│   │   └── policy/    CognitivePolicyEngine puro + denylist built-in no removible
-│   ├── orchestrator/  Intent Router, Task Planner, Confirmation Manager
-│   ├── agents/        Modelo base y runtime de agentes
-│   ├── knowledge/     Pipeline de ingesta, índice semántico, Retrieval Engine
-│   ├── gateway/       Model Router, Context Minimizer, Cost Tracker
-│   ├── execution/     Adaptadores (FileSystem, Shell, Git, etc.)
-│   ├── audit/         Audit Logger (SQLite append-only, DB separada)
-│   └── bootstrap/     Composition root (DI manual) + frontera Pydantic→dominio
-├── tests/             Pruebas por módulo
-├── config/            Configuración del sistema en TOML (sin secretos)
-└── scripts/           Utilidades de desarrollo y despliegue
+│   ├── core/              Núcleo hexagonal puro (stdlib only, mypy strict)
+│   │   ├── domain/        Entidades frozen (Task, Plan, Action, RiskLevel, AuditEvent, Transaccion…)
+│   │   ├── ports/         Los 17 contratos (16 typing.Protocol + AgentBase ABC) — D-11
+│   │   ├── policy/        CognitivePolicyEngine puro + denylist built-in no removible
+│   │   └── orchestrator/  Modelo puro de intención (IntentCategory / IntentClassification)
+│   ├── orchestrator/      Daemon asyncio (Unix socket JSON-RPC), dispatcher fail-closed,
+│   │                      PendingStore B/C, LLMOrchestrator (adapter del port vía gateway)
+│   ├── agents/            ConfiguredAgent config-driven, registry, permisos, memoria, Pellegrini
+│   ├── knowledge/         Pipeline de ingesta (extractors/ plugin), índice FTS5+Chroma, retrieval RRF
+│   ├── gateway/           Router por tiers, Context Minimizer, Cost Tracker, providers/ (anthropic,
+│   │                      litellm, ollama), traces
+│   ├── execution/         Adaptadores FileSystem/Shell/Git + PlanExecutor + UndoJournal
+│   ├── audit/             Audit Logger (SQLite append-only, DB separada)
+│   ├── ledger/            Dominio de finanzas: Transaccion + SqliteLedgerStore (agregaciones SQL)
+│   └── bootstrap/         Composition root (DI manual) + CLI Typer + frontera Pydantic→dominio
+├── tests/                 Pruebas espejando src/ por capa
+├── config/                Configuración TOML (sin secretos) + .env.example
+└── scripts/               Reservado (systemd unit y utilidades llegan con el release candidate)
 ```
 
-Las carpetas `core/domain/`, `core/ports/`, `core/policy/` y `bootstrap/` son nuevas
-de la Fase 1 (Fundaciones):
+Notas de capas:
 
 - **`core/domain/`** — entidades de dominio como `frozen` dataclasses, stdlib only. Todo lo demás las importa; ellas no importan nada del sistema.
-- **`core/ports/`** — los 14 contratos hexagonales (Protocols + la ABC `AgentBase`). Se definen y commitean antes que cualquier implementación (D-11); los módulos vecinos importan de aquí, nunca de las impls.
+- **`core/ports/`** — los 17 contratos hexagonales (16 Protocols + la ABC `AgentBase`). Se definen y commitean antes que cualquier implementación (D-11); los módulos vecinos importan de aquí, nunca de las impls.
 - **`core/policy/`** — el `CognitivePolicyEngine` puro (`Plan -> PolicyDecision`). La denylist de nivel D vive aquí en código como invariante `Final`; la config solo puede AGREGAR reglas, jamás quitarlas.
 - **`bootstrap/`** — composition root con DI manual (D-10) y la única frontera donde vive Pydantic: valida `config.toml` al boot (fail-fast) y entrega frozen dataclasses al núcleo. Pydantic nunca entra a `core/`.
+- Ojo con el nombre repetido: `core/orchestrator/` es el modelo **puro** de intención; `orchestrator/` (top-level) es la capa del **daemon**. Son capas distintas del hexágono.
 
 ### Verificación
 

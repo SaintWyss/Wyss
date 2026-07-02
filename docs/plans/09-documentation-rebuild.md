@@ -1,5 +1,13 @@
 # PR-09 — Documentation rebuild
 
+> **EJECUTADO 2026-07-02** directamente por Claude (desvío al plan de executor: el spec proponía
+> draft Gemini + verificación Claude, pero todos los hechos ya estaban verificados en la sesión del
+> audit — delegar hubiera costado más que escribir). Mecanismo GSD §12 resuelto: el marker
+> `source:ARCHITECTURE.md` apuntaba a un archivo inexistente → se creó `.planning/ARCHITECTURE.md`
+> como fuente y se sincronizó la sección de CLAUDE.md con el mismo contenido.
+> Cifras verificadas contra el repo: 17 contratos = 16 `class *(Protocol)` (grep) + `AgentBase` ABC;
+> estado 8/10 fases (STATE.md); suite 435 passed post-edición.
+
 ## 1. Objective
 Que la documentación diga la verdad: README con estado real, CLAUDE.md con la arquitectura mapeada, docs fundacionales marcados como históricos.
 

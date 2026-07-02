@@ -1,8 +1,14 @@
 # Wyss — Índice de Documentación Fundacional
 
+> ⚠️ **Documentos históricos (fase 0 de diseño, 2026-06).** Describen el diseño original y se
+> conservan como referencia; NO reflejan el estado actual. El estado real vive en
+> `.planning/ROADMAP.md` / `.planning/STATE.md`; la arquitectura vigente en
+> `docs/architecture/WYSS_TARGET_ARCHITECTURE.md`; el mapa del sistema en
+> `docs/audit/WYSS_SYSTEM_MAP.md`.
+
 **Proyecto:** Wyss — Sistema de asistencia operativa multi-agente, humano primero
 **Autor:** Santiago Wyss
-**Estado:** Fase 0 — Diseño
+**Estado:** Fase 0 — Diseño (histórico)
 
 > Wyss es el empleado que siempre necesitaste y nunca pudiste contratar.
 
