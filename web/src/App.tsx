@@ -169,6 +169,19 @@ export default function App() {
             apps
           </p>
           <BorjesLauncher />
+          <a
+            href="http://localhost:3000"
+            target="_blank"
+            rel="noreferrer"
+            title="Abrir RAG Corp (requiere el stack corriendo: pnpm dev o compose)"
+            className="flex w-full items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-sm text-humo transition-colors hover:bg-papel/60 hover:text-hueso"
+          >
+            <span>
+              RAG Corp
+              <span className="ml-1.5 font-mono text-[10px] text-humo/70">web</span>
+            </span>
+            <span className="font-mono text-[10px]">↗</span>
+          </a>
           <p className="mt-5 font-mono text-[10px] text-humo/60">
             127.0.0.1 · solo esta máquina
           </p>
