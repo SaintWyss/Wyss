@@ -1,0 +1,170 @@
+import { useCallback, useEffect, useState } from 'react'
+import { api, SESSION_EXPIRED_EVENT, type KbFreshness } from './api'
+import { Bandeja } from './surfaces/Bandeja'
+import { Chat } from './surfaces/Chat'
+import { Buscar } from './surfaces/Buscar'
+import { Finanzas } from './surfaces/Finanzas'
+import { Auditoria } from './surfaces/Auditoria'
+
+type Surface = 'chat' | 'bandeja' | 'buscar' | 'finanzas' | 'auditoria'
+
+const SURFACES: { id: Surface; label: string }[] = [
+  { id: 'chat', label: 'Chat' },
+  { id: 'bandeja', label: 'Bandeja' },
+  { id: 'buscar', label: 'Buscar' },
+  { id: 'finanzas', label: 'Finanzas' },
+  { id: 'auditoria', label: 'Auditoría' },
+]
+
+function surfaceFromHash(): Surface {
+  const raw = window.location.hash.replace('#/', '')
+  return (SURFACES.find((s) => s.id === raw)?.id ?? 'chat') as Surface
+}
+
+function useHashSurface(): [Surface, (s: Surface) => void] {
+  const [surface, setSurface] = useState<Surface>(surfaceFromHash)
+  useEffect(() => {
+    const onHash = () => setSurface(surfaceFromHash())
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  const navigate = useCallback((s: Surface) => {
+    window.location.hash = `#/${s}`
+  }, [])
+  return [surface, navigate]
+}
+
+export default function App() {
+  const [surface, navigate] = useHashSurface()
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [daemonAlive, setDaemonAlive] = useState<boolean | null>(null)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [kbs, setKbs] = useState<KbFreshness[]>([])
+
+  useEffect(() => {
+    const onExpired = () => setSessionExpired(true)
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const tick = async () => {
+      try {
+        const [daemon, pending] = await Promise.all([api.daemon(), api.pending()])
+        if (!active) return
+        setDaemonAlive(daemon.alive)
+        setPendingCount(pending.pending.length)
+      } catch {
+        // errores de red del polling no interrumpen: el strip queda como estaba
+      }
+    }
+    void tick()
+    const interval = window.setInterval(() => void tick(), 5000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  useEffect(() => {
+    api
+      .status()
+      .then((s) => setKbs(s.kbs))
+      .catch(() => setKbs([]))
+  }, [])
+
+  if (sessionExpired) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-6">
+        <div className="max-w-md">
+          <h1 className="display text-2xl font-semibold">Sesión vencida</h1>
+          <p className="mt-3 text-humo">
+            El servidor se reinició y el token cambió. Volvé a abrir la URL que
+            imprime <span className="font-mono text-hueso">wyss web</span>.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  const totalFiles = kbs.reduce((sum, kb) => sum + kb.files, 0)
+
+  return (
+    <div className="flex min-h-screen">
+      <aside className="flex w-44 shrink-0 flex-col border-r border-borde px-4 py-5">
+        <h1 className="display text-lg font-bold tracking-tight">WYSS</h1>
+        <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-humo">
+          mesa de despacho
+        </p>
+        <nav className="mt-8 flex flex-col gap-1" aria-label="Secciones">
+          {SURFACES.map(({ id, label }) => {
+            const active = surface === id
+            return (
+              <button
+                key={id}
+                onClick={() => navigate(id)}
+                aria-current={active ? 'page' : undefined}
+                className={`flex items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-sm transition-colors ${
+                  active
+                    ? 'bg-papel text-hueso shadow-[inset_2px_0_0_0_var(--color-celeste)]'
+                    : 'text-humo hover:bg-papel/60 hover:text-hueso'
+                }`}
+              >
+                {label}
+                {id === 'bandeja' && pendingCount > 0 && (
+                  <span className="rounded-full bg-celeste px-1.5 font-mono text-[10px] font-bold text-tinta">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+        <p className="mt-auto font-mono text-[10px] text-humo/60">
+          127.0.0.1 · solo esta máquina
+        </p>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-borde px-6 py-2.5">
+          <div className="flex items-center gap-2 text-sm">
+            {daemonAlive === null ? (
+              <span className="text-humo">conectando…</span>
+            ) : daemonAlive ? (
+              <>
+                <span aria-hidden className="text-riesgo-a">
+                  ●
+                </span>
+                <span className="text-humo">daemon activo</span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden className="text-riesgo-d">
+                  ●
+                </span>
+                <span className="text-hueso">el daemon no está corriendo</span>
+                <span className="font-mono text-xs text-humo">
+                  levantalo con: wyss start
+                </span>
+              </>
+            )}
+          </div>
+          <p className="font-mono text-xs text-humo">
+            {kbs.length > 0
+              ? `${kbs.length} BC · ${totalFiles.toLocaleString('es-AR')} archivos`
+              : 'índice vacío'}
+          </p>
+        </header>
+
+        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+          {surface === 'chat' && <Chat daemonAlive={daemonAlive === true} />}
+          {surface === 'bandeja' && <Bandeja daemonAlive={daemonAlive === true} />}
+          {surface === 'buscar' && <Buscar kbs={kbs} />}
+          {surface === 'finanzas' && <Finanzas />}
+          {surface === 'auditoria' && <Auditoria />}
+        </main>
+      </div>
+    </div>
+  )
+}

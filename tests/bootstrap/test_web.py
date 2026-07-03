@@ -329,3 +329,25 @@ async def test_json_rpc_call_real_unix_socket(tmp_path: Path) -> None:
     assert result == {"ok": True}
     assert captured[0]["method"] == "ask"
     assert captured[0]["params"] == {"instruction": "hola"}
+
+
+@pytest.mark.asyncio
+async def test_daemon_endpoint(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # daemon caído (socket inexistente en settings de tmp_path) → alive false, 200
+    down = await client.get("/api/daemon", headers=_AUTH)
+    assert down.status_code == 200
+    assert _json(down) == {"alive": False}
+
+    async def fake_rpc(
+        _socket: Path, method: str, _params: dict[str, object]
+    ) -> dict[str, Any]:
+        assert method == "status"
+        return {"uptime": 1}
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+    up = await client.get("/api/daemon", headers=_AUTH)
+    assert up.status_code == 200
+    assert _json(up) == {"alive": True}

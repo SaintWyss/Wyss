@@ -1,0 +1,51 @@
+@import '@fontsource-variable/archivo';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import 'tailwindcss';
+
+@theme {
+  --color-tinta: #101917;
+  --color-papel: #1a2422;
+  --color-borde: #2a3835;
+  --color-hueso: #e8e4d8;
+  --color-humo: #9ba39c;
+  --color-celeste: #86b9d6;
+  --color-riesgo-a: #5fa97c;
+  --color-riesgo-b: #c9a227;
+  --color-riesgo-c: #d07a3f;
+  --color-riesgo-d: #b0413e;
+
+  --font-sans: 'Archivo Variable', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html {
+  background: var(--color-tinta);
+  color: var(--color-hueso);
+  font-family: var(--font-sans);
+}
+
+/* display = Archivo con el eje wdth expandido (Omnibus-Type, Buenos Aires) */
+.display {
+  font-stretch: 125%;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: var(--color-celeste);
+  color: var(--color-tinta);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-celeste);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -173,6 +173,15 @@ def build_web_app(settings: WyssSettings, *, token: str) -> FastAPI:
             if store is not None:
                 store.close()
 
+    @web_app.get("/api/daemon")
+    async def api_daemon() -> dict[str, object]:
+        try:
+            await _json_rpc_call(_socket_path(settings), "status", {})
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError, RuntimeError):
+            # el strip de la UI renderiza estado, no error: 200 con alive=false
+            return {"alive": False}
+        return {"alive": True}
+
     @web_app.get("/api/search")
     async def api_search(q: str, kb: str | None = None, limit: int = 10) -> dict[str, object]:
         if not q:
