@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, cast
@@ -351,3 +352,33 @@ async def test_daemon_endpoint(
     up = await client.get("/api/daemon", headers=_AUTH)
     assert up.status_code == 200
     assert _json(up) == {"alive": True}
+
+
+@pytest.mark.asyncio
+async def test_borjes_launcher(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # script inexistente → 404 accionable, sin spawn
+    monkeypatch.setattr(web_mod, "_BORJES_TOGGLE", tmp_path / "no-existe")
+    missing = await client.post("/api/apps/borjes", headers=_AUTH)
+    assert missing.status_code == 404
+    assert "accion" in _json(missing)
+
+    # script presente → Popen con ruta fija, sin input del cliente
+    script = tmp_path / "borjes-toggle"
+    script.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(web_mod, "_BORJES_TOGGLE", script)
+    spawned: list[list[str]] = []
+
+    def fake_popen(cmd: list[str], **kwargs: object) -> object:
+        spawned.append(cmd)
+        assert kwargs.get("start_new_session") is True
+        return object()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    ok = await client.post("/api/apps/borjes", headers=_AUTH)
+    assert ok.status_code == 200
+    assert _json(ok) == {"lanzado": True}
+    assert spawned == [[str(script)]]

@@ -1,20 +1,56 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, SESSION_EXPIRED_EVENT, type KbFreshness } from './api'
+import { api, WyssApiError, SESSION_EXPIRED_EVENT, type KbFreshness } from './api'
 import { Bandeja } from './surfaces/Bandeja'
 import { Chat } from './surfaces/Chat'
 import { Buscar } from './surfaces/Buscar'
 import { Finanzas } from './surfaces/Finanzas'
 import { Auditoria } from './surfaces/Auditoria'
 
-type Surface = 'chat' | 'bandeja' | 'buscar' | 'finanzas' | 'auditoria'
+type Surface = 'chat' | 'bandeja' | 'buscar' | 'pellegrini' | 'auditoria'
 
-const SURFACES: { id: Surface; label: string }[] = [
+// Los agentes van con su nombre propio (Pellegrini = finanzas; Belgrano vendrá después).
+const SURFACES: { id: Surface; label: string; rol?: string }[] = [
   { id: 'chat', label: 'Chat' },
   { id: 'bandeja', label: 'Bandeja' },
   { id: 'buscar', label: 'Buscar' },
-  { id: 'finanzas', label: 'Finanzas' },
+  { id: 'pellegrini', label: 'Pellegrini', rol: 'finanzas' },
   { id: 'auditoria', label: 'Auditoría' },
 ]
+
+/** Lanza la app de escritorio Borjes vía el bridge (ruta fija, sin argumentos). */
+function BorjesLauncher() {
+  const [estado, setEstado] = useState<'idle' | 'ok' | 'error'>('idle')
+  const [detalle, setDetalle] = useState('')
+
+  const lanzar = async () => {
+    try {
+      await api.lanzarBorjes()
+      setEstado('ok')
+    } catch (e) {
+      setEstado('error')
+      setDetalle(e instanceof WyssApiError ? `${e.message} — ${e.accion}` : 'error de red')
+    }
+    window.setTimeout(() => setEstado('idle'), 2500)
+  }
+
+  return (
+    <button
+      onClick={() => void lanzar()}
+      title={estado === 'error' ? detalle : 'Abrir Borjes (navegador de carpetas)'}
+      className="flex w-full items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-sm text-humo transition-colors hover:bg-papel/60 hover:text-hueso"
+    >
+      <span>
+        Borjes
+        <span className="ml-1.5 font-mono text-[10px] text-humo/70">escritorio</span>
+      </span>
+      <span className="font-mono text-[10px]">
+        {estado === 'idle' && '↗'}
+        {estado === 'ok' && <span className="text-riesgo-a">✓</span>}
+        {estado === 'error' && <span className="text-riesgo-d">✗</span>}
+      </span>
+    </button>
+  )
+}
 
 function surfaceFromHash(): Surface {
   const raw = window.location.hash.replace('#/', '')
@@ -98,7 +134,7 @@ export default function App() {
           mesa de despacho
         </p>
         <nav className="mt-8 flex flex-col gap-1" aria-label="Secciones">
-          {SURFACES.map(({ id, label }) => {
+          {SURFACES.map(({ id, label, rol }) => {
             const active = surface === id
             return (
               <button
@@ -111,7 +147,14 @@ export default function App() {
                     : 'text-humo hover:bg-papel/60 hover:text-hueso'
                 }`}
               >
-                {label}
+                <span>
+                  {label}
+                  {rol && (
+                    <span className="ml-1.5 font-mono text-[10px] text-humo/70">
+                      {rol}
+                    </span>
+                  )}
+                </span>
                 {id === 'bandeja' && pendingCount > 0 && (
                   <span className="rounded-full bg-celeste px-1.5 font-mono text-[10px] font-bold text-tinta">
                     {pendingCount}
@@ -121,9 +164,15 @@ export default function App() {
             )
           })}
         </nav>
-        <p className="mt-auto font-mono text-[10px] text-humo/60">
-          127.0.0.1 · solo esta máquina
-        </p>
+        <div className="mt-auto">
+          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-humo/60">
+            apps
+          </p>
+          <BorjesLauncher />
+          <p className="mt-5 font-mono text-[10px] text-humo/60">
+            127.0.0.1 · solo esta máquina
+          </p>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -161,7 +210,7 @@ export default function App() {
           {surface === 'chat' && <Chat daemonAlive={daemonAlive === true} />}
           {surface === 'bandeja' && <Bandeja daemonAlive={daemonAlive === true} />}
           {surface === 'buscar' && <Buscar kbs={kbs} />}
-          {surface === 'finanzas' && <Finanzas />}
+          {surface === 'pellegrini' && <Finanzas />}
           {surface === 'auditoria' && <Auditoria />}
         </main>
       </div>

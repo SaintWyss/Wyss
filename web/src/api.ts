@@ -179,6 +179,8 @@ export const api = {
     if (since) params.set('since', since)
     return apiFetch<{ events: AuditEvent[] }>(`/api/audit?${params}`)
   },
+  lanzarBorjes: () =>
+    apiFetch<{ lanzado: boolean }>('/api/apps/borjes', { method: 'POST' }),
   ask: (instruction: string) =>
     apiFetch<AskResult>('/api/ask', {
       method: 'POST',

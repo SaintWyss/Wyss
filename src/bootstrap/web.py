@@ -1,7 +1,9 @@
 """Bridge HTTP local para Wyss: FastAPI como composition root web."""
 
 import json
+import os
 import sqlite3
+import subprocess
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -44,6 +46,10 @@ from orchestrator.pending_store import PendingProposal, PendingStore
 
 _TOKEN_COOKIE = "wyss_token"
 _HTTP_422 = 422
+
+# Lanzador de apps de escritorio: SOLO rutas fijas, jamás input del cliente.
+# borjes-toggle maneja running/no-running (SIGUSR1 o launch+reveal).
+_BORJES_TOGGLE = Path.home() / ".local" / "bin" / "borjes-toggle"
 
 type ASGIHandler = Callable[[Request], Awaitable[Response]]
 
@@ -172,6 +178,25 @@ def build_web_app(settings: WyssSettings, *, token: str) -> FastAPI:
         finally:
             if store is not None:
                 store.close()
+
+    @web_app.post("/api/apps/borjes")
+    async def api_borjes() -> dict[str, object]:
+        if not _BORJES_TOGGLE.exists():
+            raise WebError(
+                status.HTTP_404_NOT_FOUND,
+                error="borjes-toggle no está instalado",
+                accion=f"esperado en {_BORJES_TOGGLE}",
+            )
+        env = dict(os.environ)
+        env.setdefault("DISPLAY", ":0")
+        subprocess.Popen(  # ruta fija, sin input del cliente
+            [str(_BORJES_TOGGLE)],
+            env=env,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return {"lanzado": True}
 
     @web_app.get("/api/daemon")
     async def api_daemon() -> dict[str, object]:

@@ -50,7 +50,7 @@ export function Finanzas() {
   return (
     <section className="mx-auto max-w-3xl">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="display text-xl font-semibold">Finanzas</h2>
+        <h2 className="display text-xl font-semibold">Pellegrini</h2>
         <input
           type="month"
           value={mes}
@@ -60,7 +60,7 @@ export function Finanzas() {
         />
       </div>
       <p className="mt-1 text-sm text-humo">
-        Ledger determinístico — los números salen de SQL, nunca de un modelo.
+        Coach de finanzas. Los números salen de SQL, nunca de un modelo.
       </p>
 
       {error && (
