@@ -149,7 +149,8 @@ def test_exit_code_nonzero_on_systemic(tmp_path: Path) -> None:
     result = runner.invoke(app, ["index", str(tmp_path / "missing"), "--config", str(cfg)])
 
     assert result.exit_code != 0
-    assert "Error:" in result.output
+    assert "no existe" in result.stderr
+    assert "wyss index" in result.stderr
 
 
 def test_progress_modes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

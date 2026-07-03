@@ -177,8 +177,9 @@ def test_unknown_kb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert result.exit_code == 1
-    assert "not found" in result.stderr
+    assert "no encontrada" in result.stderr
     assert "personal" in result.stderr
+    assert "wyss index" in result.stderr
 
 
 def test_degraded_exit_code_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

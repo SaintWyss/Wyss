@@ -1,5 +1,29 @@
 # PR-07 — UX pass de CLI
 
+> **EJECUTADO 2026-07-03** directamente por Claude (desvío al plan de executor: UX = juicio,
+> convención del repo; no se delegó a modelo barato). Cadena verde: 446 passed / mypy limpio /
+> ruff limpio / 2 contratos KEPT.
+>
+> **SUMMARY — inventario de salidas (pre-PR) y cambios:**
+>
+> | Comando | Éxito | Vacío (antes → después) | Fallo (antes → después) |
+> |---|---|---|---|
+> | `index` | `BC:` + progreso + `Resumen BC` | dry-run: "Nada para indexar." → empty state con hint | ruta inexistente: `Error: <ruta>` críptico a stdout → causa+acción a stderr; ConfigError/Integrity → acción concreta |
+> | `start` | daemon corre | — | `Error: {exc}` → causa+acción (config / WAL) |
+> | `ask` | panel pending/rechazado/encolado | — | daemon caído ya era accionable; ahora también captura `ConnectionRefusedError` (socket huérfano) |
+> | `confirm` | prompt B/C + resultado | — | "Pending no encontrado." → id + dónde obtenerlo; **bug fix**: `typer.Exit` hereda de `RuntimeError` y caía en el except sistémico imprimiendo "Error sistémico: " vacío |
+> | `audit` | tabla | tabla con headers sin filas (muda) → empty state; audit.db inexistente creaba db vacía y tiraba `no such table` → empty state exit 0 | acción concreta |
+> | `search` | panels / JSON | "Sin resultados." → distingue índice vacío vs sin hits, con hint; footer "indexado al nunca indexado" → "índice sin indexaciones" | kb desconocida EN INGLÉS → español + hint `--bc`; `--json` intocado (test de shape vacío agregado) |
+> | `status` | tabla | tabla vacía muda → empty state con hint | acción concreta |
+> | `fin add-*` | mensaje verde | — | monto ≤ 0 iba a stdout → stderr causa+acción; errores sistémicos a stderr |
+> | `fin ver` | tabla + balance | tabla "(sin gastos)" + $0.00 → empty state con hint (solo si cero transacciones) | acción concreta |
+>
+> Idioma: "not found/Available/(none)" → español; acentos ("Estimación", "indexación"); "skipped" → "omitidos".
+> Helpers agregados: `_error_panel(causa, accion)` (stderr, soft_wrap) y `_empty_state(mensaje, siguiente_comando)`.
+> Exit codes verificados: 0 éxito/vacío, 1 operativo, 2 mal uso (test agregado).
+> Nota fuera de alcance (dominio, prohibido §7): `fin add-* --fecha` no valida formato ISO — se
+> almacena tal cual; candidato a PR posterior si molesta.
+
 ## 1. Objective
 Que la CLI se sienta UN producto: errores accionables, empty states informativos, idioma y formato Rich consistentes en los 10+ comandos.
 

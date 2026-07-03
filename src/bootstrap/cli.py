@@ -77,6 +77,27 @@ app.add_typer(fin_app, name="fin")
 console = Console()
 stderr_console = Console(stderr=True)
 
+_ACCION_CONFIG = (
+    "revisá config/config.toml (o el archivo pasado con --config); "
+    "las claves de API van en config/.env"
+)
+_ACCION_INTEGRIDAD = (
+    "data_dir y audit_db deben vivir en un filesystem con soporte WAL "
+    "(disco local); revisá config.toml"
+)
+
+
+def _error_panel(causa: str, accion: str) -> None:
+    """Error accionable al owner: qué pasó + qué hacer. Siempre a stderr."""
+    stderr_console.print(f"Error: {causa}", style="red", soft_wrap=True)
+    stderr_console.print(f"→ {accion}", style="red", soft_wrap=True)
+
+
+def _empty_state(mensaje: str, siguiente_comando: str) -> None:
+    """Empty state informativo: qué está vacío + el próximo comando sugerido."""
+    console.print(mensaje, soft_wrap=True)
+    console.print(f"Siguiente paso: {siguiente_comando}", style="dim", soft_wrap=True)
+
 
 @app.callback()
 def main() -> None:
@@ -327,11 +348,20 @@ def index(
 
         result = _run_with_progress(pipeline, ruta, kb_id)
         _print_summary(result, kb_id)
-    except (ConfigError, NotADirectoryError, IndexIntegrityError, AuditIntegrityError) as exc:
-        console.print(f"Error: {exc}", style="red")
+    except NotADirectoryError as exc:
+        _error_panel(
+            f"la ruta no existe o no es accesible: {exc}",
+            "verificá la ruta: wyss index <ruta>",
+        )
+        raise typer.Exit(code=1) from exc
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except (IndexIntegrityError, AuditIntegrityError) as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
-        console.print(f"Error sistémico: {exc}", style="red")
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     finally:
         if pipeline is not None:
@@ -358,8 +388,11 @@ def start(
         pending_store = PendingStore(_pending_db_path(settings))
         engine = CognitivePolicyEngine(settings.policy)
         asyncio.run(_run_start_daemon(settings, engine, pending_store, audit))
-    except (ConfigError, AuditIntegrityError) as exc:
-        stderr_console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")
@@ -422,11 +455,14 @@ def ask(
             )
         )
         _render_ask_result(result)
-    except FileNotFoundError as exc:
-        stderr_console.print("Daemon no está corriendo. Usar: wyss start", style="red")
+    except (FileNotFoundError, ConnectionRefusedError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
         raise typer.Exit(code=1) from exc
-    except (ConfigError, AuditIntegrityError) as exc:
-        stderr_console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error, RuntimeError) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")
@@ -448,7 +484,10 @@ def confirm(
         pending_store = PendingStore(_pending_db_path(settings))
         proposal = pending_store.load(pending_id)
         if proposal is None:
-            stderr_console.print("Pending no encontrado.", style="red")
+            _error_panel(
+                f"no hay propuesta pendiente con id '{pending_id}'",
+                'el id aparece en la respuesta de: wyss ask "<instrucción>"',
+            )
             raise typer.Exit(code=1)
         decision = PolicyDecision(
             task_id=proposal.task_id,
@@ -467,11 +506,17 @@ def confirm(
             )
         )
         _render_confirm_result(result)
-    except FileNotFoundError as exc:
-        stderr_console.print("Daemon no está corriendo. Usar: wyss start", style="red")
+    except typer.Exit:
+        # typer.Exit hereda de RuntimeError: sin este re-raise lo tragaría el except genérico.
+        raise
+    except (FileNotFoundError, ConnectionRefusedError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
         raise typer.Exit(code=1) from exc
-    except (ConfigError, AuditIntegrityError) as exc:
-        stderr_console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error, RuntimeError, KeyError) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")
@@ -493,9 +538,18 @@ def audit(
     """Lista el historial auditado."""
     try:
         settings = load_settings(config)
+        if not settings.audit_db.exists():
+            _empty_state(
+                "Sin auditoría todavía: audit.db no existe.",
+                "wyss index <ruta> o wyss start (generan los primeros eventos)",
+            )
+            return
         _print_audit_table(query_audit_events(settings.audit_db, since=since, limit=limit))
-    except (ConfigError, AuditIntegrityError) as exc:
-        stderr_console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")
@@ -534,10 +588,10 @@ def search(
         available_kb_ids = state_store.list_kb_ids()
         if kb is not None:
             if kb not in available_kb_ids:
-                stderr_console.print(
-                    f"Error: knowledge base '{kb}' not found. "
-                    f"Available: {_format_available_kbs(available_kb_ids)}",
-                    style="red",
+                _error_panel(
+                    f"base de conocimiento '{kb}' no encontrada; "
+                    f"disponibles: {_format_available_kbs(available_kb_ids)}",
+                    f"indexala primero: wyss index <ruta> --bc {kb}",
                 )
                 raise typer.Exit(code=1)
             kb_ids = frozenset({kb})
@@ -557,8 +611,11 @@ def search(
             _print_search_panels(result.hits, kb_ids)
 
         _print_freshness_footer(state_store.freshness_by_kb())
-    except (ConfigError, IndexIntegrityError, AuditIntegrityError) as exc:
-        stderr_console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except (IndexIntegrityError, AuditIntegrityError) as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")
@@ -585,8 +642,11 @@ def status(
         settings = load_settings(config)
         state_store = StateStore(settings.data_dir / "index.db")
         _print_status_table(state_store.freshness_by_kb())
-    except (ConfigError, IndexIntegrityError, AuditIntegrityError) as exc:
-        stderr_console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except (IndexIntegrityError, AuditIntegrityError) as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")
@@ -612,8 +672,9 @@ def _now_iso() -> str:
 def _validate_monto(monto: float) -> None:
     """Rechaza montos no positivos en la frontera CLI (RESEARCH Pitfall 5, T-08-06)."""
     if monto <= 0:
-        console.print(
-            f"Error: el monto debe ser positivo (recibido {monto}).", style="red"
+        _error_panel(
+            f"el monto debe ser positivo (recibido {monto})",
+            "reintentá con un monto mayor a 0",
         )
         raise typer.Exit(code=1)
 
@@ -650,11 +711,14 @@ def fin_add_ingreso(
             f"Ingreso registrado: ${monto:.2f} de '{fuente}' ({transaccion.fecha}).",
             style="green",
         )
-    except (ConfigError, AuditIntegrityError) as exc:
-        console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
-        console.print(f"Error sistémico: {exc}", style="red")
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     finally:
         if store is not None:
@@ -693,11 +757,14 @@ def fin_add_gasto(
             f"Gasto registrado: ${monto:.2f} en '{categoria}' ({transaccion.fecha}).",
             style="green",
         )
-    except (ConfigError, AuditIntegrityError) as exc:
-        console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
-        console.print(f"Error sistémico: {exc}", style="red")
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     finally:
         if store is not None:
@@ -730,11 +797,14 @@ def fin_ver(
         ingresos, gastos = store.balance(ventana_desde, ventana_hasta)
         superavit = ingresos - gastos
         _print_ledger_table(gastos_por_categoria, ingresos, gastos, superavit)
-    except (ConfigError, AuditIntegrityError) as exc:
-        console.print(f"Error: {exc}", style="red")
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
-        console.print(f"Error sistémico: {exc}", style="red")
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     finally:
         if store is not None:
@@ -747,6 +817,12 @@ def _print_ledger_table(
     gastos: float,
     superavit: float,
 ) -> None:
+    if not gastos_por_categoria and ingresos == 0 and gastos == 0:
+        _empty_state(
+            "Ledger vacío: sin transacciones en la ventana pedida.",
+            "wyss fin add-ingreso <monto> <fuente> o wyss fin add-gasto <monto> <categoría>",
+        )
+        return
     table = Table(title="Ledger de finanzas")
     table.add_column("Categoría (gasto)")
     table.add_column("Total", justify="right")
@@ -825,14 +901,14 @@ def _run_with_progress(pipeline: IngestPipeline, ruta: Path, kb_id: str) -> Inge
             progress.update(task_id, completed=total)
             return result
 
-    console.print(f"progreso: iniciando indexacion de {ruta} en BC {kb_id}")
+    console.print(f"progreso: iniciando indexación de {ruta} en BC {kb_id}")
     result = asyncio.run(pipeline.run(ruta, kb_id))
     console.print("progreso: corrida finalizada")
     return result
 
 
 def _print_estimate(result: EstimateResult) -> None:
-    table = Table(title="Estimacion de ingesta")
+    table = Table(title="Estimación de ingesta")
     table.add_column("Metrica")
     table.add_column("Valor")
     table.add_row("archivos", str(result.files))
@@ -846,7 +922,10 @@ def _print_estimate(result: EstimateResult) -> None:
 def _print_dry_run(items: Sequence[tuple[str, str]], kb_id: str) -> None:
     console.print(f"Dry run BC: {kb_id}")
     if not items:
-        console.print("Nada para indexar.")
+        _empty_state(
+            "Nada para indexar en esa ruta.",
+            "wyss index <otra-ruta> --dry-run",
+        )
         return
     for path, reason in items:
         console.print(f"{reason}: {path}")
@@ -855,7 +934,7 @@ def _print_dry_run(items: Sequence[tuple[str, str]], kb_id: str) -> None:
 def _print_summary(result: IngestRunResult, kb_id: str) -> None:
     console.print(
         f"Resumen BC {kb_id}: {result.indexed} indexados, {result.failed} fallados, "
-        f"{result.excluded_secret} excluidos por secretos, {result.skipped} skipped"
+        f"{result.excluded_secret} excluidos por secretos, {result.skipped} omitidos"
     )
     for warning in result.warnings:
         console.print(f"Aviso: {warning}")
@@ -878,7 +957,16 @@ def _print_degraded_banner(reason: str) -> None:
 
 def _print_search_panels(hits: Sequence[Hit], kb_ids: frozenset[str]) -> None:
     if not hits:
-        console.print("Sin resultados.")
+        if not kb_ids:
+            _empty_state(
+                "Índice vacío: no hay bases de conocimiento.",
+                "wyss index <ruta>",
+            )
+        else:
+            _empty_state(
+                "Sin resultados para la búsqueda.",
+                "wyss index <ruta> (si el contenido todavía no está indexado)",
+            )
         return
 
     source = "all" if len(kb_ids) != 1 else next(iter(kb_ids))
@@ -898,10 +986,19 @@ def _print_freshness_footer(freshness: Sequence[BcFreshness]) -> None:
         (item.last_indexed_at for item in freshness if item.last_indexed_at is not None),
         default=None,
     )
+    if latest is None:
+        stderr_console.print(f"índice sin indexaciones · {len(freshness)} BCs")
+        return
     stderr_console.print(f"indexado al {_format_timestamp(latest)} · {len(freshness)} BCs")
 
 
 def _print_status_table(freshness: Sequence[BcFreshness]) -> None:
+    if not freshness:
+        _empty_state(
+            "Índice vacío: no hay bases de conocimiento.",
+            "wyss index <ruta>",
+        )
+        return
     table = Table(title="Estado del índice")
     table.add_column("BC")
     table.add_column("Última indexación", no_wrap=True)
@@ -929,7 +1026,7 @@ def _format_timestamp(value: float | None) -> str:
 
 def _format_available_kbs(kb_ids: Sequence[str]) -> str:
     if not kb_ids:
-        return "(none)"
+        return "(ninguna)"
     return ", ".join(kb_ids)
 
 
@@ -1033,6 +1130,12 @@ def query_audit_events(
 
 
 def _print_audit_table(rows: Sequence[AuditRow]) -> None:
+    if not rows:
+        _empty_state(
+            "Sin eventos de auditoría en la ventana pedida.",
+            "wyss audit --limit 50 (sin --since) para ver el historial completo",
+        )
+        return
     table = Table(title="Auditoría")
     table.add_column("created_at", no_wrap=True)
     table.add_column("actor_id")
