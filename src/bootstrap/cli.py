@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import secrets
 import sqlite3
 import sys
 from collections.abc import Mapping, Sequence
@@ -13,6 +14,7 @@ from typing import Annotated, Any
 
 import httpx
 import typer
+import uvicorn
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
@@ -654,6 +656,40 @@ def status(
     finally:
         if state_store is not None:
             state_store.close()
+
+
+@app.command()
+def web(
+    port: Annotated[int, typer.Option("--port")] = 7777,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Levanta la UI web local de Wyss."""
+    try:
+        settings = load_settings(config)
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+    from bootstrap.web import build_web_app
+
+    token = secrets.token_urlsafe(32)
+    url = f"http://127.0.0.1:{port}/?token={token}"
+    console.print(
+        Panel(
+            f"{url}\n\nSolo accesible desde esta máquina.",
+            title="Wyss web",
+            expand=False,
+        )
+    )
+    uvicorn.run(
+        build_web_app(settings, token=token),
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+    )
 
 
 def _ledger_db_path(settings: WyssSettings) -> Path:
