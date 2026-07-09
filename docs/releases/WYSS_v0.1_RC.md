@@ -109,6 +109,15 @@ Resultado real del smoke destructivo (qwen planificó `file.delete /etc/passwd`)
 - `wyss audit` lee la DB directo; el método JSON-RPC `audit` del daemon devuelve vacío (deuda menor).
 - El path pending audita la decisión de política dentro de `confirmation.requested` (payload), no como evento `policy.decision` separado.
 
+## Mobile Bridge MVP (agregado 2026-07-09)
+
+Wyss se controla desde el teléfono en la misma LAN: `wyss web --lan` imprime la
+URL de pairing (token una vez → cookie), la SPA es responsive (bottom-nav móvil)
+y el flujo completo ask → riesgo → CONFIRMAR → resultado → auditoría corre desde
+el browser del teléfono contra el mismo daemon del PC. Sin `--lan` nada cambia
+(127.0.0.1 only). Host allowlist exacta (solo el IP LAN de la máquina), 401 sin
+auth en todo path. Detalle y smoke: `docs/mobile/WYSS_MOBILE_BRIDGE_MVP.md`.
+
 ## Próxima fase recomendada
 
 1. **PR-08 security re-audit** sobre el loop de ejecución ahora real (era el paso previo a RC en el roadmap).
