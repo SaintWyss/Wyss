@@ -1,0 +1,235 @@
+"""Loop E2E del daemon con ejecución real: ask → policy → confirm → execute → audit.
+
+Cierra el gap RC v0.1: el daemon recibe un `PlanRunner` (PlanExecutor real sobre
+adapters reales en tmp_path) y `confirm` ejecuta de verdad, con journal y evidencia
+de auditoría. Sin runner inyectado el shape histórico se preserva (compat).
+"""
+
+import asyncio
+import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+
+from core.domain import AuditEventType
+from core.domain.plan import Action, Plan
+from core.orchestrator.intent import IntentCategory, IntentClassification
+from core.policy import CognitivePolicyEngine
+from execution.executor import PlanExecutor
+from execution.filesystem import FileSystemAdapter
+from execution.git import GitAdapter
+from execution.journal import UndoJournal
+from execution.shell import ShellAdapter
+from orchestrator.daemon import DaemonServer
+from orchestrator.pending_store import PendingStore
+
+from .conftest import FakeAudit
+
+
+class _MemoryWriter:
+    def __init__(self) -> None:
+        self.data = bytearray()
+
+    def write(self, data: bytes) -> None:
+        self.data.extend(data)
+
+    async def drain(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    async def wait_closed(self) -> None:
+        return None
+
+
+async def _rpc(daemon: DaemonServer, method: str, params: dict[str, object]) -> dict[str, Any]:
+    reader = asyncio.StreamReader()
+    reader.feed_data(
+        json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
+        + b"\n"
+    )
+    reader.feed_eof()
+    writer = _MemoryWriter()
+    await daemon.handle(reader, cast(Any, writer))
+    response = json.loads(bytes(writer.data))
+    assert "error" not in response, response
+    return cast(dict[str, Any], response["result"])
+
+
+class _PlanOrchestrator:
+    """OrchestratorPort fake que devuelve un plan fijo (el LLM real se prueba aparte)."""
+
+    def __init__(self, plan: Plan) -> None:
+        self._plan = plan
+
+    async def classify_intent(self, instruction: str) -> IntentClassification:
+        del instruction
+        return IntentClassification(IntentCategory.FILE_OPERATION, 0.95, False)
+
+    async def draft_plan(self, instruction: str, intent: IntentClassification) -> Plan:
+        del instruction, intent
+        return self._plan
+
+    async def health_check(self) -> bool:
+        return True
+
+
+@pytest.fixture
+def journal(tmp_path: Path) -> Iterator[UndoJournal]:
+    j = UndoJournal(tmp_path / "journal.db", backup_base_dir=tmp_path / "undo_backups")
+    try:
+        yield j
+    finally:
+        j.close()
+
+
+def _runner(
+    engine: CognitivePolicyEngine, audit: FakeAudit, journal: UndoJournal, tmp_path: Path
+) -> PlanExecutor:
+    return PlanExecutor(
+        filesystem=FileSystemAdapter(engine, audit, journal),
+        shell=ShellAdapter(cast(Any, audit)),
+        git=GitAdapter(cast(Any, audit), tmp_path),
+        journal=journal,
+        audit=audit,
+    )
+
+
+def _daemon(
+    engine: CognitivePolicyEngine,
+    plan: Plan,
+    pending_store: PendingStore,
+    audit: FakeAudit,
+    runner: PlanExecutor | None,
+) -> DaemonServer:
+    return DaemonServer(
+        engine=engine,
+        orchestrator=_PlanOrchestrator(plan),
+        pending_store=pending_store,
+        audit=audit,
+        runner=runner,
+    )
+
+
+async def test_confirm_executes_file_write_end_to_end(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """file.write (C) pide CONFIRMAR; el confirm ejecuta, verifica y audita."""
+    target = tmp_path / "nota.txt"
+    plan = Plan(
+        task_id="rc-smoke",
+        summary="crear nota de prueba",
+        steps=(
+            Action("file.write", str(target), {"content": "hola desde wyss rc"}),
+        ),
+        rationale="smoke RC v0.1",
+    )
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    asked = await _rpc(daemon, "ask", {"instruction": f"crear nota en {target}"})
+    assert asked["outcome"] == "pending"
+    assert not target.exists()  # nada se ejecuta antes de confirmar
+
+    confirmed = await _rpc(
+        daemon, "confirm", {"pending_id": asked["pending_id"], "response": "CONFIRMAR"}
+    )
+    assert confirmed["accepted"] is True
+    assert confirmed["success"] is True
+    assert str(confirmed["execution_id"]).startswith("exec-rc-smoke-")
+
+    assert target.read_text(encoding="utf-8") == "hola desde wyss rc"
+    event_types = [event.event_type for event in fake_audit.events]
+    # El path pending audita la decisión de política dentro de CONFIRMATION_REQUESTED
+    # (payload risk_level/outcome); POLICY_DECISION como evento aparece en reject/queued.
+    for expected in (
+        AuditEventType.COMMAND_RECEIVED,
+        AuditEventType.PLAN_CREATED,
+        AuditEventType.CONFIRMATION_REQUESTED,
+        AuditEventType.CONFIRMATION_ANSWERED,
+        AuditEventType.TASK_COMPLETED,
+    ):
+        assert expected in event_types
+
+
+async def test_wrong_confirmation_does_not_execute(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """Nivel C exige la palabra literal CONFIRMAR; 's' no alcanza y nada se escribe."""
+    target = tmp_path / "nota.txt"
+    plan = Plan(
+        task_id="rc-neg",
+        summary="crear nota",
+        steps=(Action("file.write", str(target), {"content": "no"}),),
+        rationale="test",
+    )
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    asked = await _rpc(daemon, "ask", {"instruction": "crear nota"})
+    denied = await _rpc(
+        daemon, "confirm", {"pending_id": asked["pending_id"], "response": "s"}
+    )
+    assert denied["accepted"] is False
+    assert not target.exists()
+
+
+async def test_queued_read_reports_honest_failure(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """A-level ejecuta directo; file.read no está soportado por el executor v0.1 y
+    el resultado lo dice honesto (success=False + TASK_FAILED), sin placeholder."""
+    plan = Plan(
+        task_id="rc-read",
+        summary="leer archivo",
+        steps=(Action("file.read", str(tmp_path / "x.txt")),),
+        rationale="test",
+    )
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    asked = await _rpc(daemon, "ask", {"instruction": "leer archivo"})
+    assert asked["outcome"] == "executed"
+    assert asked["success"] is False
+    assert "unsupported" in asked["detail"]
+    assert AuditEventType.TASK_FAILED in [e.event_type for e in fake_audit.events]
+
+
+async def test_without_runner_keeps_legacy_shape(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+) -> None:
+    """Sin runner inyectado el daemon conserva el contrato previo (no ejecuta)."""
+    target = tmp_path / "nota.txt"
+    plan = Plan(
+        task_id="rc-legacy",
+        summary="crear nota",
+        steps=(Action("file.write", str(target), {"content": "x"}),),
+        rationale="test",
+    )
+    daemon = _daemon(engine, plan, pending_store, fake_audit, None)
+
+    asked = await _rpc(daemon, "ask", {"instruction": "crear nota"})
+    confirmed = await _rpc(
+        daemon, "confirm", {"pending_id": asked["pending_id"], "response": "CONFIRMAR"}
+    )
+    assert confirmed["accepted"] is True
+    assert "success" not in confirmed
+    assert not target.exists()

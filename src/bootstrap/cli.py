@@ -46,6 +46,11 @@ from core.orchestrator.intent import IntentCategory, IntentClassification
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
 from core.ports.knowledge import EmbeddingProvider
+from execution.executor import PlanExecutor
+from execution.filesystem import FileSystemAdapter
+from execution.git import GitAdapter
+from execution.journal import UndoJournal
+from execution.shell import ShellAdapter
 from gateway.providers.ollama import OllamaEmbeddingProvider
 from gateway.secrets_patterns import BUILTIN_SECRET_PATTERNS
 from knowledge.chunker import TokenChunker
@@ -406,36 +411,65 @@ def start(
             audit.close()
 
 
+def _build_plan_runner(
+    settings: BootstrapWyssSettings,
+    engine: CognitivePolicyEngine,
+    audit: SqliteAuditLogger,
+) -> tuple[PlanExecutor, UndoJournal]:
+    """Arma la capa de ejecución real (D-69): adapters + journal tras el mismo engine.
+
+    ShellAdapter arranca con allowlist VACÍA (fail-closed): ningún binario corre
+    hasta que el owner lo permita explícitamente por config. GitAdapter apunta al
+    data_dir — sin repo ahí, toda acción git falla como resultado, no como excepción.
+    """
+    exec_dir = settings.data_dir / "execution"
+    journal = UndoJournal(exec_dir / "journal.db", backup_base_dir=exec_dir / "undo_backups")
+    executor = PlanExecutor(
+        filesystem=FileSystemAdapter(engine, audit, journal),
+        shell=ShellAdapter(audit),
+        git=GitAdapter(audit, settings.data_dir),
+        journal=journal,
+        audit=audit,
+    )
+    return executor, journal
+
+
 async def _run_start_daemon(
     settings: BootstrapWyssSettings,
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     audit: SqliteAuditLogger,
 ) -> None:
-    if settings.orchestrator.mode == "deterministic":
-        await run_daemon(
-            _socket_path(settings),
-            engine=engine,
-            orchestrator=_DeterministicOrchestrator(),
-            pending_store=pending_store,
-            audit=audit,
-        )
-        return
+    runner, journal = _build_plan_runner(settings, engine, audit)
+    try:
+        if settings.orchestrator.mode == "deterministic":
+            await run_daemon(
+                _socket_path(settings),
+                engine=engine,
+                orchestrator=_DeterministicOrchestrator(),
+                pending_store=pending_store,
+                audit=audit,
+                runner=runner,
+            )
+            return
 
-    async with httpx.AsyncClient() as client:
-        gateway = build_gateway(
-            settings.gateway,
-            client=client,
-            audit=audit,
-            data_dir=str(settings.data_dir),
-        )
-        await run_daemon(
-            _socket_path(settings),
-            engine=engine,
-            orchestrator=LLMOrchestrator(gateway, tier=settings.orchestrator.tier),
-            pending_store=pending_store,
-            audit=audit,
-        )
+        async with httpx.AsyncClient() as client:
+            gateway = build_gateway(
+                settings.gateway,
+                client=client,
+                audit=audit,
+                data_dir=str(settings.data_dir),
+            )
+            await run_daemon(
+                _socket_path(settings),
+                engine=engine,
+                orchestrator=LLMOrchestrator(gateway, tier=settings.orchestrator.tier),
+                pending_store=pending_store,
+                audit=audit,
+                runner=runner,
+            )
+    finally:
+        journal.close()
 
 
 @app.command()
@@ -1123,6 +1157,9 @@ def _render_ask_result(result: dict[str, Any]) -> None:
     if outcome == "queued":
         console.print(f"Encolado: {result.get('execution_id')}")
         return
+    if outcome == "executed":
+        _render_execution(result)
+        return
     if outcome == "degraded":
         stderr_console.print(
             str(result.get("message", "Orquestador no disponible.")),
@@ -1134,10 +1171,22 @@ def _render_ask_result(result: dict[str, Any]) -> None:
 
 def _render_confirm_result(result: dict[str, Any]) -> None:
     if result.get("accepted"):
-        console.print(f"Encolado: {result.get('execution_id')}")
+        if "success" in result:
+            _render_execution(result)
+        else:
+            console.print(f"Encolado: {result.get('execution_id')}")
         return
     reason = result.get("reason")
     console.print(f"No confirmado{f': {reason}' if reason else ''}.")
+
+
+def _render_execution(result: dict[str, Any]) -> None:
+    detail = str(result.get("detail", ""))
+    execution_id = result.get("execution_id")
+    if result.get("success"):
+        console.print(f"Ejecutado ({execution_id}): {detail}", style="green")
+        return
+    stderr_console.print(f"Ejecución falló ({execution_id}): {detail}", style="red")
 
 
 def query_audit_events(

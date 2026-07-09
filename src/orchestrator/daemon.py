@@ -8,6 +8,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from core.domain import ActorType, AuditEvent, AuditEventType, Outcome, RiskLevel
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
@@ -15,6 +16,7 @@ from core.domain.policy import PolicyDecision
 from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
+from core.ports.execution import PlanRunner
 from core.ports.orchestrator import OrchestratorPort
 from orchestrator.dispatcher import dispatch, ttl_for_risk
 from orchestrator.pending_store import PendingProposal, PendingStore
@@ -52,11 +54,13 @@ class DaemonServer:
         orchestrator: OrchestratorPort,
         pending_store: PendingStore,
         audit: AuditPort,
+        runner: PlanRunner | None = None,
     ) -> None:
         self._engine = engine
         self._orchestrator = orchestrator
         self._pending_store = pending_store
         self._audit = audit
+        self._runner = runner
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
             "confirm": self._confirm,
@@ -139,13 +143,17 @@ class DaemonServer:
             )
         )
         decision = self._engine.evaluate(plan)
-        return await dispatch(
+        dispatched = await dispatch(
             plan,
             decision,
             pending_store=self._pending_store,
             audit=self._audit,
             ttl_for=ttl_for_risk,
         )
+        if dispatched.get("outcome") == "queued" and self._runner is not None:
+            executed = await self._execute_plan(plan)
+            return {"outcome": "executed", **executed}
+        return dispatched
 
     async def _confirm(self, params: Mapping[str, Any]) -> JsonDict:
         pending_id = str(params.get("pending_id", "")).strip()
@@ -192,8 +200,32 @@ class DaemonServer:
         resolved = self._pending_store.resolve(pending_id, "owner")
         if resolved is None:
             return {"accepted": False, "execution_id": None, "reason": "pending stale"}
-        execution_id = f"exec-{resolved.task_id}-{pending_id[:12]}"
-        return {"accepted": True, "execution_id": execution_id}
+        if self._runner is None:
+            execution_id = f"exec-{resolved.task_id}-{pending_id[:12]}"
+            return {"accepted": True, "execution_id": execution_id}
+        executed = await self._execute_plan(plan)
+        return {"accepted": True, **executed}
+
+    async def _execute_plan(self, plan: Plan) -> JsonDict:
+        """Ejecuta un plan ya autorizado por política y audita el resultado terminal."""
+        assert self._runner is not None
+        execution_id = f"exec-{plan.task_id}-{uuid4().hex[:12]}"
+        result = await self._runner.run(plan)
+        success = bool(getattr(result, "success", False))
+        detail = str(getattr(result, "detail", ""))
+        self._audit.log(
+            AuditEvent.new(
+                task_id=plan.task_id,
+                actor_type=ActorType.SYSTEM,
+                actor_id="executor",
+                event_type=(
+                    AuditEventType.TASK_COMPLETED if success else AuditEventType.TASK_FAILED
+                ),
+                message=detail or ("plan ejecutado" if success else "plan falló"),
+                payload={"execution_id": execution_id, "success": success},
+            )
+        )
+        return {"execution_id": execution_id, "success": success, "detail": detail}
 
     async def _status(self, params: Mapping[str, Any]) -> JsonDict:
         del params
@@ -235,6 +267,7 @@ async def start_daemon(
     orchestrator: OrchestratorPort,
     pending_store: PendingStore,
     audit: AuditPort,
+    runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
 ) -> RunningDaemon:
     """Arranca el Unix socket server y devuelve recursos cerrables."""
@@ -245,6 +278,7 @@ async def start_daemon(
         orchestrator=orchestrator,
         pending_store=pending_store,
         audit=audit,
+        runner=runner,
     )
     server = await asyncio.start_unix_server(daemon.handle, str(socket_path))
     os.chmod(socket_path, 0o600)
@@ -261,6 +295,7 @@ async def run_daemon(
     orchestrator: OrchestratorPort,
     pending_store: PendingStore,
     audit: AuditPort,
+    runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
 ) -> None:
     """Corre el daemon hasta cancelación/señal y limpia socket al salir."""
@@ -270,6 +305,7 @@ async def run_daemon(
         orchestrator=orchestrator,
         pending_store=pending_store,
         audit=audit,
+        runner=runner,
         reaper_interval_s=reaper_interval_s,
     )
     try:
