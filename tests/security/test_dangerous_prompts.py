@@ -100,6 +100,48 @@ def test_disk_format_still_rejected(engine: CognitivePolicyEngine) -> None:
     )
 
 
+def test_firewall_disable(engine: CognitivePolicyEngine) -> None:
+    _assert_rejected(
+        engine, _plan(Action("shell.run", "ufw", {"args": ["disable"]})),
+        "shell-firewall-tamper",
+    )
+    _assert_rejected(
+        engine,
+        _plan(Action("shell.run", "systemctl", {"args": ["stop", "firewalld"]})),
+        "shell-firewall-tamper",
+    )
+    _assert_rejected(
+        engine,
+        _plan(Action("shell.run", "bash", {"args": ["-c", "iptables -F"]})),
+        "shell-firewall-tamper",
+    )
+
+
+def test_shell_rm_bypass_is_rejected(engine: CognitivePolicyEngine) -> None:
+    # borrar por shell saltea papelera+journal: SIEMPRE file.delete, nunca rm
+    _assert_rejected(
+        engine, _plan(Action("shell.run", "rm", {"args": ["nota.txt"]})),
+        "shell-rm-bypass",
+    )
+    _assert_rejected(
+        engine,
+        _plan(Action("shell.run", "bash", {"args": ["-c", "rm -rf /home/saintwyss"]})),
+        "shell-recursive-delete",
+    )
+
+
+def test_chmod_chown_destructive(engine: CognitivePolicyEngine) -> None:
+    _assert_rejected(
+        engine, _plan(Action("shell.run", "chmod", {"args": ["777", "/srv/app"]})),
+        "shell-perm-destructive",
+    )
+    _assert_rejected(
+        engine,
+        _plan(Action("shell.run", "bash", {"args": ["-c", "chown -R nobody /srv"]})),
+        "shell-perm-destructive",
+    )
+
+
 def test_git_force_push_main(engine: CognitivePolicyEngine) -> None:
     _assert_rejected(
         engine, _plan(Action("git.push", "main", {"force": True})),
@@ -164,4 +206,22 @@ def test_benign_shell_with_pipe_to_grep_not_blocked(
     plan = _plan(Action("shell.run", "grep", {"args": ["-r", "TODO", "src"]}))
     decision = engine.evaluate(plan)
     assert "shell-fetch-pipe-exec" not in decision.matched_rules
+    assert decision.risk_level != RiskLevel.D
+
+
+def test_systemctl_status_firewalld_not_blocked(
+    engine: CognitivePolicyEngine,
+) -> None:
+    # la regla de firewall es por verbo destructivo: los reads no caen en D
+    plan = _plan(Action("shell.run", "systemctl", {"args": ["status", "firewalld"]}))
+    decision = engine.evaluate(plan)
+    assert "shell-firewall-tamper" not in decision.matched_rules
+    assert decision.risk_level != RiskLevel.D
+
+
+def test_chmod_plus_x_not_blocked(engine: CognitivePolicyEngine) -> None:
+    # chmod +x sobre un archivo NO es destructivo: queda C (allowlist decide), no D
+    plan = _plan(Action("shell.run", "chmod", {"args": ["+x", "script.sh"]}))
+    decision = engine.evaluate(plan)
+    assert "shell-perm-destructive" not in decision.matched_rules
     assert decision.risk_level != RiskLevel.D

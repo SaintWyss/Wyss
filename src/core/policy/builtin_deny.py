@@ -1,4 +1,4 @@
-"""Denylist built-in: 7 reglas D NO removibles por config (regla #2 del owner).
+"""Denylist built-in: reglas D NO removibles por config (regla #2 del owner).
 
 `BUILTIN_DENY` es `Final` — la config TOML solo puede AGREGAR reglas
 (`PolicyRules.deny = BUILTIN_DENY + tuple(config_rules)`), nunca vaciar estas. Si la
@@ -80,5 +80,46 @@ BUILTIN_DENY: Final[tuple[DenyRule, ...]] = (
         description="shell.run que escala privilegios (sudo/su/doas/pkexec).",
         action_type="shell.run",
         target_patterns=("sudo", "su", "doas", "pkexec"),
+    ),
+    DenyRule(
+        id="shell-rm-bypass",
+        description=(
+            "shell.run con rm/rmdir/shred como binario — el borrado va por file.delete "
+            "(papelera + journal), nunca por shell irreversible."
+        ),
+        action_type="shell.run",
+        target_patterns=("rm", "rmdir", "shred"),
+    ),
+    DenyRule(
+        id="shell-recursive-delete",
+        description="Borrado recursivo embebido en args de shell (rm -rf/-fr/-r ...).",
+        action_type="shell.run",
+        arg_substrings=("rm -rf", "rm -fr", "rm -r "),
+    ),
+    DenyRule(
+        id="shell-perm-destructive",
+        description="chmod/chown destructivo: world-writable (777), 000 o recursivo.",
+        action_type="shell.run",
+        arg_substrings=("chmod 777", "chmod -r", "chmod 000", "chown -r"),
+    ),
+    DenyRule(
+        id="shell-firewall-tamper",
+        description=(
+            "Deshabilitar/vaciar el firewall (ufw disable, systemctl stop/disable/mask "
+            "firewalld/nftables, iptables -F, nft flush). Los subcomandos de lectura "
+            "(status) NO matchean: la regla es por verbo destructivo, no por binario."
+        ),
+        action_type="shell.run",
+        arg_substrings=(
+            "ufw disable",
+            "stop firewalld",
+            "disable firewalld",
+            "mask firewalld",
+            "stop nftables",
+            "disable nftables",
+            "iptables -f",
+            "iptables --flush",
+            "nft flush",
+        ),
     ),
 )
