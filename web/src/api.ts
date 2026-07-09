@@ -41,19 +41,25 @@ export interface Pending {
 }
 
 export interface AskResult {
-  outcome: 'pending' | 'rejected' | 'queued' | 'degraded' | string
+  outcome: 'pending' | 'rejected' | 'queued' | 'executed' | 'degraded' | string
   pending_id?: string
   plan?: string
   risk_level?: RiskLevel
   reasons?: string[]
   execution_id?: string
   message?: string
+  // outcome 'executed' (nivel A con executor real, RC): resultado honesto
+  success?: boolean
+  detail?: string
 }
 
 export interface ConfirmResult {
   accepted: boolean
   execution_id?: string
   reason?: string
+  // presentes cuando el daemon ejecutó de verdad (RC: PlanExecutor cableado)
+  success?: boolean
+  detail?: string
 }
 
 export interface KbFreshness {

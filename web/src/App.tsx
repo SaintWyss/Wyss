@@ -127,8 +127,8 @@ export default function App() {
   const totalFiles = kbs.reduce((sum, kb) => sum + kb.files, 0)
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-44 shrink-0 flex-col border-r border-borde px-4 py-5">
+    <div className="flex h-dvh">
+      <aside className="hidden w-44 shrink-0 flex-col border-r border-borde px-4 py-5 md:flex">
         <h1 className="display text-lg font-bold tracking-tight">WYSS</h1>
         <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-humo">
           mesa de despacho
@@ -183,14 +183,20 @@ export default function App() {
             <span className="font-mono text-[10px]">↗</span>
           </a>
           <p className="mt-5 font-mono text-[10px] text-humo/60">
-            127.0.0.1 · solo esta máquina
+            {window.location.hostname === '127.0.0.1' ||
+            window.location.hostname === 'localhost'
+              ? '127.0.0.1 · solo esta máquina'
+              : `${window.location.hostname} · red local`}
           </p>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-borde px-6 py-2.5">
+        <header className="flex items-center justify-between border-b border-borde px-4 py-2.5 md:px-6">
           <div className="flex items-center gap-2 text-sm">
+            <span className="display mr-1 text-sm font-bold tracking-tight md:hidden">
+              WYSS
+            </span>
             {daemonAlive === null ? (
               <span className="text-humo">conectando…</span>
             ) : daemonAlive ? (
@@ -212,20 +218,48 @@ export default function App() {
               </>
             )}
           </div>
-          <p className="font-mono text-xs text-humo">
+          <p className="hidden font-mono text-xs text-humo sm:block">
             {kbs.length > 0
               ? `${kbs.length} BC · ${totalFiles.toLocaleString('es-AR')} archivos`
               : 'índice vacío'}
           </p>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+        <main className="min-w-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           {surface === 'chat' && <Chat daemonAlive={daemonAlive === true} />}
           {surface === 'bandeja' && <Bandeja daemonAlive={daemonAlive === true} />}
           {surface === 'buscar' && <Buscar kbs={kbs} />}
           {surface === 'pellegrini' && <Finanzas />}
           {surface === 'auditoria' && <Auditoria />}
         </main>
+
+        <nav
+          aria-label="Secciones"
+          className="flex shrink-0 border-t border-borde bg-tinta pb-[env(safe-area-inset-bottom)] md:hidden"
+        >
+          {SURFACES.map(({ id, label }) => {
+            const active = surface === id
+            return (
+              <button
+                key={id}
+                onClick={() => navigate(id)}
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex-1 px-1 py-2.5 text-center text-[11px] transition-colors ${
+                  active
+                    ? 'text-hueso shadow-[inset_0_2px_0_0_var(--color-celeste)]'
+                    : 'text-humo'
+                }`}
+              >
+                {label}
+                {id === 'bandeja' && pendingCount > 0 && (
+                  <span className="absolute right-1/2 top-1 mr-[-22px] rounded-full bg-celeste px-1.5 font-mono text-[9px] font-bold leading-4 text-tinta">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, WyssApiError, type AskResult, type RiskLevel } from '../api'
-import { ErrorNote, RiskChip } from '../ui'
+import { useDictado } from '../dictado'
+import { ErrorNote, ResultadoEjecucion, RiskChip } from '../ui'
 import { Sello, type Resolucion } from '../documento'
 
 interface Mensaje {
@@ -18,6 +19,10 @@ export function Chat({ daemonAlive }: { daemonAlive: boolean }) {
   const [input, setInput] = useState('')
   const [enviando, setEnviando] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // El dictado solo llena el input editable: el owner revisa y envía a mano.
+  const dictado = useDictado((texto) =>
+    setInput((prev) => (prev ? `${prev} ${texto}` : texto)),
+  )
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -98,6 +103,22 @@ export function Chat({ daemonAlive }: { daemonAlive: boolean }) {
           }
           className="flex-1 rounded-sm border border-borde bg-papel px-4 py-2.5 text-sm placeholder:text-humo/60 disabled:opacity-50"
         />
+        {dictado.soportado && (
+          <button
+            type="button"
+            onClick={dictado.toggle}
+            disabled={!daemonAlive}
+            aria-pressed={dictado.activo}
+            title="Dictar (el texto queda editable antes de enviar)"
+            className={`rounded-sm border px-3 py-2.5 font-mono text-xs transition-colors disabled:opacity-40 ${
+              dictado.activo
+                ? 'animate-pulse border-celeste text-celeste'
+                : 'border-borde text-humo hover:border-celeste hover:text-celeste'
+            }`}
+          >
+            {dictado.activo ? '● grabando' : '⌾ dictar'}
+          </button>
+        )}
         <button
           type="submit"
           disabled={!daemonAlive || enviando || input.trim() === ''}
@@ -143,6 +164,18 @@ function Respuesta({ ask, daemonAlive }: { ask: AskResult; daemonAlive: boolean 
       </p>
     )
   }
+  if (ask.outcome === 'executed') {
+    return (
+      <p className="text-sm">
+        {ask.success ? (
+          <span className="text-riesgo-a">Ejecutado (nivel A)</span>
+        ) : (
+          <span className="text-riesgo-d">Falló la ejecución</span>
+        )}{' '}
+        <span className="font-mono text-xs text-humo">{ask.detail}</span>
+      </p>
+    )
+  }
   if (ask.outcome === 'degraded') {
     return (
       <p className="text-sm italic text-humo">
@@ -168,7 +201,11 @@ function PropuestaInline({
   const [resolucion, setResolucion] = useState<Resolucion | null>(null)
   const [gate, setGate] = useState<string | null>(null) // null = sin gate abierto
   const [error, setError] = useState<{ error: string; accion: string } | null>(null)
-  const [executionId, setExecutionId] = useState<string | undefined>()
+  const [ejecucion, setEjecucion] = useState<{
+    executionId?: string
+    success?: boolean
+    detail?: string
+  }>({})
 
   const send = async (approve: boolean) => {
     setError(null)
@@ -176,7 +213,11 @@ function PropuestaInline({
       const result = await api.confirm(pendingId, approve)
       if (result.accepted) {
         setResolucion('aprobado')
-        setExecutionId(result.execution_id)
+        setEjecucion({
+          executionId: result.execution_id,
+          success: result.success,
+          detail: result.detail,
+        })
       } else {
         setResolucion('rechazado')
       }
@@ -246,13 +287,9 @@ function PropuestaInline({
           </footer>
         )
       ) : (
-        <footer className="mt-4 flex items-center gap-4">
+        <footer className="mt-4 flex flex-wrap items-center gap-4">
           <Sello tipo={resolucion} />
-          {executionId && (
-            <span className="font-mono text-xs text-humo">
-              Encolado: {executionId}
-            </span>
-          )}
+          <ResultadoEjecucion {...ejecucion} />
         </footer>
       )}
     </article>

@@ -50,3 +50,32 @@ export function ErrorNote({ error, accion }: { error: string; accion: string }) 
     </div>
   )
 }
+
+/** Resultado real de la ejecución post-confirmación (RC: el daemon ejecuta). */
+export function ResultadoEjecucion({
+  executionId,
+  success,
+  detail,
+}: {
+  executionId?: string
+  success?: boolean
+  detail?: string
+}) {
+  if (executionId === undefined) return null
+  if (success === undefined) {
+    // daemon viejo sin runner: solo encoló
+    return (
+      <span className="font-mono text-xs text-humo">Encolado: {executionId}</span>
+    )
+  }
+  return (
+    <span className="text-sm">
+      {success ? (
+        <span className="text-riesgo-a">Ejecutado</span>
+      ) : (
+        <span className="text-riesgo-d">Falló</span>
+      )}{' '}
+      <span className="font-mono text-xs text-humo">{detail}</span>
+    </span>
+  )
+}

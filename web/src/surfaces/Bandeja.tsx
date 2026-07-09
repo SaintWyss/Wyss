@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, WyssApiError, type Pending } from '../api'
-import { EmptyState, ErrorNote, RiskChip } from '../ui'
+import { EmptyState, ErrorNote, ResultadoEjecucion, RiskChip } from '../ui'
 import { Sello, useCountdown, type Resolucion } from '../documento'
 
 export function Bandeja({ daemonAlive }: { daemonAlive: boolean }) {
@@ -62,7 +62,13 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'gate' } // nivel C: exige tipear CONFIRMAR
   | { kind: 'enviando' }
-  | { kind: 'resuelto'; resolucion: Resolucion; executionId?: string }
+  | {
+      kind: 'resuelto'
+      resolucion: Resolucion
+      executionId?: string
+      success?: boolean
+      detail?: string
+    }
   | { kind: 'error'; error: string; accion: string }
 
 function Documento({ pending, daemonAlive }: { pending: Pending; daemonAlive: boolean }) {
@@ -80,6 +86,8 @@ function Documento({ pending, daemonAlive }: { pending: Pending; daemonAlive: bo
           kind: 'resuelto',
           resolucion: 'aprobado',
           executionId: result.execution_id,
+          success: result.success,
+          detail: result.detail,
         })
       } else {
         setPhase({ kind: 'resuelto', resolucion: 'rechazado' })
@@ -202,13 +210,13 @@ function Documento({ pending, daemonAlive }: { pending: Pending; daemonAlive: bo
       )}
 
       {resuelto && (
-        <footer className="mt-5 flex items-center gap-4">
+        <footer className="mt-5 flex flex-wrap items-center gap-4">
           <Sello tipo={phase.resolucion} />
-          {phase.executionId && (
-            <span className="font-mono text-xs text-humo">
-              Encolado: {phase.executionId}
-            </span>
-          )}
+          <ResultadoEjecucion
+            executionId={phase.executionId}
+            success={phase.success}
+            detail={phase.detail}
+          />
         </footer>
       )}
 
