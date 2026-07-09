@@ -5,8 +5,8 @@
 Sistema de asistencia operativa multi-agente, humano primero.
 
 **Autor:** Santiago Wyss  
-**Estado:** v0.1 en construcción — 8 de 10 fases completas (estado real: `.planning/ROADMAP.md` y `.planning/STATE.md`)  
-**Versión:** 0.1
+**Estado:** v0.1 RC — loop ask→plan→política→confirmar→ejecutar→auditar verificado E2E con LLM real (ver `docs/releases/WYSS_v0.1_RC.md`)  
+**Versión:** 0.1-rc
 
 ---
 
