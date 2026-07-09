@@ -18,10 +18,11 @@ undo corre E2E desde escritorio y teléfono. 488 tests, mypy strict, hexágono e
 `BUILTIN_DENY`; flujo confirm B/C con re-evaluación; journal-antes-de-mutar; gateway
 (cost gate, minimizer, traces); auth del bridge.
 
-**Frágil:** executor no lee/lista (solo muta); undo es evidencia, no comando; móvil sin
-TLS; deuda F3 de la segunda muralla (**cerrada en PR-08**); RPC `audit` del daemon fake.
+**Frágil:** executor no lee/lista (**cerrado en PR-11**); undo es evidencia, no comando
+(**cerrado en PR-09**); móvil sin TLS; deuda F3 de la segunda muralla (**cerrada en
+PR-08**); RPC `audit` del daemon fake.
 
-**Para v0.1 estable:** PR-08 (seguridad) + PR-09 (undo) + PR-11 (read tools) + PR-10 (TLS).
+**Para v0.1 estable:** PR-08 ✅ + PR-09 ✅ + PR-11 ✅ + PR-10 (TLS).
 **Para v0.2+:** memoria, n8n, scheduler, Notion. **Arquitectura: se preserva.**
 
 ---
@@ -153,7 +154,7 @@ vivos. Sin fallback automático entre tiers (D-17). Mejora pendiente: mensaje di
 |---|---|---|
 | **PR-08 Security Re-Audit** | Auditar superficie de ejecución + cerrar gaps denylist + suite prompts peligrosos + fix F3/TTL | **CERRADO** |
 | **PR-09 `wyss undo`** | Undo user-facing (§6) | **CERRADO** |
-| **PR-11 Operator Read Tools** | `file.read/list/stat` + `git.status/log/diff` | v0.1 |
+| **PR-11 Operator Read Tools** | `file.read/list/stat` + `git.status/log/diff` | **CERRADO** |
 | **PR-10 HTTPS local + voz** | mkcert, cookie Secure, PWA, voz destrabada | v0.1 |
 | **PR-14 v0.1.0 Stable** | Cierre, docs, smoke, tag | v0.1 |
 | PR-15 Scheduler · PR-16 Notion adapter · PR-17 Daily Assistant · PR-12 Memory · PR-13 Intake n8n | | v0.2 |
@@ -223,6 +224,6 @@ dashboards fancy (datos antes que vidrio).
 
 ## 17. Próxima acción
 
-PR-08 y PR-09 cerrados. Siguiente: **PR-11 Operator Read Tools** (`file.read/list/stat`
-+ `git.status/log/diff`) — un operador que no puede mirar es más grave que un token en
-LAN propia. Después PR-10 (HTTPS mkcert + voz) y PR-14 (v0.1.0 estable).
+PR-08, PR-09 y PR-11 cerrados. Siguiente: **PR-10 HTTPS local + voz** (mkcert, cookie
+Secure, PWA opcional, voz del browser destrabada por secure context). Después PR-14
+(v0.1.0 estable: smoke en teléfono físico + tag).

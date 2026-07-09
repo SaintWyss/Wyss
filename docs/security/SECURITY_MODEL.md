@@ -43,7 +43,7 @@ denylist de nivel D vive en código y no es removible por configuración.
 
 | Nivel | Significado | Ejemplos |
 |---|---|---|
-| **A** | Directo, sin confirmación | `file.read`, `file.list`, `file.stat`, `knowledge.query`, `finance.query` |
+| **A** | Directo, sin confirmación | `file.read`, `file.list`, `file.stat`, `git.status/log/diff`, `knowledge.query`, `finance.query` |
 | **B** | Confirmación simple (`s`) | `file.move`, `file.rename`, `finance.record` |
 | **C** | Confirmación fuerte (`CONFIRMAR`) | `file.write/create/delete`, `shell.run` (allowlisted), `git.commit/push`, tipo desconocido (fail-closed) |
 | **D** | Rechazo absoluto | ver denylist abajo |
@@ -95,6 +95,17 @@ no solo el binario, para tipificar el pipe-a-intérprete sin bloquear usos benig
 
 Aunque el LLM alucine un plan destructivo con `estimated_risk: A`, la denylist gana
 (test `test_llm_cannot_downgrade_dangerous_plan`).
+
+## Lecturas (PR-11)
+
+Las lecturas son nivel A pero NO están fuera del perímetro:
+
+- `file.read/list/stat` pasan la **segunda muralla**: leer `.env`/`~/.ssh` resuelve
+  **D** (`secret-exfiltration`, que cubre lecturas) y se bloquea + audita.
+- La salida tiene tope (`256 KiB` por read, `500` entradas por list) y avisa si trunca.
+- `git.status/log/diff` rechazan flags con capacidad de escritura (`--output`, `-o`):
+  un subcomando de lectura nivel A no puede escribir a disco.
+- Nada de esto journala (no hay mutación que deshacer).
 
 ## Qué requiere qué
 
