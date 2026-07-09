@@ -172,3 +172,34 @@ def test_resolved_path_above_max_risk_blocked(
         f"Se esperaba bloqueo para acción en ~/.ssh vía symlink, resultado: {result}"
     )
     assert "second wall" in result.detail.lower()
+
+
+def test_directory_symlink_parent_is_allowed(
+    engine: CognitivePolicyEngine,
+    tmp_path: Path,
+) -> None:
+    """F3 (PR-08): un symlink de DIRECTORIO padre (infra tipo ~/Data → /mnt/hdd/Data)
+    NO debe disparar el bloqueo por path-tricks — solo el archivo-symlink final lo hace.
+    """
+    import asyncio
+
+    real_dir = tmp_path / "real_data"
+    real_dir.mkdir()
+    link_dir = tmp_path / "Data"  # symlink de directorio, como ~/Data en producción
+    link_dir.symlink_to(real_dir)
+
+    fake_audit = FakeAudit()
+    adapter = _make_adapter(engine, fake_audit, tmp_path)
+
+    action = Action(
+        type="file.write",
+        target=str(link_dir / "nota.txt"),  # el archivo NO es symlink; el padre sí
+        parameters={"content": "hola"},
+        on_error=ErrorPolicy.ABORT,
+    )
+    result = asyncio.run(adapter.execute(action))
+
+    assert result.success is True, (
+        f"symlink de directorio padre benigno no debe bloquearse: {result.detail!r}"
+    )
+    assert (real_dir / "nota.txt").read_text() == "hola"

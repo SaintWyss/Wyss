@@ -146,18 +146,21 @@ class FileSystemAdapter:
             self._audit_blocked(action.target, resolved_target, str(decision.risk_level), reason)
             return False, resolved_target, reason
 
-        # NOTA (deuda conocida F3, audit fase 6): esta comparación es contra el
-        # target CRUDO, no contra el path normalizado por el engine (que solo hace
-        # expanduser). Por eso CUALQUIER target con `~`, ruta relativa o symlink
-        # difiere de resolved_target y se bloquea — incluido el benigno `~/Data`
-        # (que es symlink → /mnt/hdd/Data en este entorno). Hoy los callers (tests)
-        # pasan paths absolutos ya resueltos, así que no molesta. Cuando fase 7
-        # (agents) genere acciones con `~`, comparar contra el path expanduser del
-        # engine para disparar SOLO en el delta de resolve() (el vector real de
-        # path-tricks/symlink), no en expansión benigna.
-        if resolved_target != action.target:
+        # Anti-symlink del componente-archivo (F3, cerrado en PR-08): comparamos el
+        # path totalmente resuelto contra "padre resuelto / nombre crudo". Esto
+        # permite symlinks de DIRECTORIO de infraestructura (ej. ~/Data → /mnt/hdd/Data:
+        # el padre es symlink pero el archivo objetivo no redirige) y a la vez BLOQUEA
+        # el vector real: cuando el último componente es un symlink que apunta a otro
+        # lado (redirección silenciosa dentro del mismo nivel de riesgo). El escape a
+        # una zona MÁS peligrosa ya lo corta el re-eval de riesgo de arriba.
+        expanded = Path(os.path.expanduser(action.target))
+        try:
+            parent_resolved = str(expanded.parent.resolve() / expanded.name)
+        except OSError:
+            parent_resolved = resolved_target  # padre irresoluble: no disparar acá
+        if resolved_target != parent_resolved:
             reason = (
-                f"resolved path differs from original (path tricks): "
+                f"el archivo objetivo es un symlink que redirige (path tricks): "
                 f"{action.target!r} -> {resolved_target!r}"
             )
             self._audit_blocked(action.target, resolved_target, str(decision.risk_level), reason)
