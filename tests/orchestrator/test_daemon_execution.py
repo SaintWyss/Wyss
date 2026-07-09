@@ -233,3 +233,70 @@ async def test_without_runner_keeps_legacy_shape(
     assert confirmed["accepted"] is True
     assert "success" not in confirmed
     assert not target.exists()
+
+
+async def test_expired_proposal_not_executed(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """PR-08: una propuesta vencida (aunque el reaper no haya corrido) no se ejecuta."""
+    from core.domain.policy import PolicyDecision
+    from core.domain.risk import Outcome, RiskLevel
+
+    target = tmp_path / "no.txt"
+    plan = Plan(
+        task_id="rc-exp",
+        summary="crear nota",
+        steps=(Action("file.write", str(target), {"content": "no"}),),
+        rationale="test",
+    )
+    decision = PolicyDecision(
+        task_id="rc-exp", risk_level=RiskLevel.C, outcome=Outcome.CONFIRM_STRONG
+    )
+    pending_id = pending_store.save(plan, decision, ttl_seconds=-5)  # ya vencida
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    result = await _rpc(
+        daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}
+    )
+    assert result["accepted"] is False
+    assert result["reason"] == "propuesta expirada"
+    assert not target.exists()
+
+
+async def test_confirm_reevaluates_and_rejects_now_dangerous(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """PR-08 (defensa en profundidad): aunque el pending diga C, si el plan es D la
+    re-evaluación al confirmar lo rechaza. El store no es la autoridad; la política sí.
+    """
+    from core.domain.policy import PolicyDecision
+    from core.domain.risk import Outcome, RiskLevel
+
+    plan = Plan(
+        task_id="rc-sneak",
+        summary="borrar passwd",
+        steps=(Action("file.delete", "/etc/passwd"),),
+        rationale="test",
+    )
+    # pending guardado con nivel C mentido (como si un caller lo hubiera degradado)
+    faked = PolicyDecision(
+        task_id="rc-sneak", risk_level=RiskLevel.C, outcome=Outcome.CONFIRM_STRONG
+    )
+    pending_id = pending_store.save(plan, faked, ttl_seconds=600)
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    result = await _rpc(
+        daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}
+    )
+    assert result["accepted"] is False
+    assert "política" in result["reason"]

@@ -163,6 +163,11 @@ class DaemonServer:
         proposal = self._pending_store.load(pending_id)
         if proposal is None or proposal.status != "pending":
             return {"accepted": False, "execution_id": None, "reason": "pending no encontrado"}
+        # Defensa en profundidad: el ttl_reaper corre cada N s, así que una propuesta
+        # puede estar vencida por tiempo pero seguir status='pending' hasta la próxima
+        # barrida. No la ejecutamos: el TTL es un límite duro, no una sugerencia.
+        if _is_expired(proposal.expires_at):
+            return {"accepted": False, "execution_id": None, "reason": "propuesta expirada"}
 
         decision = _decision_from_proposal(proposal)
         accepted = _confirmation_matches(decision, response)
@@ -320,6 +325,17 @@ def _error_response(req_id: object, code: int, message: str) -> JsonDict:
         "error": {"code": code, "message": message},
         "id": req_id,
     }
+
+
+def _is_expired(expires_at: str) -> bool:
+    """True si `expires_at` (ISO 8601) ya pasó. Un timestamp corrupto se trata como
+    vencido (fail-closed): mejor rechazar una confirmación que ejecutar sobre basura."""
+    from datetime import UTC, datetime
+
+    try:
+        return datetime.fromisoformat(expires_at) < datetime.now(UTC)
+    except ValueError:
+        return True
 
 
 def _decision_from_proposal(proposal: PendingProposal) -> PolicyDecision:
