@@ -1395,6 +1395,10 @@ def _render_execution(result: dict[str, Any]) -> None:
     execution_id = result.get("execution_id")
     if result.get("success"):
         console.print(f"Ejecutado ({execution_id}): {detail}", style="green")
+        outputs = result.get("outputs")
+        if isinstance(outputs, list):
+            for output in outputs:
+                console.print(Panel(str(output), expand=False))
         return
     stderr_console.print(f"Ejecución falló ({execution_id}): {detail}", style="red")
 

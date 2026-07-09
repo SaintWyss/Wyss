@@ -55,6 +55,12 @@ _KNOWN_PROVIDERS: frozenset[str] = frozenset({"litellm", "anthropic"})
 _BASE_LEVELS: dict[str, RiskLevel] = {
     "file.read": RiskLevel.A,
     "file.list": RiskLevel.A,
+    "file.stat": RiskLevel.A,
+    # Lecturas git (PR-11): status/log/diff son inspección pura → A. El GitAdapter
+    # rechaza flags con capacidad de escritura (--output/-o) en estos subcomandos.
+    "git.status": RiskLevel.A,
+    "git.log": RiskLevel.A,
+    "git.diff": RiskLevel.A,
     "file.move": RiskLevel.B,
     "file.rename": RiskLevel.B,
     "file.create": RiskLevel.C,

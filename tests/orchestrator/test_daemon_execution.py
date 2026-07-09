@@ -185,19 +185,45 @@ async def test_wrong_confirmation_does_not_execute(
     assert not target.exists()
 
 
-async def test_queued_read_reports_honest_failure(
+async def test_queued_read_executes_and_surfaces_output(
     tmp_path: Path,
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     fake_audit: FakeAudit,
     journal: UndoJournal,
 ) -> None:
-    """A-level ejecuta directo; file.read no está soportado por el executor v0.1 y
-    el resultado lo dice honesto (success=False + TASK_FAILED), sin placeholder."""
+    """PR-11: A-level ejecuta directo y la salida de la lectura llega al owner
+    en la respuesta del daemon (outputs)."""
+    target = tmp_path / "x.txt"
+    target.write_text("hola operador", encoding="utf-8")
     plan = Plan(
         task_id="rc-read",
         summary="leer archivo",
-        steps=(Action("file.read", str(tmp_path / "x.txt")),),
+        steps=(Action("file.read", str(target)),),
+        rationale="test",
+    )
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    asked = await _rpc(daemon, "ask", {"instruction": "leer archivo"})
+    assert asked["outcome"] == "executed"
+    assert asked["success"] is True
+    assert asked["outputs"] == ["hola operador"]
+    assert AuditEventType.TASK_COMPLETED in [e.event_type for e in fake_audit.events]
+
+
+async def test_queued_read_missing_file_reports_honest_failure(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """Leer un archivo inexistente falla honesto (success=False + TASK_FAILED)."""
+    plan = Plan(
+        task_id="rc-read-miss",
+        summary="leer archivo",
+        steps=(Action("file.read", str(tmp_path / "no-existe.txt")),),
         rationale="test",
     )
     runner = _runner(engine, fake_audit, journal, tmp_path)
@@ -206,7 +232,7 @@ async def test_queued_read_reports_honest_failure(
     asked = await _rpc(daemon, "ask", {"instruction": "leer archivo"})
     assert asked["outcome"] == "executed"
     assert asked["success"] is False
-    assert "unsupported" in asked["detail"]
+    assert "not found" in asked["detail"]
     assert AuditEventType.TASK_FAILED in [e.event_type for e in fake_audit.events]
 
 

@@ -235,6 +235,8 @@ class DaemonServer:
         result = await self._runner.run(plan)
         success = bool(getattr(result, "success", False))
         detail = str(getattr(result, "detail", ""))
+        raw_outputs = getattr(result, "outputs", ())
+        outputs = [str(item) for item in raw_outputs] if raw_outputs else []
         self._audit.log(
             AuditEvent.new(
                 task_id=plan.task_id,
@@ -247,7 +249,12 @@ class DaemonServer:
                 payload={"execution_id": execution_id, "success": success},
             )
         )
-        return {"execution_id": execution_id, "success": success, "detail": detail}
+        return {
+            "execution_id": execution_id,
+            "success": success,
+            "detail": detail,
+            "outputs": outputs,
+        }
 
     async def _status(self, params: Mapping[str, Any]) -> JsonDict:
         del params

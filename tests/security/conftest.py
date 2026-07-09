@@ -14,6 +14,10 @@ from core.policy import BUILTIN_DENY, CognitivePolicyEngine
 _BASE_LEVELS: dict[str, RiskLevel] = {
     "file.read": RiskLevel.A,
     "file.list": RiskLevel.A,
+    "file.stat": RiskLevel.A,
+    "git.status": RiskLevel.A,
+    "git.log": RiskLevel.A,
+    "git.diff": RiskLevel.A,
     "file.move": RiskLevel.B,
     "file.rename": RiskLevel.B,
     "file.create": RiskLevel.C,
