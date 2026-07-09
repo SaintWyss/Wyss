@@ -151,8 +151,8 @@ vivos. Sin fallback automático entre tiers (D-17). Mejora pendiente: mensaje di
 
 | PR | Objetivo | Estado |
 |---|---|---|
-| **PR-08 Security Re-Audit** | Auditar superficie de ejecución + cerrar gaps denylist + suite prompts peligrosos + fix F3/TTL | **EN CURSO** |
-| **PR-09 `wyss undo`** | Undo user-facing (§6) | siguiente |
+| **PR-08 Security Re-Audit** | Auditar superficie de ejecución + cerrar gaps denylist + suite prompts peligrosos + fix F3/TTL | **CERRADO** |
+| **PR-09 `wyss undo`** | Undo user-facing (§6) | **CERRADO** |
 | **PR-11 Operator Read Tools** | `file.read/list/stat` + `git.status/log/diff` | v0.1 |
 | **PR-10 HTTPS local + voz** | mkcert, cookie Secure, PWA, voz destrabada | v0.1 |
 | **PR-14 v0.1.0 Stable** | Cierre, docs, smoke, tag | v0.1 |
@@ -223,6 +223,6 @@ dashboards fancy (datos antes que vidrio).
 
 ## 17. Próxima acción
 
-**PR-08 en curso** (este documento se escribió como parte de él). Al cerrar PR-08 →
-**PR-09 `wyss undo`** (§6): el undo es la capacidad que vuelve seguro todo lo destructivo
-que ya se puede ejecutar, y construye sobre el journal que ya existe.
+PR-08 y PR-09 cerrados. Siguiente: **PR-11 Operator Read Tools** (`file.read/list/stat`
++ `git.status/log/diff`) — un operador que no puede mirar es más grave que un token en
+LAN propia. Después PR-10 (HTTPS mkcert + voz) y PR-14 (v0.1.0 estable).

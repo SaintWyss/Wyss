@@ -118,8 +118,14 @@ Aunque el LLM alucine un plan destructivo con `estimated_risk: A`, la denylist g
 ## Undo / rollback
 
 El journal (`undo_entries`) registra la operación inversa antes de mutar; el rollback
-automático corre en ABORT intra-plan. El comando user-facing `wyss undo <task_id>`
-es PR-09 (undo pasa por el MISMO policy engine — no es un bypass).
+automático corre en ABORT intra-plan. `wyss undo <task_id>` (PR-09) deshace las
+mutaciones ya aplicadas: lista las entradas `applied` en orden inverso, corre
+pre-chequeos de colisión (dry-run con `--dry-run`), evalúa el plan inverso con el
+MISMO policy engine (una inversa en denylist → undo rechazado; NO es un bypass),
+pide la palabra del nivel resultante y aplica abortando en el primer fallo. Cada
+entrada revertida pasa a `rolled_back` (segundo undo = nada que deshacer). Todo
+queda auditado (`command.received` → `confirmation.answered` → `task.completed/failed`).
+Shell y git no se deshacen (irreversibles por diseño; el journal no los registra).
 
 ## Huecos conocidos (documentados, no silenciados)
 
