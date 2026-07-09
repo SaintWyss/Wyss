@@ -178,15 +178,37 @@ class UndoJournal:
             return None
         return _row_to_entry(row)
 
+    def load_applied_for_task(self, task_id: str) -> list[UndoEntry]:
+        """Entradas 'applied' de una tarea en orden INVERSO de ejecución (PR-09).
+
+        Es la vista que consume `wyss undo`: solo mutaciones que llegaron a
+        aplicarse (las 'pending' pertenecen a un plan en vuelo; las 'rolled_back'
+        ya fueron revertidas) y en orden inverso, que es el único orden seguro
+        para deshacer.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM undo_entries WHERE task_id=? AND status='applied' "
+            "ORDER BY step_index DESC, created_at DESC",
+            (task_id,),
+        ).fetchall()
+        return [_row_to_entry(row) for row in rows]
+
+    def backup_path(self, entry_id: str) -> Path:
+        """Ruta del backup de sobreescritura de una entrada (exista o no)."""
+        return self._backup_base_dir / entry_id
+
     # ------------------------------------------------------------------
     # Restauración
     # ------------------------------------------------------------------
 
-    def restore(self, entry_id: str) -> bool:
+    def restore(self, entry_id: str, *, expected_status: str = "pending") -> bool:
         """Aplica la operación inversa de una entrada.
 
-        Retorna True si se revirtió; False si la entrada no existe o ya fue
-        procesada (status != 'pending'). NO lanza excepción en esos casos.
+        Retorna True si se revirtió; False si la entrada no existe o su status no
+        es `expected_status`. NO lanza excepción en esos casos. El default
+        ('pending') es el rollback intra-plan del executor (ABORT); `wyss undo`
+        (PR-09) pasa expected_status='applied' para revertir mutaciones ya
+        aplicadas de tareas completadas.
 
         Tipos de inversa soportados:
         - file.move  → shutil.move(dest, origin)
@@ -195,7 +217,7 @@ class UndoJournal:
         - file.restore_trash → lee .trashinfo y mueve files/<name> de vuelta a origin
         """
         entry = self.load(entry_id)
-        if entry is None or entry.status != "pending":
+        if entry is None or entry.status != expected_status:
             return False
 
         op = json.loads(entry.inverse_op)
