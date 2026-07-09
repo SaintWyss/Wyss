@@ -174,6 +174,31 @@ def test_resolved_path_above_max_risk_blocked(
     assert "second wall" in result.detail.lower()
 
 
+def test_path_traversal_to_system_dir_blocked(
+    engine: CognitivePolicyEngine,
+    tmp_path: Path,
+) -> None:
+    """PR-08: un target con `../` que escapa hacia /etc se resuelve ANTES de re-evaluar,
+    y la denylist (system-files-write) lo corta en la segunda muralla."""
+    import asyncio
+
+    traversal = os.path.join(str(tmp_path), *[".."] * 30, "etc", "passwd")
+    action = Action(
+        type="file.write",
+        target=traversal,
+        parameters={"content": "evil"},
+        on_error=ErrorPolicy.ABORT,
+    )
+    fake_audit = FakeAudit()
+    adapter = _make_adapter(engine, fake_audit, tmp_path)
+
+    result = asyncio.run(adapter.execute(action))
+
+    assert result.success is False, f"traversal debía bloquearse: {result}"
+    assert "second wall" in result.detail.lower()
+    assert not Path("/etc/passwd_evil").exists()
+
+
 def test_directory_symlink_parent_is_allowed(
     engine: CognitivePolicyEngine,
     tmp_path: Path,
