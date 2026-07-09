@@ -23,9 +23,15 @@ denylist de nivel D vive en código y no es removible por configuración.
 5. **Confirmación con TTL** — B pide `s`, C pide `CONFIRMAR` literal; la propuesta
    vence (auto-reject) y **una propuesta vencida no se ejecuta aunque el reaper no
    haya corrido** (chequeo de `expires_at` en `daemon._confirm`, PR-08).
-6. **Re-evaluación al confirmar** — al confirmar, el plan se re-evalúa con el engine;
-   si ahora es D/REJECT, se rechaza. El pending store **no es la autoridad**; la
-   política sí (test `test_confirm_reevaluates_and_rejects_now_dangerous`).
+6. **Re-evaluación al confirmar** — al confirmar, el plan se re-evalúa con el engine
+   ANTES de validar la palabra; si ahora es D/REJECT, se rechaza aunque la palabra sea
+   correcta. Si el riesgo re-evaluado SUBIÓ (p.ej. B→C), la palabra exigida es la del
+   nivel nuevo — `s` no alcanza para un plan que hoy es C
+   (`test_confirm_escalated_risk_requires_stronger_word`). El pending store **no es la
+   autoridad**; la política sí (`test_confirm_reevaluates_and_rejects_now_dangerous`).
+   Doble confirm no re-ejecuta: `resolve()` es atómico
+   (`UPDATE … WHERE status='pending'` + rowcount; tests `test_double_confirm_executes_only_once`,
+   `test_double_resolve_is_atomic`).
 7. **Segunda muralla en el adapter** (`filesystem._second_wall`) — resuelve el path
    real y re-evalúa. Bloquea si el riesgo resuelto supera `max_risk` o si el
    **componente-archivo final es un symlink que redirige** (fix F3, PR-08: los
@@ -55,6 +61,10 @@ denylist de nivel D vive en código y no es removible por configuración.
 | `disk-format` | `shell.run` con mkfs/fdisk/parted/`dd if=` |
 | **`shell-fetch-pipe-exec`** | `shell.run` que canaliza descarga a intérprete (`curl\|bash`, `wget\|sh`, `\|python`, `\|perl`) — nuevo PR-08 |
 | **`shell-privilege-escalation`** | `shell.run` con `sudo`/`su`/`doas`/`pkexec` — nuevo PR-08 |
+| **`shell-rm-bypass`** | `shell.run` con `rm`/`rmdir`/`shred` como binario (el borrado va por `file.delete`: papelera+journal) — nuevo PR-08 |
+| **`shell-recursive-delete`** | `rm -rf`/`-fr`/`-r` embebido en args de shell — nuevo PR-08 |
+| **`shell-perm-destructive`** | `chmod 777`/`000`, `chmod -R`, `chown -R` — nuevo PR-08 |
+| **`shell-firewall-tamper`** | Deshabilitar/vaciar firewall: `ufw disable`, `systemctl stop/disable/mask firewalld|nftables`, `iptables -F`, `nft flush` (los reads como `status` NO matchean) — nuevo PR-08 |
 
 La denylist ahora inspecciona también **argumentos de shell** (`DenyRule.arg_substrings`),
 no solo el binario, para tipificar el pipe-a-intérprete sin bloquear usos benignos
@@ -72,6 +82,9 @@ no solo el binario, para tipificar el pipe-a-intérprete sin bloquear usos benig
 | Read/upload SSH keys o .env | **D** `secret-exfiltration` |
 | `curl … \| bash` | **D** `shell-fetch-pipe-exec` |
 | `sudo rm -rf /` | **D** `shell-privilege-escalation` |
+| Deshabilitar firewall (`ufw disable`, `systemctl stop firewalld`, `iptables -F`) | **D** `shell-firewall-tamper` |
+| `rm` por shell (directo o `rm -rf` embebido) | **D** `shell-rm-bypass` / `shell-recursive-delete` |
+| `chmod -R 777` / `chown -R` | **D** `shell-perm-destructive` |
 | `mkfs` / format disco | **D** `disk-format` |
 | `git push --force main` | **D** `git-force-push-main` |
 | Modificar repo del owner | **C** confirmable (no es sistema) |
@@ -110,11 +123,16 @@ es PR-09 (undo pasa por el MISMO policy engine — no es un bypass).
 
 ## Huecos conocidos (documentados, no silenciados)
 
-- `shell-privilege-escalation` matchea `target="sudo"` (nombre), no `/usr/bin/sudo`
-  (ruta absoluta). El ShellAdapter usa nombres de binario y la allowlist vacía cubre
-  el resto; endurecer a rutas si se puebla la allowlist con paths absolutos.
-- Firewall/servicios (`ufw disable`, `systemctl stop`) no tienen regla D dura para
-  evitar over-blocking de sus subcomandos de lectura; hoy gateados por allowlist vacía
-  + confirmación C. Regla dura (target+arg) es candidata si se puebla la allowlist.
+- `shell-privilege-escalation` y `shell-rm-bypass` matchean el NOMBRE del binario
+  (`sudo`, `rm`), no la ruta absoluta (`/usr/bin/sudo`). El ShellAdapter usa nombres y
+  la allowlist vacía cubre el resto; endurecer a rutas si se puebla la allowlist con
+  paths absolutos.
+- `systemctl stop <servicio-no-firewall>` sigue siendo C + allowlist fail-closed, no D:
+  parar un servicio propio (docker, n8n) es un uso legítimo bajo confirmación fuerte.
+  El "salvo política explícita" del scope lo implementa la allowlist (vacía = todo
+  bloqueado; poblarla ES la política explícita).
+- `shell-perm-destructive` matchea `chmod -r*` en minúsculas: bloquea también
+  `chmod -R 755` (recursivo no-777). Over-blocking asumido: recursivo sobre permisos
+  es destructivo por alcance, no solo por modo.
 - No existe tipo de acción de red (`net.*`): una exfiltración por red sería `shell.run`
   (allowlist) o un tipo desconocido (C). Formalizar en v0.2 si se agrega capacidad de red.
