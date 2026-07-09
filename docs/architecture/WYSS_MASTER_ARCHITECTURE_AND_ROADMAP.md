@@ -155,7 +155,7 @@ vivos. Sin fallback automático entre tiers (D-17). Mejora pendiente: mensaje di
 | **PR-08 Security Re-Audit** | Auditar superficie de ejecución + cerrar gaps denylist + suite prompts peligrosos + fix F3/TTL | **CERRADO** |
 | **PR-09 `wyss undo`** | Undo user-facing (§6) | **CERRADO** |
 | **PR-11 Operator Read Tools** | `file.read/list/stat` + `git.status/log/diff` | **CERRADO** |
-| **PR-10 HTTPS local + voz** | mkcert, cookie Secure, PWA, voz destrabada | v0.1 |
+| **PR-10 HTTPS local + voz** | `--tls` self-signed auto (mkcert opcional), cookie Secure, voz destrabada | **CERRADO** (PWA diferida) |
 | **PR-14 v0.1.0 Stable** | Cierre, docs, smoke, tag | v0.1 |
 | PR-15 Scheduler · PR-16 Notion adapter · PR-17 Daily Assistant · PR-12 Memory · PR-13 Intake n8n | | v0.2 |
 
@@ -224,6 +224,6 @@ dashboards fancy (datos antes que vidrio).
 
 ## 17. Próxima acción
 
-PR-08, PR-09 y PR-11 cerrados. Siguiente: **PR-10 HTTPS local + voz** (mkcert, cookie
-Secure, PWA opcional, voz del browser destrabada por secure context). Después PR-14
-(v0.1.0 estable: smoke en teléfono físico + tag).
+PR-08, PR-09, PR-11 y PR-10 cerrados — todo lo técnico de v0.1 está. Siguiente:
+**PR-14 v0.1.0 estable**: smoke en el teléfono físico del owner (`wyss web --lan --tls`,
+aceptar cert, probar voz), docs al día (`docs/OPERATOR.md`) y tag `v0.1.0`.

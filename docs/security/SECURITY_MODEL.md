@@ -124,7 +124,17 @@ Las lecturas son nivel A pero NO están fuera del perímetro:
 - **Auth:** token 32B urlsafe (`compare_digest`) → cookie HttpOnly SameSite=Strict;
   401 en TODO path sin auth. No hay envío de comandos sin autenticar.
 - **El bridge nunca decide riesgo:** solo reenvía al daemon, que re-evalúa.
-- **Residual conocido:** HTTP plano en LAN (token sin TLS) → mitigación en PR-10 (mkcert).
+- **TLS opt-in (PR-10):** `wyss web --tls` sirve HTTPS con cert self-signed
+  auto-generado (`data/tls/`, openssl del sistema, SAN = localhost + IP LAN,
+  clave 0600). La cookie del token lleva `Secure` y el Origin permitido pasa a
+  `https://` (un solo esquema, el servido). La CLI imprime la huella SHA-256 para
+  verificar el cert en el teléfono antes de aceptarlo (TOFU); cero avisos =
+  traer certs de mkcert a `data/tls/` (se usan tal cual si cubren los hosts).
+  Si cambia la IP LAN (DHCP), el cert se regenera solo.
+- **Residual conocido:** el primer accept del cert self-signed es TOFU — un MITM
+  activo EN la LAN durante ese primer pairing podría interponer su cert; la
+  huella impresa existe para eso. mkcert elimina el aviso pero exige instalar su
+  CA en el teléfono (paso manual equivalente).
 
 ## Undo / rollback
 

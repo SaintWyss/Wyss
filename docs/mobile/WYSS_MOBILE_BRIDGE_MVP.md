@@ -123,15 +123,16 @@ probado end-to-end).
 
 ## Limitaciones conocidas
 
-- Voz bloqueada por contexto inseguro sobre `http://<ip>` (ver arriba).
+- Voz sobre `http://<ip>`: bloqueada por contexto inseguro. **Resuelto en PR-10**:
+  `wyss web --lan --tls` sirve HTTPS (cert self-signed auto-generado; huella
+  SHA-256 impresa para verificar en el teléfono; mkcert opcional en `data/tls/`)
+  y el dictado se destraba.
 - Token visible en la URL de pairing (historial del browser del teléfono);
-  se invalida reiniciando `wyss web`.
+  se invalida reiniciando `wyss web`. Con `--tls` además viaja cifrado.
 - Un solo token por corrida: todos los devices comparten sesión.
 - La UI no hace push: la Bandeja se refresca por polling (5s el strip; botón
   "actualizar" en la lista).
 
 ## Próximo PR sugerido
 
-HTTPS local opcional (mkcert) — destraba el dictado por voz en el teléfono y
-cifra el token en tránsito. Después: PWA manifest para "instalar" Wyss en el
-home screen.
+PWA manifest para "instalar" Wyss en el home screen (diferido de PR-10).
