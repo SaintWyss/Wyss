@@ -96,6 +96,7 @@ def build_web_app(
     *,
     token: str,
     lan_hosts: frozenset[str] = frozenset(),
+    tls: bool = False,
 ) -> FastAPI:
     """Construye la app HTTP local autenticada para la UI web.
 
@@ -103,9 +104,14 @@ def build_web_app(
     pasados (el IP LAN detectado por `wyss web --lan`). Nunca es un wildcard:
     un Host ajeno sigue en 403 aunque el server esté bindeado a 0.0.0.0
     (mitiga DNS rebinding). La autenticación por token/cookie no cambia.
+
+    Con `tls=True` (PR-10) el server se sirve por HTTPS: el Origin permitido pasa
+    a ser `https://` (el `http://` deja de aceptarse — un solo esquema, el que se
+    sirve) y la cookie del token lleva el flag `Secure`.
     """
     web_app = FastAPI()
     allowed_hosts = frozenset({"127.0.0.1", "localhost"} | lan_hosts)
+    allowed_scheme = "https" if tls else "http"
 
     @web_app.middleware("http")
     async def local_security_middleware(request: Request, call_next: ASGIHandler) -> Response:
@@ -118,14 +124,14 @@ def build_web_app(
             )
 
         origin = request.headers.get("origin")
-        if origin is not None and not _is_allowed_origin(origin, allowed_hosts):
+        if origin is not None and not _is_allowed_origin(origin, allowed_hosts, allowed_scheme):
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
                 error="origen no permitido",
                 accion="usá la interfaz local servida por wyss web",
             )
 
-        auth_response = _authenticate_request(request, token)
+        auth_response = _authenticate_request(request, token, secure_cookie=tls)
         if auth_response is not None:
             return auth_response
 
@@ -417,12 +423,14 @@ def _is_allowed_host(value: str, allowed: frozenset[str]) -> bool:
     return host in allowed
 
 
-def _is_allowed_origin(value: str, allowed: frozenset[str]) -> bool:
+def _is_allowed_origin(value: str, allowed: frozenset[str], scheme: str) -> bool:
     parsed = urlsplit(value)
-    return parsed.scheme == "http" and parsed.hostname in allowed
+    return parsed.scheme == scheme and parsed.hostname in allowed
 
 
-def _authenticate_request(request: Request, token: str) -> Response | None:
+def _authenticate_request(
+    request: Request, token: str, *, secure_cookie: bool = False
+) -> Response | None:
     path = request.url.path
     query_token = request.query_params.get("token")
     if request.method == "GET" and path == "/" and query_token is not None:
@@ -434,6 +442,7 @@ def _authenticate_request(request: Request, token: str) -> Response | None:
                 httponly=True,
                 samesite="strict",
                 path="/",
+                secure=secure_cookie,
             )
             return response
         return _error_response(

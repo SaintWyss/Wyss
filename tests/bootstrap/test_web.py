@@ -104,6 +104,57 @@ async def test_host_check(client: httpx.AsyncClient) -> None:
     assert _json(response)["error"] == "host no permitido"
 
 
+# ---------------------------------------------------------------------------
+# PR-10: modo TLS — cookie Secure y Origin https (un solo esquema, el servido)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def tls_app(settings: WyssSettings) -> FastAPI:
+    return build_web_app(settings, token=_TOKEN, tls=True)
+
+
+@pytest.fixture
+async def tls_client(tls_app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=tls_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="https://127.0.0.1",
+    ) as async_client:
+        yield async_client
+
+
+async def test_tls_cookie_is_secure(tls_client: httpx.AsyncClient) -> None:
+    redirect = await tls_client.get("/?token=token-test", follow_redirects=False)
+
+    assert redirect.status_code == 302
+    set_cookie = redirect.headers["set-cookie"]
+    assert "wyss_token=token-test" in set_cookie
+    assert "secure" in set_cookie.lower()  # el token jamás viaja por http plano
+
+
+async def test_tls_origin_scheme(tls_client: httpx.AsyncClient) -> None:
+    """Con TLS el Origin permitido es https://<host>; http:// deja de aceptarse."""
+    accepted = await tls_client.get(
+        "/api/status", headers={**_AUTH, "Origin": "https://127.0.0.1"}
+    )
+    assert accepted.status_code == 200
+
+    downgraded = await tls_client.get(
+        "/api/status", headers={**_AUTH, "Origin": "http://127.0.0.1"}
+    )
+    assert downgraded.status_code == 403
+
+
+async def test_without_tls_cookie_not_secure(client: httpx.AsyncClient) -> None:
+    """Sin --tls (localhost puro) la cookie no lleva Secure — si lo llevara, el
+    browser la descartaría sobre http://127.0.0.1 y el pairing local moriría."""
+    redirect = await client.get("/?token=token-test", follow_redirects=False)
+
+    assert redirect.status_code == 302
+    assert "secure" not in redirect.headers["set-cookie"].lower()
+
+
 async def test_origin_check(
     client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

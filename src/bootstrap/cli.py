@@ -4,6 +4,7 @@ import asyncio
 import json
 import secrets
 import sqlite3
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -863,6 +864,14 @@ def web(
             help="Expone la UI también en la red local (pairing del teléfono por URL con token).",
         ),
     ] = False,
+    tls: Annotated[
+        bool,
+        typer.Option(
+            "--tls",
+            help="Sirve por HTTPS (cert self-signed auto-generado en data/tls; "
+            "cifra el token en la LAN y destraba la voz del browser).",
+        ),
+    ] = False,
     config: Annotated[
         Path,
         typer.Option("--config", help="Ruta al config.toml."),
@@ -877,32 +886,62 @@ def web(
 
     from bootstrap.web import build_web_app
 
+    lan_ip: str | None = None
+    if lan:
+        lan_ip = _lan_ip()
+        if lan_ip is None:
+            _error_panel(
+                "no pude detectar la IP LAN de esta máquina",
+                "verificá la conexión de red o levantá sin --lan",
+            )
+            raise typer.Exit(code=1)
+
+    scheme = "https" if tls else "http"
+    ssl_certfile: str | None = None
+    ssl_keyfile: str | None = None
+    tls_note = ""
+    if tls:
+        from bootstrap.tls import ensure_certificate, fingerprint_sha256
+
+        hosts = ["localhost", "127.0.0.1"] + ([lan_ip] if lan_ip else [])
+        try:
+            cert, key = ensure_certificate(settings.data_dir / "tls", hosts)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            _error_panel(
+                f"no pude generar el certificado TLS: {exc}",
+                "verificá que openssl esté instalado, o poné tus certs (mkcert) en "
+                f"{settings.data_dir / 'tls'}/cert.pem y key.pem",
+            )
+            raise typer.Exit(code=1) from exc
+        ssl_certfile, ssl_keyfile = str(cert), str(key)
+        tls_note = (
+            "\nTLS: cert self-firmado — el browser avisa UNA vez; verificá la huella:\n"
+            f"{fingerprint_sha256(cert)}\n"
+            "(cero avisos: generá certs con mkcert y dejalos en data/tls/)"
+        )
+
     token = secrets.token_urlsafe(32)
-    local_url = f"http://127.0.0.1:{port}/?token={token}"
+    local_url = f"{scheme}://127.0.0.1:{port}/?token={token}"
     if not lan:
         console.print(
             Panel(
-                f"{local_url}\n\nSolo accesible desde esta máquina.",
+                f"{local_url}\n\nSolo accesible desde esta máquina." + tls_note,
                 title="Wyss web",
                 expand=False,
             )
         )
         uvicorn.run(
-            build_web_app(settings, token=token),
+            build_web_app(settings, token=token, tls=tls),
             host="127.0.0.1",
             port=port,
             log_level="warning",
+            ssl_certfile=ssl_certfile,
+            ssl_keyfile=ssl_keyfile,
         )
         return
 
-    lan_ip = _lan_ip()
-    if lan_ip is None:
-        _error_panel(
-            "no pude detectar la IP LAN de esta máquina",
-            "verificá la conexión de red o levantá sin --lan",
-        )
-        raise typer.Exit(code=1)
-    phone_url = f"http://{lan_ip}:{port}/?token={token}"
+    assert lan_ip is not None
+    phone_url = f"{scheme}://{lan_ip}:{port}/?token={token}"
     console.print(
         Panel(
             f"PC:       {local_url}\n"
@@ -910,16 +949,19 @@ def web(
             "Pairing: abrí la URL de teléfono UNA vez; el token queda en cookie.\n"
             "⚠ Expuesto a la red local. El PC decide y ejecuta; el teléfono solo\n"
             "propone y confirma. Solo se acepta el host exacto de esta máquina.\n"
-            f"Firewall (ufw): sudo ufw allow from 192.168.0.0/16 to any port {port} proto tcp",
+            f"Firewall (ufw): sudo ufw allow from 192.168.0.0/16 to any port {port} proto tcp"
+            + tls_note,
             title="Wyss web — modo LAN",
             expand=False,
         )
     )
     uvicorn.run(
-        build_web_app(settings, token=token, lan_hosts=frozenset({lan_ip})),
+        build_web_app(settings, token=token, lan_hosts=frozenset({lan_ip}), tls=tls),
         host="0.0.0.0",  # opt-in explícito (--lan); Host allowlist + token gatean
         port=port,
         log_level="warning",
+        ssl_certfile=ssl_certfile,
+        ssl_keyfile=ssl_keyfile,
     )
 
 
