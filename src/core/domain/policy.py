@@ -23,6 +23,12 @@ class DenyRule:
     `action_type` y `target_patterns` son patterns fnmatch; `params_equal` matchea
     igualdad de parámetros (ej. `{"recursive": True, "to_trash": False}`). Una tupla
     vacía de `target_patterns` matchea cualquier target.
+
+    `arg_substrings` matchea si ALGÚN elemento de `Action.parameters["args"]` contiene
+    ALGUNO de los substrings (case-insensitive). Vacío = sin restricción. Sirve para
+    tipificar shell peligroso por sus argumentos (pipe a intérprete), no solo por el
+    binario. TODAS las condiciones presentes se cumplen a la vez (AND), así una regla
+    puede exigir binario X con argumento Y sin bloquear su uso benigno.
     """
 
     id: str
@@ -30,6 +36,7 @@ class DenyRule:
     action_type: str
     target_patterns: tuple[str, ...] = ()
     params_equal: Mapping[str, object] = field(default_factory=dict)
+    arg_substrings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

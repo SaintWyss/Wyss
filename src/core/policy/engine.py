@@ -85,7 +85,9 @@ class CognitivePolicyEngine:
             fnmatch(_normalize(action.target), p) for p in rule.target_patterns
         ):
             return False
-        return all(action.parameters.get(k) == v for k, v in rule.params_equal.items())
+        if not all(action.parameters.get(k) == v for k, v in rule.params_equal.items()):
+            return False
+        return not rule.arg_substrings or _args_contain(action, rule.arg_substrings)
 
     def _matches_aggregate(self, rule: DenyRule, plan: Plan) -> bool:
         """Regla `mass-delete`: el plan agrega > `delete_count_d` borrados → hit D."""
@@ -124,6 +126,20 @@ class CognitivePolicyEngine:
         return any(
             fnmatch(norm, _sensitive_glob(p)) for p in self._rules.thresholds.sensitive_dirs
         )
+
+
+def _args_contain(action: Action, substrings: tuple[str, ...]) -> bool:
+    """True si algún arg de `parameters["args"]` contiene algún substring (case-insensitive).
+
+    El comando completo (target + args unidos) se inspecciona: un plan puede poner el
+    payload peligroso en el target del intérprete o en sus argumentos indistintamente.
+    """
+    raw = action.parameters.get("args", ())
+    parts = [action.target]
+    if isinstance(raw, (list, tuple)):
+        parts.extend(str(item) for item in raw)
+    haystack = " ".join(parts).lower()
+    return any(sub.lower() in haystack for sub in substrings)
 
 
 def _sensitive_glob(pattern: str) -> str:

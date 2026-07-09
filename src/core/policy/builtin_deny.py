@@ -44,9 +44,17 @@ BUILTIN_DENY: Final[tuple[DenyRule, ...]] = (
     ),
     DenyRule(
         id="system-files-write",
-        description="Write/delete bajo /etc, /boot, /usr.",
+        description="Write/delete bajo directorios de sistema (kernel, servicios, root).",
         action_type="file.*",
-        target_patterns=("/etc/**", "/boot/**", "/usr/**"),
+        target_patterns=(
+            "/etc/**",
+            "/boot/**",
+            "/usr/**",
+            "/sys/**",
+            "/proc/**",
+            "/var/lib/**",
+            "/root/**",
+        ),
     ),
     DenyRule(
         id="git-force-push-main",
@@ -60,5 +68,17 @@ BUILTIN_DENY: Final[tuple[DenyRule, ...]] = (
         description="shell.run con comando destructivo de disco (mkfs/fdisk/parted/dd if=).",
         action_type="shell.run",
         target_patterns=("mkfs*", "*fdisk*", "*parted*", "*dd if=*"),
+    ),
+    DenyRule(
+        id="shell-fetch-pipe-exec",
+        description="shell.run que canaliza descarga a un intérprete (curl|bash, wget|sh...).",
+        action_type="shell.run",
+        arg_substrings=("| bash", "|bash", "| sh", "|sh", "| python", "|python", "| perl"),
+    ),
+    DenyRule(
+        id="shell-privilege-escalation",
+        description="shell.run que escala privilegios (sudo/su/doas/pkexec).",
+        action_type="shell.run",
+        target_patterns=("sudo", "su", "doas", "pkexec"),
     ),
 )
