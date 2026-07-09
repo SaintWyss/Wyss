@@ -29,6 +29,10 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike
 
 function detectarCtor(): SpeechRecognitionCtor | null {
+  // Sin secure context (http://<ip-lan>) el mic está vedado aunque el ctor
+  // exista: ocultar el botón y dejar el input de texto (fallback obligatorio).
+  // Con `wyss web --tls` (PR-10) esto pasa a true y la voz se destraba.
+  if (!window.isSecureContext) return null
   const w = window as unknown as {
     SpeechRecognition?: SpeechRecognitionCtor
     webkitSpeechRecognition?: SpeechRecognitionCtor
