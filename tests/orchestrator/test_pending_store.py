@@ -119,6 +119,20 @@ def test_resolve_by_id_does_not_affect_other_pending(
     assert other.status == "pending"
 
 
+def test_double_resolve_is_atomic(pending_store: PendingStore) -> None:
+    """PR-08 (regresión de carrera): resolve() usa UPDATE ... WHERE status='pending' +
+    rowcount, así que de dos confirmaciones concurrentes solo UNA gana; la segunda
+    recibe None y no puede disparar ejecución."""
+    pending_id = pending_store.save(_plan(), _decision(), ttl_seconds=60)
+
+    first = pending_store.resolve(pending_id, resolved_by="owner")
+    second = pending_store.resolve(pending_id, resolved_by="owner")
+
+    assert first is not None
+    assert first.status == "confirmed"
+    assert second is None
+
+
 def test_reap_once_expires_and_audits(pending_store: PendingStore) -> None:
     pending_id = pending_store.save(_plan(), _decision(RiskLevel.C), ttl_seconds=-1)
     audit = FakeAudit()

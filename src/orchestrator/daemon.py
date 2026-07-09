@@ -12,14 +12,13 @@ from uuid import uuid4
 
 from core.domain import ActorType, AuditEvent, AuditEventType, Outcome, RiskLevel
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
-from core.domain.policy import PolicyDecision
 from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
 from core.ports.execution import PlanRunner
 from core.ports.orchestrator import OrchestratorPort
 from orchestrator.dispatcher import dispatch, ttl_for_risk
-from orchestrator.pending_store import PendingProposal, PendingStore
+from orchestrator.pending_store import PendingStore
 from orchestrator.ttl_reaper import ttl_reaper
 
 JsonDict = dict[str, Any]
@@ -169,21 +168,10 @@ class DaemonServer:
         if _is_expired(proposal.expires_at):
             return {"accepted": False, "execution_id": None, "reason": "propuesta expirada"}
 
-        decision = _decision_from_proposal(proposal)
-        accepted = _confirmation_matches(decision, response)
-        self._audit.log(
-            AuditEvent.new(
-                task_id=proposal.task_id,
-                actor_type=ActorType.OWNER,
-                actor_id="owner",
-                event_type=AuditEventType.CONFIRMATION_ANSWERED,
-                message="confirmación respondida",
-                payload={"pending_id": pending_id, "accepted": accepted},
-            )
-        )
-        if not accepted:
-            return {"accepted": False, "execution_id": None}
-
+        # Re-evaluación ANTES de validar la palabra: el pending store no es la
+        # autoridad, la política sí. Si el plan es D ahora, ni la palabra correcta
+        # lo ejecuta; si el riesgo subió (p.ej. B→C), la palabra exigida es la del
+        # nivel NUEVO, no la del nivel guardado.
         plan = _plan_from_json(proposal.plan_json)
         fresh_decision = self._engine.evaluate(plan)
         if (
@@ -201,6 +189,35 @@ class DaemonServer:
                 "execution_id": None,
                 "reason": "plan rechazado por política al confirmar",
             }
+
+        stored_level = RiskLevel[proposal.risk_level]
+        effective_level = max(stored_level, fresh_decision.risk_level)
+        accepted = _confirmation_matches(effective_level, response)
+        self._audit.log(
+            AuditEvent.new(
+                task_id=proposal.task_id,
+                actor_type=ActorType.OWNER,
+                actor_id="owner",
+                event_type=AuditEventType.CONFIRMATION_ANSWERED,
+                message="confirmación respondida",
+                payload={
+                    "pending_id": pending_id,
+                    "accepted": accepted,
+                    "risk_level": effective_level.name,
+                },
+            )
+        )
+        if not accepted:
+            if fresh_decision.risk_level > stored_level:
+                return {
+                    "accepted": False,
+                    "execution_id": None,
+                    "reason": (
+                        f"el riesgo re-evaluado subió a {effective_level.name}: "
+                        "se requiere la confirmación de ese nivel"
+                    ),
+                }
+            return {"accepted": False, "execution_id": None}
 
         resolved = self._pending_store.resolve(pending_id, "owner")
         if resolved is None:
@@ -338,18 +355,10 @@ def _is_expired(expires_at: str) -> bool:
         return True
 
 
-def _decision_from_proposal(proposal: PendingProposal) -> PolicyDecision:
-    return PolicyDecision(
-        task_id=proposal.task_id,
-        risk_level=RiskLevel[proposal.risk_level],
-        outcome=Outcome[proposal.outcome],
-    )
-
-
-def _confirmation_matches(decision: PolicyDecision, response: str) -> bool:
-    if decision.risk_level == RiskLevel.B:
+def _confirmation_matches(level: RiskLevel, response: str) -> bool:
+    if level == RiskLevel.B:
         return response.lower() == "s"
-    if decision.risk_level == RiskLevel.C:
+    if level == RiskLevel.C:
         return response == "CONFIRMAR"
     return False
 

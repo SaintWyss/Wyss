@@ -268,6 +268,82 @@ async def test_expired_proposal_not_executed(
     assert not target.exists()
 
 
+async def test_double_confirm_executes_only_once(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """PR-08: el segundo confirm sobre el mismo pending NO re-ejecuta (resolve atómico:
+    UPDATE ... WHERE status='pending' → el segundo caller ve status='confirmed' y corta).
+    """
+    target = tmp_path / "una-vez.txt"
+    plan = Plan(
+        task_id="rc-double",
+        summary="crear nota",
+        steps=(Action("file.write", str(target), {"content": "una vez"}),),
+        rationale="test",
+    )
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    asked = await _rpc(daemon, "ask", {"instruction": "crear nota"})
+    first = await _rpc(
+        daemon, "confirm", {"pending_id": asked["pending_id"], "response": "CONFIRMAR"}
+    )
+    second = await _rpc(
+        daemon, "confirm", {"pending_id": asked["pending_id"], "response": "CONFIRMAR"}
+    )
+
+    assert first["accepted"] is True
+    assert second["accepted"] is False
+    assert second["reason"] == "pending no encontrado"
+    completed = [
+        e for e in fake_audit.events if e.event_type is AuditEventType.TASK_COMPLETED
+    ]
+    assert len(completed) == 1  # ejecutó exactamente una vez
+
+
+async def test_confirm_escalated_risk_requires_stronger_word(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    """PR-08: si la re-evaluación sube el riesgo (pending dice B, plan es C), la palabra
+    exigida es la del nivel NUEVO: 's' no alcanza, CONFIRMAR sí."""
+    from core.domain.policy import PolicyDecision
+    from core.domain.risk import Outcome, RiskLevel
+
+    target = tmp_path / "escalada.txt"
+    plan = Plan(
+        task_id="rc-esc",
+        summary="crear nota",
+        steps=(Action("file.write", str(target), {"content": "x"}),),  # C real
+        rationale="test",
+    )
+    # pending guardado con nivel B mentido (como si la política hubiera cambiado después)
+    stale = PolicyDecision(
+        task_id="rc-esc", risk_level=RiskLevel.B, outcome=Outcome.CONFIRM_SIMPLE
+    )
+    pending_id = pending_store.save(plan, stale, ttl_seconds=600)
+    runner = _runner(engine, fake_audit, journal, tmp_path)
+    daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
+
+    weak = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "s"})
+    assert weak["accepted"] is False
+    assert "re-evaluado" in weak["reason"]
+    assert not target.exists()
+
+    strong = await _rpc(
+        daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}
+    )
+    assert strong["accepted"] is True
+    assert target.exists()
+
+
 async def test_confirm_reevaluates_and_rejects_now_dangerous(
     tmp_path: Path,
     engine: CognitivePolicyEngine,
