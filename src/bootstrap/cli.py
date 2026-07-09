@@ -25,7 +25,7 @@ from bootstrap.config import WyssSettings as BootstrapWyssSettings
 from bootstrap.config import load_settings
 from bootstrap.gateway import build_gateway
 from core.domain import TipoTransaccion, Transaccion
-from core.domain.audit import ActorType, AuditEvent, Span
+from core.domain.audit import ActorType, AuditEvent, AuditEventType, Span
 from core.domain.config import WyssSettings
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
 from core.domain.knowledge import (
@@ -51,6 +51,7 @@ from execution.filesystem import FileSystemAdapter
 from execution.git import GitAdapter
 from execution.journal import UndoJournal
 from execution.shell import ShellAdapter
+from execution.undo import UndoStep, apply_undo, inverse_plan, plan_undo
 from gateway.providers.ollama import OllamaEmbeddingProvider
 from gateway.secrets_patterns import BUILTIN_SECRET_PATTERNS
 from knowledge.chunker import TokenChunker
@@ -560,6 +561,166 @@ def confirm(
     finally:
         if pending_store is not None:
             pending_store.close()
+
+
+@app.command()
+def undo(
+    task_id: str,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Muestra qué se desharía sin tocar nada."),
+    ] = False,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Deshace las mutaciones aplicadas de una tarea (journal → inversas + confirmación).
+
+    El undo pasa por el MISMO policy engine que todo lo demás: las operaciones
+    inversas se evalúan como un plan y piden confirmación a su nivel de riesgo.
+    """
+    audit_logger: SqliteAuditLogger | None = None
+    journal: UndoJournal | None = None
+    try:
+        settings = load_settings(config)
+        exec_dir = settings.data_dir / "execution"
+        journal_db = exec_dir / "journal.db"
+        if not journal_db.exists():
+            _empty_state(
+                "no hay journal de ejecución todavía (ninguna mutación registrada)",
+                'wyss ask "<instrucción>"',
+            )
+            return
+        journal = UndoJournal(journal_db, backup_base_dir=exec_dir / "undo_backups")
+        steps = plan_undo(journal, task_id)
+        if not steps:
+            _empty_state(
+                f"la tarea '{task_id}' no tiene mutaciones aplicadas para deshacer",
+                "wyss audit  (el task_id aparece en la columna task)",
+            )
+            return
+
+        plan = inverse_plan(task_id, steps)
+        engine = CognitivePolicyEngine(settings.policy)
+        decision = engine.evaluate(plan)
+        _print_undo_table(task_id, steps, decision)
+        if dry_run:
+            return
+
+        blocked = [step for step in steps if not step.ready]
+        if blocked:
+            _error_panel(
+                f"el estado cambió desde la ejecución: {blocked[0].detail}",
+                f"revisá con: wyss undo {task_id} --dry-run",
+            )
+            raise typer.Exit(code=1)
+
+        audit_logger = SqliteAuditLogger(settings.audit_db)
+        audit_logger.log(
+            AuditEvent.new(
+                task_id=plan.task_id,
+                actor_type=ActorType.OWNER,
+                actor_id="owner",
+                event_type=AuditEventType.COMMAND_RECEIVED,
+                message=f"wyss undo {task_id}",
+                payload={"undo_of": task_id, "steps": len(steps)},
+            )
+        )
+        if decision.outcome == Outcome.REJECT or decision.risk_level >= RiskLevel.D:
+            audit_logger.log(
+                AuditEvent.new(
+                    task_id=plan.task_id,
+                    actor_type=ActorType.SYSTEM,
+                    actor_id="policy",
+                    event_type=AuditEventType.POLICY_DECISION,
+                    message="undo rechazado por política",
+                    payload={
+                        "risk_level": decision.risk_level.name,
+                        "matched_rules": list(decision.matched_rules),
+                    },
+                )
+            )
+            _error_panel(
+                "la política rechaza las operaciones inversas (nivel D): "
+                + ", ".join(decision.matched_rules),
+                "el undo pasa por el mismo engine que todo lo demás — no es un bypass",
+            )
+            raise typer.Exit(code=1)
+
+        if decision.outcome != Outcome.EXECUTE:
+            accepted = prompt_confirmation(decision, console)
+            audit_logger.log(
+                AuditEvent.new(
+                    task_id=plan.task_id,
+                    actor_type=ActorType.OWNER,
+                    actor_id="owner",
+                    event_type=AuditEventType.CONFIRMATION_ANSWERED,
+                    message="confirmación de undo respondida",
+                    payload={"accepted": accepted, "risk_level": decision.risk_level.name},
+                )
+            )
+            if not accepted:
+                console.print("Undo no confirmado. Nada se tocó.")
+                return
+
+        success, details = apply_undo(journal, steps)
+        audit_logger.log(
+            AuditEvent.new(
+                task_id=plan.task_id,
+                actor_type=ActorType.SYSTEM,
+                actor_id="undo",
+                event_type=(
+                    AuditEventType.TASK_COMPLETED if success else AuditEventType.TASK_FAILED
+                ),
+                message=(
+                    f"undo de {task_id}: {len(details)} paso(s)"
+                    if success
+                    else f"undo de {task_id} falló: {details[-1]}"
+                ),
+                payload={"undo_of": task_id, "details": details},
+            )
+        )
+        if not success:
+            _error_panel(
+                f"el undo se detuvo en el primer fallo: {details[-1]}",
+                f"revisá el estado con: wyss undo {task_id} --dry-run",
+            )
+            raise typer.Exit(code=1)
+        console.print(
+            f"[green]✓ Deshecho:[/] {len(steps)} operación(es) revertida(s) de '{task_id}'."
+        )
+    except typer.Exit:
+        raise
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error, RuntimeError, KeyError) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+    finally:
+        if journal is not None:
+            journal.close()
+        if audit_logger is not None:
+            audit_logger.close()
+
+
+def _print_undo_table(
+    task_id: str, steps: Sequence[UndoStep], decision: PolicyDecision
+) -> None:
+    """Dry-run del undo: qué se revertiría, en qué orden y con qué nivel de riesgo."""
+    table = Table(title=f"Undo de '{task_id}' — nivel {decision.risk_level.name}")
+    table.add_column("#", justify="right")
+    table.add_column("inversa")
+    table.add_column("target", overflow="fold")
+    table.add_column("estado")
+    for index, step in enumerate(steps, start=1):
+        estado = "[green]listo[/]" if step.ready else f"[red]{step.detail}[/]"
+        table.add_row(str(index), step.inverse.type, step.inverse.target, estado)
+    console.print(table)
 
 
 @app.command()
