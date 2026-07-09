@@ -27,8 +27,10 @@ from gateway.providers.litellm import LiteLLMProvider
 from gateway.router import ModelRouter
 from gateway.traces import TraceStore
 
-# URL base del proxy LiteLLM del owner (localhost:4000). Override por env si difiere.
-_LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+# URL base default del proxy LiteLLM del owner (localhost:4000). El override por env
+# LITELLM_BASE_URL se lee en build time (no en import) para que el `.env` cargado por
+# load_settings() llegue a tiempo.
+_LITELLM_DEFAULT_BASE_URL = "http://localhost:4000"
 
 
 def build_gateway(
@@ -76,7 +78,7 @@ def build_gateway(
     providers: dict[str, ModelProvider] = {
         "litellm": LiteLLMProvider(
             client,
-            base_url=_LITELLM_BASE_URL,
+            base_url=os.environ.get("LITELLM_BASE_URL", _LITELLM_DEFAULT_BASE_URL),
             master_key=os.environ.get("LITELLM_MASTER_KEY", ""),
         ),
         "anthropic": AnthropicProvider(

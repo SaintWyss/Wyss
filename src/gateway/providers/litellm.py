@@ -21,7 +21,12 @@ class LiteLLMProvider:
         self, client: httpx.AsyncClient, base_url: str, master_key: str
     ) -> None:
         self._client = client
-        self._url = f"{base_url.rstrip('/')}/v1/chat/completions"
+        # El adapter es dueño del path: acepta base URL con o sin `/v1` (ambas
+        # convenciones circulan — OpenAI SDK usa base con /v1) y evita `/v1/v1`.
+        base = base_url.rstrip("/")
+        if base.endswith("/v1"):
+            base = base[: -len("/v1")]
+        self._url = f"{base}/v1/chat/completions"
         self._headers = {"authorization": f"Bearer {master_key}"}  # nunca logueado
 
     @property

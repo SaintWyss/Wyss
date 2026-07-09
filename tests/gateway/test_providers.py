@@ -171,3 +171,27 @@ async def test_fake_model_provider_puede_inyectar_excepcion(
 
     with pytest.raises(httpx.ConnectTimeout):
         await fake.complete(request_economico)
+
+
+async def test_litellm_base_url_con_v1_no_duplica_path(
+    http_client: httpx.AsyncClient, respx_mock: respx.MockRouter
+) -> None:
+    """(2c) Regresión smoke RC: base_url estilo OpenAI (`.../v1`) no produce `/v1/v1`."""
+    route = respx_mock.post("http://localhost:4000/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+    )
+    provider = LiteLLMProvider(
+        http_client, base_url="http://localhost:4000/v1", master_key="sk-master"
+    )
+
+    await provider.complete(
+        ModelRequest(prompt="ping", model_alias="gemini-default", max_tokens=8)
+    )
+
+    assert route.calls.last.request.url.path == "/v1/chat/completions"
