@@ -66,6 +66,12 @@ def _get_int(params: object, key: str, default: int = 0) -> int:
     return default
 
 
+# Topes de las lecturas (PR-11): la salida viaja por JSON-RPC y termina en consola/
+# contexto de LLM — nunca volcar un archivo de 2 GB ni un directorio de 100k entradas.
+_READ_CAP_BYTES = 256 * 1024
+_LIST_CAP_ENTRIES = 500
+
+
 def _sha256(path: Path) -> str:
     """SHA-256 en chunks de 64 KiB. NUNCA hashear 2 TB entero (RESEARCH Anti-Patterns)."""
     h = hashlib.sha256()
@@ -220,6 +226,12 @@ class FileSystemAdapter:
                 return await self._execute_move(action, resolved_path)
             elif action.type == "file.delete":
                 return await self._execute_delete(action, resolved_path)
+            elif action.type == "file.read":
+                return self._execute_read(resolved_path)
+            elif action.type == "file.list":
+                return self._execute_list(resolved_path)
+            elif action.type == "file.stat":
+                return self._execute_stat(resolved_path)
             else:
                 return ToolResult(
                     success=False,
@@ -425,6 +437,90 @@ class FileSystemAdapter:
     # ------------------------------------------------------------------
     # Verify (D-67)
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Lecturas (PR-11) — sin journal: no mutan nada. La segunda muralla ya
+    # corrió (leer ~/.ssh o .env resuelve D por secret-exfiltration → bloqueado).
+    # ------------------------------------------------------------------
+
+    def _execute_read(self, resolved_path: Path) -> ToolResult:
+        """file.read: contenido con tope de _READ_CAP_BYTES, honesto si trunca."""
+        if not resolved_path.is_file():
+            return ToolResult(
+                success=False,
+                detail=f"file not found: {resolved_path}",
+                payload={"resolved_target": str(resolved_path)},
+            )
+        size = resolved_path.stat().st_size
+        with open(resolved_path, "rb") as f:
+            raw = f.read(_READ_CAP_BYTES)
+        truncated = size > _READ_CAP_BYTES
+        content = raw.decode("utf-8", errors="replace")
+        if truncated:
+            content += f"\n… [truncado: {size} bytes totales, mostrando {_READ_CAP_BYTES}]"
+        return ToolResult(
+            success=True,
+            detail=f"read {min(size, _READ_CAP_BYTES)} of {size} bytes from {resolved_path}",
+            payload={
+                "resolved_target": str(resolved_path),
+                "output": content,
+                "size": size,
+                "truncated": truncated,
+            },
+        )
+
+    def _execute_list(self, resolved_path: Path) -> ToolResult:
+        """file.list: listado no-recursivo ordenado, con tope de entradas."""
+        if not resolved_path.is_dir():
+            return ToolResult(
+                success=False,
+                detail=f"not a directory: {resolved_path}",
+                payload={"resolved_target": str(resolved_path)},
+            )
+        entries = sorted(resolved_path.iterdir(), key=lambda p: p.name)
+        total = len(entries)
+        shown = entries[:_LIST_CAP_ENTRIES]
+        lines = [f"{entry.name}/" if entry.is_dir() else entry.name for entry in shown]
+        if total > _LIST_CAP_ENTRIES:
+            lines.append(f"… [{total - _LIST_CAP_ENTRIES} entradas más]")
+        return ToolResult(
+            success=True,
+            detail=f"listed {total} entries in {resolved_path}",
+            payload={
+                "resolved_target": str(resolved_path),
+                "output": "\n".join(lines),
+                "count": total,
+            },
+        )
+
+    def _execute_stat(self, resolved_path: Path) -> ToolResult:
+        """file.stat: tipo, tamaño, mtime y modo — inspección sin abrir el archivo."""
+        if not resolved_path.exists():
+            return ToolResult(
+                success=False,
+                detail=f"path not found: {resolved_path}",
+                payload={"resolved_target": str(resolved_path)},
+            )
+        info = resolved_path.stat()
+        kind = "dir" if resolved_path.is_dir() else "file"
+        from datetime import UTC, datetime
+
+        mtime = datetime.fromtimestamp(info.st_mtime, tz=UTC).isoformat()
+        output = (
+            f"{resolved_path}\n"
+            f"tipo: {kind}  tamaño: {info.st_size} bytes\n"
+            f"mtime: {mtime}  modo: {oct(info.st_mode & 0o7777)}"
+        )
+        return ToolResult(
+            success=True,
+            detail=f"stat {resolved_path}",
+            payload={
+                "resolved_target": str(resolved_path),
+                "output": output,
+                "size": info.st_size,
+                "kind": kind,
+            },
+        )
 
     async def verify(self, action: Action, result: ToolResult) -> Verification:
         """Verificación post-ejecución por tipo de acción (D-67).

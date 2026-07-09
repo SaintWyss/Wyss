@@ -132,6 +132,43 @@ async def test_allowed_status_runs(git_repo: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# PR-11: flags con capacidad de escritura bloqueados en subcomandos de lectura
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_read_subcommand_write_flag_blocked(git_repo: Path) -> None:
+    """git log/diff/status son nivel A (lectura): --output/-o escribe a disco y se
+    bloquea sin spawnar proceso, auditado."""
+    audit = FakeAudit()
+    adapter = _make_adapter(audit, git_repo)
+
+    for args in (("--output=/tmp/exfil",), ("-o", "/tmp/exfil")):
+        result = await adapter.execute(_make_action("log", *args))
+        assert result.success is False
+        assert "no permitido" in result.detail
+        assert result.payload.get("blocked") == "write_flag"
+        assert "returncode" not in result.payload  # no hubo proceso
+
+    blocked_events = [
+        e for e in audit.events if e.payload.get("blocked") == "write_flag"
+    ]
+    assert len(blocked_events) == 2
+
+
+@pytest.mark.asyncio
+async def test_read_subcommand_normal_args_still_run(git_repo: Path) -> None:
+    """Args normales de lectura (p.ej. --oneline) siguen pasando."""
+    audit = FakeAudit()
+    adapter = _make_adapter(audit, git_repo)
+
+    result = await adapter.execute(_make_action("status", "--short"))
+
+    assert result.success is True
+    assert result.payload["returncode"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Test 3: verify() pasa con returncode == 0
 # ---------------------------------------------------------------------------
 

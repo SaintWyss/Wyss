@@ -32,6 +32,18 @@ DEFAULT_ALLOWED_SUBCOMMANDS: frozenset[str] = frozenset(
     {"status", "diff", "add", "commit", "log"}
 )
 
+# Subcomandos de lectura (PR-11): clasifican nivel A en la política, así que NO pueden
+# aceptar flags con capacidad de escritura — `git log --output=<archivo>` escribe.
+_READ_SUBCOMMANDS: frozenset[str] = frozenset({"status", "log", "diff"})
+
+
+def _has_write_capable_flag(args: Sequence[str]) -> str | None:
+    """Devuelve el flag ofensivo si algún arg puede escribir a disco, o None."""
+    for arg in args:
+        if arg == "-o" or arg.startswith("--output"):
+            return arg
+    return None
+
 
 class GitAdapter:
     """Adapter git que ejecuta solo subcomandos en el allowlist, vía argv (shell=False).
@@ -121,6 +133,31 @@ class GitAdapter:
                 detail=f"subcomando git '{subcommand}' no está en el allowlist (blocked)",
                 payload={"blocked": "allowlist", "binary": subcommand},
             )
+
+        # --- Flags de escritura en subcomandos de lectura (PR-11, fail-closed) ---
+        if subcommand in _READ_SUBCOMMANDS:
+            offending = _has_write_capable_flag(args)
+            if offending is not None:
+                self._audit.log(
+                    AuditEvent.new(
+                        actor_type=ActorType.SYSTEM,
+                        actor_id=self.name,
+                        event_type=AuditEventType.ACTION_COMPLETED,
+                        message=(
+                            f"flag con capacidad de escritura '{offending}' bloqueado "
+                            f"en subcomando de lectura 'git {subcommand}'"
+                        ),
+                        payload={"blocked": "write_flag", "flag": offending},
+                    )
+                )
+                return ToolResult(
+                    success=False,
+                    detail=(
+                        f"flag '{offending}' no permitido en 'git {subcommand}' "
+                        "(lectura nivel A no puede escribir a disco)"
+                    ),
+                    payload={"blocked": "write_flag", "flag": offending},
+                )
 
         # --- Resolver binario git ---
         resolved_git = self._resolve_git()

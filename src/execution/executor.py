@@ -37,12 +37,30 @@ class ExecutorResult:
     `applied_entries` lista los entry_ids del journal que fueron aplicados
     (útil para auditoría post-ejecución).
     `failed_step` es el índice (base-0) del paso que falló, o None en éxito.
+    `outputs` (PR-11) son las salidas visibles de los pasos de lectura
+    (payload "output" de file.read/list/stat, o "stdout" de git/shell) — es lo
+    que el daemon devuelve al owner para que un operador que lee pueda mostrar.
     """
 
     success: bool
     detail: str
     applied_entries: tuple[str, ...] = field(default_factory=tuple)
     failed_step: int | None = None
+    outputs: tuple[str, ...] = field(default_factory=tuple)
+
+
+def _visible_output(result: ToolResult) -> str | None:
+    """Salida visible de un paso: 'output' (lecturas de fs) o 'stdout' (git/shell)."""
+    try:
+        output = result.payload.get("output")
+        if isinstance(output, str) and output:
+            return output
+        stdout = result.payload.get("stdout")
+        if isinstance(stdout, str) and stdout:
+            return stdout
+    except AttributeError:
+        pass
+    return None
 
 
 class PlanExecutor:
@@ -144,6 +162,7 @@ class PlanExecutor:
         """
         # Lista mutable de (step_index, entry_id) para rollback en orden inverso
         applied_entry_ids: list[str] = []
+        step_outputs: list[str] = []
 
         for step_index, action in enumerate(plan.steps):
             adapter = self._adapter_for(action)
@@ -181,6 +200,12 @@ class PlanExecutor:
             if not step_failed and entry_id is not None:
                 applied_entry_ids.append(entry_id)
 
+            # --- Aflorar salida visible del paso (PR-11: lecturas) ---
+            if not step_failed:
+                output = _visible_output(result)
+                if output:
+                    step_outputs.append(output)
+
             # --- Manejar falla del paso según on_error ---
             if step_failed:
                 return await self._handle_failure(
@@ -200,6 +225,7 @@ class PlanExecutor:
             detail=f"plan {plan.task_id!r} completado ({len(plan.steps)} pasos)",
             applied_entries=tuple(applied_entry_ids),
             failed_step=None,
+            outputs=tuple(step_outputs),
         )
 
     # ------------------------------------------------------------------
