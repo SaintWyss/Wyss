@@ -695,12 +695,19 @@ def status(
 @app.command()
 def web(
     port: Annotated[int, typer.Option("--port")] = 7777,
+    lan: Annotated[
+        bool,
+        typer.Option(
+            "--lan",
+            help="Expone la UI también en la red local (pairing del teléfono por URL con token).",
+        ),
+    ] = False,
     config: Annotated[
         Path,
         typer.Option("--config", help="Ruta al config.toml."),
     ] = Path("config/config.toml"),
 ) -> None:
-    """Levanta la UI web local de Wyss."""
+    """Levanta la UI web local de Wyss (con --lan, accesible desde el teléfono)."""
     try:
         settings = load_settings(config)
     except ConfigError as exc:
@@ -710,20 +717,62 @@ def web(
     from bootstrap.web import build_web_app
 
     token = secrets.token_urlsafe(32)
-    url = f"http://127.0.0.1:{port}/?token={token}"
+    local_url = f"http://127.0.0.1:{port}/?token={token}"
+    if not lan:
+        console.print(
+            Panel(
+                f"{local_url}\n\nSolo accesible desde esta máquina.",
+                title="Wyss web",
+                expand=False,
+            )
+        )
+        uvicorn.run(
+            build_web_app(settings, token=token),
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+        )
+        return
+
+    lan_ip = _lan_ip()
+    if lan_ip is None:
+        _error_panel(
+            "no pude detectar la IP LAN de esta máquina",
+            "verificá la conexión de red o levantá sin --lan",
+        )
+        raise typer.Exit(code=1)
+    phone_url = f"http://{lan_ip}:{port}/?token={token}"
     console.print(
         Panel(
-            f"{url}\n\nSolo accesible desde esta máquina.",
-            title="Wyss web",
+            f"PC:       {local_url}\n"
+            f"Teléfono: {phone_url}\n\n"
+            "Pairing: abrí la URL de teléfono UNA vez; el token queda en cookie.\n"
+            "⚠ Expuesto a la red local. El PC decide y ejecuta; el teléfono solo\n"
+            "propone y confirma. Solo se acepta el host exacto de esta máquina.\n"
+            f"Firewall (ufw): sudo ufw allow from 192.168.0.0/16 to any port {port} proto tcp",
+            title="Wyss web — modo LAN",
             expand=False,
         )
     )
     uvicorn.run(
-        build_web_app(settings, token=token),
-        host="127.0.0.1",
+        build_web_app(settings, token=token, lan_hosts=frozenset({lan_ip})),
+        host="0.0.0.0",  # opt-in explícito (--lan); Host allowlist + token gatean
         port=port,
         log_level="warning",
     )
+
+
+def _lan_ip() -> str | None:
+    """IP local de salida (sin tráfico real: UDP connect no envía paquetes)."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))  # TEST-NET-1: solo resuelve la ruta local
+            ip = str(probe.getsockname()[0])
+    except OSError:
+        return None
+    return None if ip.startswith("127.") else ip
 
 
 def _ledger_db_path(settings: WyssSettings) -> Path:

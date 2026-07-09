@@ -91,14 +91,26 @@ class TransaccionBody(BaseModel):
     fecha: str | None = None
 
 
-def build_web_app(settings: WyssSettings, *, token: str) -> FastAPI:
-    """Construye la app HTTP local autenticada para la UI web."""
+def build_web_app(
+    settings: WyssSettings,
+    *,
+    token: str,
+    lan_hosts: frozenset[str] = frozenset(),
+) -> FastAPI:
+    """Construye la app HTTP local autenticada para la UI web.
+
+    `lan_hosts` extiende la allowlist de Host/Origin SOLO a los hosts exactos
+    pasados (el IP LAN detectado por `wyss web --lan`). Nunca es un wildcard:
+    un Host ajeno sigue en 403 aunque el server esté bindeado a 0.0.0.0
+    (mitiga DNS rebinding). La autenticación por token/cookie no cambia.
+    """
     web_app = FastAPI()
+    allowed_hosts = frozenset({"127.0.0.1", "localhost"} | lan_hosts)
 
     @web_app.middleware("http")
     async def local_security_middleware(request: Request, call_next: ASGIHandler) -> Response:
         host = request.headers.get("host", "")
-        if not _is_allowed_host(host):
+        if not _is_allowed_host(host, allowed_hosts):
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
                 error="host no permitido",
@@ -106,7 +118,7 @@ def build_web_app(settings: WyssSettings, *, token: str) -> FastAPI:
             )
 
         origin = request.headers.get("origin")
-        if origin is not None and not _is_allowed_origin(origin):
+        if origin is not None and not _is_allowed_origin(origin, allowed_hosts):
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
                 error="origen no permitido",
@@ -398,16 +410,16 @@ def _daemon_down_response() -> JSONResponse:
     )
 
 
-def _is_allowed_host(value: str) -> bool:
+def _is_allowed_host(value: str, allowed: frozenset[str]) -> bool:
     if not value:
         return False
     host = value.rsplit("@", maxsplit=1)[-1].split(":", maxsplit=1)[0].lower()
-    return host in {"127.0.0.1", "localhost"}
+    return host in allowed
 
 
-def _is_allowed_origin(value: str) -> bool:
+def _is_allowed_origin(value: str, allowed: frozenset[str]) -> bool:
     parsed = urlsplit(value)
-    return parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
+    return parsed.scheme == "http" and parsed.hostname in allowed
 
 
 def _authenticate_request(request: Request, token: str) -> Response | None:

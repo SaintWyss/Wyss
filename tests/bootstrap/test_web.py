@@ -382,3 +382,69 @@ async def test_borjes_launcher(
     assert ok.status_code == 200
     assert _json(ok) == {"lanzado": True}
     assert spawned == [[str(script)]]
+
+
+# ---------------------------------------------------------------------------
+# Modo LAN (mobile bridge): allowlist exacta de hosts, jamás wildcard
+# ---------------------------------------------------------------------------
+
+_LAN_IP = "192.168.100.5"
+
+
+@pytest.fixture
+async def lan_client(settings: WyssSettings) -> AsyncIterator[httpx.AsyncClient]:
+    lan_app = build_web_app(settings, token=_TOKEN, lan_hosts=frozenset({_LAN_IP}))
+    transport = httpx.ASGITransport(app=lan_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=f"http://{_LAN_IP}",
+    ) as async_client:
+        yield async_client
+
+
+async def test_lan_host_permitido_con_cookie(lan_client: httpx.AsyncClient) -> None:
+    """El host LAN declarado accede con cookie; el flujo de pairing por token funciona."""
+    assert (await lan_client.get("/api/status", headers=_AUTH)).status_code == 200
+
+    redirect = await lan_client.get(f"/?token={_TOKEN}", follow_redirects=False)
+    assert redirect.status_code == 302
+    assert f"wyss_token={_TOKEN}" in redirect.headers["set-cookie"]
+
+
+async def test_lan_no_autenticado_401(lan_client: httpx.AsyncClient) -> None:
+    """LAN habilitada NO implica ejecución sin auth: sin cookie/token → 401 en todo path."""
+    assert (await lan_client.get("/api/status")).status_code == 401
+    assert (
+        await lan_client.post("/api/ask", json={"instruction": "hola"})
+    ).status_code == 401
+
+
+async def test_lan_host_ajeno_403(lan_client: httpx.AsyncClient) -> None:
+    """La allowlist es exacta: otro host (DNS rebinding) sigue en 403 aun autenticado."""
+    response = await lan_client.get(
+        "/api/status", headers={"Host": "evil.com", **_AUTH}
+    )
+    assert response.status_code == 403
+    assert _json(response)["error"] == "host no permitido"
+
+
+async def test_lan_origin_permitido_y_ajeno(lan_client: httpx.AsyncClient) -> None:
+    """Origin del propio host LAN pasa; un Origin ajeno se corta en 403."""
+    ok = await lan_client.get(
+        "/api/status", headers={"Origin": f"http://{_LAN_IP}:7777", **_AUTH}
+    )
+    assert ok.status_code == 200
+
+    rejected = await lan_client.get(
+        "/api/status", headers={"Origin": "http://evil.com", **_AUTH}
+    )
+    assert rejected.status_code == 403
+    assert _json(rejected)["error"] == "origen no permitido"
+
+
+async def test_default_sigue_solo_localhost(client: httpx.AsyncClient) -> None:
+    """Sin lan_hosts (default), el host LAN NO está permitido: LAN es opt-in."""
+    response = await client.get(
+        "/api/status", headers={"Host": f"{_LAN_IP}:7777", **_AUTH}
+    )
+    assert response.status_code == 403
