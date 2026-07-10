@@ -935,7 +935,7 @@ def web(
             "(cero avisos: generá certs con mkcert y dejalos en data/tls/)"
         )
 
-    token = secrets.token_urlsafe(32)
+    token = _load_or_create_web_token(settings.data_dir)
     local_url = f"{scheme}://127.0.0.1:{port}/?token={token}"
     if not lan:
         console.print(
@@ -961,7 +961,9 @@ def web(
         Panel(
             f"PC:       {local_url}\n"
             f"Teléfono: {phone_url}\n\n"
-            "Pairing: abrí la URL de teléfono UNA vez; el token queda en cookie.\n"
+            "Pairing: abrí la URL de teléfono UNA vez; quedás logueado 30 días\n"
+            "(el token persiste en data/web_token: reiniciar el server no desloguea).\n"
+            "App: menú de Chrome → 'Agregar a la pantalla de inicio' → ícono Wyss.\n"
             "⚠ Expuesto a la red local. El PC decide y ejecuta; el teléfono solo\n"
             "propone y confirma. Solo se acepta el host exacto de esta máquina.\n"
             f"Firewall (ufw): sudo ufw allow from 192.168.0.0/16 to any port {port} proto tcp"
@@ -978,6 +980,25 @@ def web(
         ssl_certfile=ssl_certfile,
         ssl_keyfile=ssl_keyfile,
     )
+
+
+def _load_or_create_web_token(data_dir: Path) -> str:
+    """Token del bridge estable entre reinicios (data/web_token, 0600).
+
+    Antes se regeneraba en cada `wyss web` y cada reinicio invalidaba la cookie
+    del teléfono (re-pairing forzado). Persistirlo en data/ lo deja al mismo
+    nivel de protección que la key TLS y las DBs; borrar el archivo rota el token.
+    """
+    token_file = data_dir / "web_token"
+    if token_file.exists():
+        stored = token_file.read_text(encoding="utf-8").strip()
+        if len(stored) >= 32:
+            return stored
+    token = secrets.token_urlsafe(32)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(token, encoding="utf-8")
+    token_file.chmod(0o600)
+    return token
 
 
 def _lan_ip() -> str | None:

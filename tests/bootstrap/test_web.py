@@ -91,6 +91,9 @@ async def test_auth_flow(client: httpx.AsyncClient) -> None:
     assert redirect.status_code == 302
     assert "wyss_token=token-test" in redirect.headers["set-cookie"]
     assert redirect.headers["location"] == "/"
+    # Cookie persistente (no de sesión): el teléfono no pierde el pairing al
+    # cerrar el browser. 30 días.
+    assert "max-age=2592000" in redirect.headers["set-cookie"].lower()
 
     rejected = await client.get("/?token=mal")
     assert rejected.status_code == 401

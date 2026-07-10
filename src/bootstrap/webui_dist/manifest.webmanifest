@@ -1,0 +1,16 @@
+{
+  "name": "Wyss — mesa de despacho",
+  "short_name": "Wyss",
+  "description": "Agente personal local-first: proponé, sellá, ejecutá.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101917",
+  "theme_color": "#101917",
+  "icons": [
+    { "src": "/wyss.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/wyss-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/wyss-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/wyss-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

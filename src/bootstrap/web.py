@@ -46,6 +46,9 @@ from ledger.sqlite_store import SqliteLedgerStore
 from orchestrator.pending_store import PendingProposal, PendingStore
 
 _TOKEN_COOKIE = "wyss_token"
+# Cookie persistente: sin max_age era de sesión y el teléfono perdía el pairing
+# al cerrar el browser. 30 días = re-parear una vez al mes, no una vez por día.
+_TOKEN_COOKIE_MAX_AGE = 30 * 24 * 3600
 _HTTP_422 = 422
 
 # Rechazos del middleware van al log (visible con el log_level=warning de uvicorn):
@@ -486,6 +489,7 @@ def _authenticate_request(
             response.set_cookie(
                 _TOKEN_COOKIE,
                 query_token,
+                max_age=_TOKEN_COOKIE_MAX_AGE,
                 httponly=True,
                 samesite="strict",
                 path="/",
