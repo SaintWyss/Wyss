@@ -1,133 +1,80 @@
-# Wyss — Requirements
+# Wyss — Requirements (Milestone v1.0 — Producto final)
 
-**Versión:** v1 (v0.1 del producto según docs/01)
-**Fuente:** 18 docs fundacionales (`docs/`) + research (`research/SUMMARY.md` — 10 gaps incorporados)
-**Trazabilidad RF:** cada requirement referencia los RF de `docs/04-requerimientos-funcionales.md` que cubre.
+**Defined:** 2026-07-10 · **Research:** `.planning/research/SUMMARY.md` (confidence HIGH)
+**Requirements de v0.1:** ver git history de este archivo + sección Validated de PROJECT.md.
 
----
+Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de planes (rutinas, intake, agentes) pasa por CognitivePolicyEngine y cae a la bandeja; el owner sella. Nivel D absoluto.
 
-## v1 Requirements
+## v1.0 Requirements
 
-### Knowledge (El Índice)
+### Scheduler / Rutinas (SCHED)
 
-- [ ] **KNOW-01**: El owner puede indexar una ruta con `wyss index <ruta>` — escaneo, extracción y indexación híbrida (metadatos + FTS5 + vectores) *(RF-012, RF-013)*
-- [ ] **KNOW-02**: La re-indexación es incremental — size+mtime como filtro rápido, hash solo si cambió; 10 archivos modificados no re-procesan 2 TB *(RF-013)*
-- [ ] **KNOW-03**: El escaneo es reanudable — estado por archivo en SQLite (pending/extracted/embedded/failed); un crash no pierde progreso
-- [x] **KNOW-04**: El owner puede buscar con `wyss search "<consulta>"` — recuperación híbrida con fusión RRF, < 5 segundos sobre cualquier volumen *(RF-014)*
-- [x] **KNOW-05**: Cada resultado incluye ruta exacta, extracto relevante, fuente y fecha *(RF-014)*
-- [ ] **KNOW-06**: Extractores para PDF, DOCX, TXT, MD, PY/JS/TS, CSV, XLSX; imágenes y video/audio solo metadatos — registrables sin modificar el pipeline *(RF-012)*
-- [ ] **KNOW-07**: Los secretos (.env, *.key, tokens, contraseñas, alta entropía) se detectan y excluyen ANTES de indexar — verificado con prueba dirigida *(RF-021, regla #8)*
-- [ ] **KNOW-08**: `wyss index --estimate` proyecta chunks y costo de embeddings antes de llamar a la API; `--dry-run` lista qué se indexaría
-- [ ] **KNOW-09**: La indexación muestra progreso visible (archivos procesados / total, ETA) *(gap #5)*
-- [x] **KNOW-10**: El índice expone su frescura — "indexado al [fecha]" consultable *(gap #6)*
-- [ ] **KNOW-11**: Las BC se organizan por contexto (colección separada por BC) — base estructural del aislamiento *(RF-015)*
+- [ ] **SCHED-01**: Owner puede crear una rutina programada (cron u hora fija) desde CLI o web, con preview legible del schedule antes de guardar
+- [ ] **SCHED-02**: Una rutina que dispara genera un Plan que pasa por la política: A ejecuta directo, B/C caen a la bandeja como propuesta — jamás auto-ejecución (cierra MULTI-02)
+- [ ] **SCHED-03**: Owner puede listar, pausar, reanudar y borrar rutinas, y ver el último resultado de cada una
+- [ ] **SCHED-04**: Tras downtime del daemon, las rutinas perdidas se manejan con política de catch-up explícita (coalesce; jamás doble-fire)
+- [ ] **SCHED-05**: Toda ejecución de rutina queda auditada: trigger, plan, decisión de política, resultado
 
-### Orchestrator (El Núcleo)
+### Notion adapter (NOTION)
 
-- [ ] **ORCH-01**: `wyss start` levanta el daemon (Unix socket + JSON-RPC, asyncio); corre persistente sin intervención *(RF-001)*
-- [ ] **ORCH-02**: `wyss ask "<instrucción>"` envía lenguaje natural al daemon y recibe respuesta *(RF-001)*
-- [ ] **ORCH-03**: El Intent Router clasifica en ≥ 9 categorías (knowledge_query, file_operation, repo_task, system_action, agent_task, routine_trigger, admin_task, dangerous_operation, ambiguous_request) *(RF-002)*
-- [ ] **ORCH-04**: Ante instrucción ambigua el sistema pide aclaración en vez de asumir *(RF-003)*
-- [ ] **ORCH-05**: Toda tarea modificadora genera un Plan explícito y legible (pasos, riesgo, justificación) antes de ejecutarse *(RF-004, regla #7)*
-- [ ] **ORCH-06**: Las colas de pendientes (confirmaciones, propuestas) viven en SQLite — un restart del daemon no pierde nada
-- [ ] **ORCH-07**: Política de errores explícita por paso de plan: retry con backoff / escalar al owner / abortar — las fallas nunca son silenciosas *(gap #3)*
+- [ ] **NOTION-01**: Owner puede pedir en lenguaje natural leer una página/database de Notion y ver el contenido (nivel A con base_levels explícito para notion.*)
+- [ ] **NOTION-02**: Owner puede pedir crear/editar contenido en Notion; el write cae como propuesta B/C con preview del cambio antes de confirmar
+- [ ] **NOTION-03**: El adapter respeta rate limits (retry/backoff en 429) y pagina resultados completos
+- [ ] **NOTION-04**: El token de Notion vive en config/.env (jamás en repo) y toda llamada queda auditada
 
-### Cognitive Policy (Seguridad cognitiva)
+### Memoria del owner (MEM)
 
-- [x] **POL-01**: Todo plan pasa por la política cognitiva antes de ejecutarse *(RF-018)*
-- [x] **POL-02**: Nivel A ejecuta directo; B pide confirmación simple [s/N]; C pide confirmación fuerte (escribir "CONFIRMAR") *(RF-019)*
-- [x] **POL-03**: Nivel D se rechaza con explicación, queda auditado, y ningún path de código lo ejecuta — aunque el owner insista *(RF-020, regla #2)*
-- [x] **POL-04**: La clasificación D es determinística (denylist de operaciones); el LLM puede subir el riesgo estimado, nunca bajarlo
-- [x] **POL-05**: La política evalúa el plan completo + agregados (cantidad de archivos, directorios tocados) — sin bypass por composición de pasos menores
-- [ ] **POL-06**: Eval set del clasificador de política: planes dorados con nivel esperado; un falso-A (ejecutar lo que debía confirmar) se detecta en CI *(gap #8)*
-- [x] **POL-07**: El contenido recuperado de BC se trata como dato no confiable — jamás como instrucción; nunca eleva el nivel de un plan aprobado *(gap #10)*
+- [ ] **MEM-01**: Owner puede decirle a wyss que recuerde un hecho/preferencia y persiste (write = acción gateada ≥B)
+- [ ] **MEM-02**: Owner puede ver, editar y borrar su memoria — legible, nunca blob opaco
+- [ ] **MEM-03**: La memoria distingue trust tiers (owner-stated vs ingested-external); contenido externo jamás se recuerda sin confirmación
+- [ ] **MEM-04**: El contenido recordado se inyecta como DATO (no instrucción) en los prompts del planner — anti prompt-injection laundering
 
-### Gateway (Modelos externos)
+### Daily Assistant (DAILY)
 
-- [x] **GATE-01**: Único punto de salida a IA externa; ≥ 2 proveedores configurables, intercambiables vía config sin tocar código *(RF-007)*
-- [x] **GATE-02**: Selección de modelo por costo/complejidad/riesgo (lógica local → económico → fuerte) *(RF-007)*
-- [x] **GATE-03**: El Context Minimizer filtra secretos, rutas innecesarias y contexto no solicitado antes de TODA llamada externa *(RF-021, regla #4)*
-- [x] **GATE-04**: Cost Tracker registra tokens y costo por llamada y actúa como gate — presupuesto con hard-stop, no solo reporte
-- [x] **GATE-05**: Tracing por llamada LLM: prompt, contexto, output, latencia, costo — consultable, separado de la auditoría *(gap #9)*
+- [ ] **DAILY-01**: Owner recibe un digest diario a hora configurable: pendientes de bandeja, snapshot Pellegrini, fallas de rutinas
+- [ ] **DAILY-02**: El digest es solo lectura (nivel A) — nunca ejecuta ni propone writes por sí solo
+- [ ] **DAILY-03**: Owner puede ver el digest del día en la web y pedirlo on-demand
 
-### Agents
+### Intake n8n (INTAKE)
 
-- [x] **AGENT-01**: AgentBase define el contrato: recibir tarea → consultar BC habilitada → generar plan → ejecutar → reportar *(RF-008, RF-010)*
-- [x] **AGENT-02**: Crear un agente nuevo = entrada en config (identidad, dominio, herramientas, BC, modelo, presupuesto) — sin código nuevo *(RF-008)*
-- [x] **AGENT-03**: Un agente sin permiso vigente no puede consultar una BC — filtro estructural ANTES del retrieval; intento sin permiso → bloqueado + auditado *(RF-009, RF-015, regla #3)*
-- [x] **AGENT-04**: La revocación de permisos tiene efecto inmediato — verificación por query, sin cache *(RF-015)*
-- [x] **AGENT-05**: Los agentes no se comunican entre sí — solo el orquestador delega y consolida *(RF-011, regla #5)*
-- [x] **AGENT-06**: Ningún agente puede alterar su propia config, permisos o presupuesto *(regla #6)*
-- [x] **AGENT-07**: Cada agente respeta su presupuesto de modelos configurado
-- [x] **AGENT-08**: Memoria operativa por agente (patrón MEMORY.md): persiste preferencias del owner en su dominio; solo el owner o extracción supervisada escribe en ella — contenido de BC jamás escribe memoria directamente *(gap #1)*
-- [x] **AGENT-09**: Belgrano (dominio estudio) completa ≥ 3 tareas reales de punta a punta, reportando al orquestador
+- [ ] **INTAKE-01**: Un workflow n8n puede postear una propuesta a `POST /api/intake` con bearer token dedicado (nunca la cookie del pairing)
+- [ ] **INTAKE-02**: Toda propuesta de intake pasa por la política y cae a la bandeja como B/C — jamás auto-ejecuta
+- [ ] **INTAKE-03**: El endpoint tiene rate limit propio y rechaza sin token válido (401 auditado, sin loguear el token)
 
-### Execution
+### Web PC (WEB)
 
-- [x] **EXEC-01**: Adaptadores de ejecución desacoplados (FileSystem, Shell, Git) con allowlist de comandos *(RF-016)*
-- [x] **EXEC-02**: Toda acción modificadora se verifica después de ejecutada (conteos, hashes, estados) *(RF-017)*
-- [x] **EXEC-03**: Operaciones de archivos con undo: papelera en vez de borrado, journal origen→destino con operación inversa *(gap #7)*
-- [x] **EXEC-04**: El adapter de ejecución re-verifica el nivel de riesgo antes de ejecutar (segunda muralla tras la política)
+- [ ] **WEB-01**: Owner ve y gestiona rutinas desde la web (lista, estado, pausar/reanudar)
+- [ ] **WEB-02**: Owner ve el digest diario en la web
+- [ ] **WEB-03**: Owner edita su memoria desde la web
+- [ ] **WEB-04**: La UI desktop recibe glow-up cohesivo de página entera (aprovecha pantalla grande, jerarquía clara, sin huecos de layout)
 
-### Routines (Multi-agente)
+### App móvil Android (APK)
 
-- [ ] **ROUT-01**: Routine Scheduler con rutinas definidas en config (cron o evento); ejemplo obligatorio: resumen ejecutivo semanal lunes 8:00 *(RF-006)*
-- [ ] **ROUT-02**: Las acciones B/C generadas por rutinas nunca se auto-ejecutan — quedan como propuestas pendientes
-- [ ] **ROUT-03**: Bandeja de aprobaciones: las propuestas pendientes viven en SQLite y el owner es notificado *(gap #4)*
-- [ ] **ROUT-04**: Ejecución única por (rutina, ventana) — idempotencia ante reinicios del scheduler
-- [ ] **ROUT-05**: Estado durable de tareas multi-paso: una tarea que muere en el paso N retoma desde N *(gap #2)*
-- [ ] **ROUT-06**: Tareas multi-dominio: el orquestador divide, delega a cada agente y consolida resultados *(RF-005)*
-- [ ] **ROUT-07**: Las 4 BC del owner (Personal, RAGcorp, Beca Ciber #1, Beca Ciber #2) conectadas con habilitaciones selectivas por agente
+- [ ] **APK-01**: Owner instala un APK en Android que abre wyss como app nativa
+- [ ] **APK-02**: Pairing por QR: la web/CLI muestra un QR con URL del bridge + fingerprint del cert; la app lo escanea y queda pareada sin tipear nada
+- [ ] **APK-03**: La app confía SOLO en el cert cuya huella vino en el QR (TOFU pinning en onReceivedSslError); cert distinto = bloqueo con aviso, jamás proceed ciego
+- [ ] **APK-04**: La app usa el mismo origen del bridge (`server.url`) — sin bundle local, sin aflojar allowlist de Host/Origin ni CORS
+- [ ] **APK-05**: Owner puede confirmar propuestas B/C desde la app (paridad funcional con la web, gate CONFIRMAR incluido)
+- [ ] **APK-06**: Ante server caído o IP cambiada, la app muestra error accionable y permite re-pairing
 
-### Team Mode
+## Future Requirements (diferidas — decisión owner 2026-07-10)
 
-- [ ] **TEAM-01**: Interfaz separada para trabajadores — sin acceso al núcleo ni a la auditoría completa
-- [ ] **TEAM-02**: Un trabajador solo interactúa con los agentes que el owner le asignó
-- [ ] **TEAM-03**: Intento de exceder el rol → escala al owner (probado explícitamente)
-- [ ] **TEAM-04**: El agente asignado contacta al trabajador por canal configurado, extrae estado e intención, actualiza tablero de tareas
-- [ ] **TEAM-05**: Input de trabajadores = contenido no confiable siempre — anti-injection endurecido
-
-### Audit (transversal)
-
-- [x] **AUD-01**: Toda acción relevante registra: actor, instrucción, plan, decisión de política, confirmación, acciones, resultado, costo — en SQLite *(RF-022, regla #1)*
-- [ ] **AUD-02**: El owner puede consultar el historial de acciones *(RF-023)*
-- [x] **AUD-03**: Eval set de conocimiento: N consultas doradas con archivo esperado — regresión detectable *(gap #8)*
-
----
-
-## v2 Requirements (deferred)
-
-- Replicación de instancia para clientes (RF-024) — Fase 6 del roadmap de producto
-- Interfaz móvil / voz
-- Watcher de filesystem para re-indexación automática (v0.1: re-scan manual o programado)
-- Extracción inteligente automática de memoria (v0.1: almacenamiento estructurado, extracción supervisada)
-- Sandboxing por contenedores (v0.1: allowlist + paths restringidos)
-- GUI / no-code builder
+- **PUSH-01**: Notificaciones push con la app cerrada (requiere decidir FCM/cloud relay vs foreground-only — tensión con local-first)
+- **REMOTE-01**: Acceso remoto fuera de LAN (VPN/túnel; cambia modelo de cert y auth)
+- **NSYNC-01**: Notion sync bidireccional automático (no resuelto ni en integraciones comerciales; read+write confirmado alcanza)
+- TEAM-01/02: modo equipo (vieja fase 10)
 
 ## Out of Scope
 
-- Multiusuario / multiempresa — v1.0 del producto, no v0.1
-- Modelos locales pesados — API-first por decisión de diseño
-- Marketplace de agentes — futuro
-- Domótica — futuro
-- Comunicación agente-a-agente (A2A/swarms) — anti-feature deliberada: rompe auditabilidad
-- Agentes auto-mejorables que escriben sus propias skills — anti-feature: vector de persistencia de ataques
-- Fine-tuning de modelos propios — el model routing da el 90% del beneficio
+- Auto-ejecución de B/C por cualquier productor (violaría el modelo de confianza)
+- App iOS (owner usa Android; sin hardware de build Apple)
+- Play Store (distribución sideload personal)
+- Multi-usuario / multiempresa
 
 ## Traceability
 
-| Categoría | Requirements | Fase |
-|---|---|---|
-| POL (núcleo política) | POL-01..05 | Phase 1 — Fundaciones |
-| AUD (esquema) | AUD-01 | Phase 1 — Fundaciones |
-| GATE | GATE-01..05 | Phase 2 — Gateway |
-| KNOW (ingesta) | KNOW-01..03, 06..09, 11 | Phase 3 — Pipeline de Ingesta |
-| KNOW (búsqueda) | KNOW-04, 05, 10 · AUD-03 | Phase 4 — Búsqueda Híbrida |
-| ORCH | ORCH-01..07 · POL-06 · AUD-02 | Phase 5 — Orquestador Daemon |
-| EXEC | EXEC-01..04 | Phase 6 — Capa de Ejecución |
-| AGENT (modelo) | AGENT-01..06, 08 · POL-07 | Phase 7 — Modelo de Agentes |
-| AGENT (Belgrano) | AGENT-07, 09 | Phase 8 — Belgrano |
-| ROUT | ROUT-01..07 | Phase 9 — Multi-agente y Rutinas |
-| TEAM | TEAM-01..05 | Phase 10 — Modo Equipo |
+(La completa el roadmapper.)
 
-55/55 mapeados — cobertura completa.
+| REQ | Phase |
+|-----|-------|
+| — | — |
