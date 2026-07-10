@@ -397,11 +397,26 @@ def start(
         pending_store = PendingStore(_pending_db_path(settings))
         engine = CognitivePolicyEngine(settings.policy)
         asyncio.run(_run_start_daemon(settings, engine, pending_store, audit))
+    except typer.Exit:
+        # typer.Exit hereda de RuntimeError: sin este re-raise lo tragaría el except de abajo.
+        raise
     except ConfigError as exc:
         _error_panel(str(exc), _ACCION_CONFIG)
         raise typer.Exit(code=1) from exc
     except AuditIntegrityError as exc:
         _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except RuntimeError as exc:
+        # "daemon ya corriendo": no es un fallo — el daemon está arriba. Antes esto
+        # explotaba como traceback crudo y el smoke físico lo leyó como error fatal.
+        if "ya corriendo" in str(exc):
+            _error_panel(
+                str(exc),
+                "el daemon ya está arriba: usalo directo con wyss ask/confirm, "
+                "o bajalo con: pkill -f 'wyss start'",
+            )
+        else:
+            stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     except (OSError, sqlite3.Error) as exc:
         stderr_console.print(f"Error sistémico: {exc}", style="red")

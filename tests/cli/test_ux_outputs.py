@@ -116,6 +116,27 @@ def test_confirm_daemon_caido(tmp_path: Path) -> None:
     assert "Error sistémico" not in result.stderr
 
 
+def test_start_daemon_ya_corriendo_es_accionable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-14 (smoke físico): 'daemon ya corriendo' salía como traceback crudo de
+    80 líneas y se leyó como fallo fatal — debe ser un panel accionable."""
+    cfg = _write_config(tmp_path)
+
+    async def fake_run(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("daemon ya corriendo en data/wyss.sock")
+
+    monkeypatch.setattr(cli, "_run_start_daemon", fake_run)
+
+    result = runner.invoke(app, ["start", "--config", str(cfg)])
+
+    assert result.exit_code == 1
+    assert "ya corriendo" in result.stderr
+    assert "ya está arriba" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert "Error sistémico" not in result.stderr
+
+
 def test_audit_sin_db(tmp_path: Path) -> None:
     cfg = _write_config(tmp_path)
 
