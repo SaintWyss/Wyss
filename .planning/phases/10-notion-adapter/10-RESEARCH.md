@@ -394,7 +394,7 @@ async def test_query_retries_on_429(respx_mock: respx.MockRouter, http_client: h
 
 **If this table is empty:** N/A — see above.
 
-## Open Questions
+## Open Questions (RESOLVED — recomendaciones incorporadas a los planes 2026-07-10)
 
 1. **Should `notion.write_page`/`notion.append_block` get an additional "workspace scope" denylist rule (analogous to `wyss-self-modify`), restricting writes to an owner-configured allowlist of page/database IDs?**
    - What we know: `DenyRule.target_patterns` uses `fnmatch` glob matching against `action.target` — works naturally for filesystem paths, awkwardly for opaque Notion UUIDs (no natural "allowlist, not denylist" primitive exists in the current `CognitivePolicyEngine` — it is deny-only, not permit-only).
