@@ -51,15 +51,34 @@ export function ErrorNote({ error, accion }: { error: string; accion: string }) 
   )
 }
 
+/** Salidas visibles de pasos de lectura (file.read/list/stat, git): monospace, scroll. */
+export function Salidas({ outputs }: { outputs?: string[] }) {
+  if (!outputs || outputs.length === 0) return null
+  return (
+    <div className="mt-2 flex w-full flex-col gap-2">
+      {outputs.map((salida, i) => (
+        <pre
+          key={i}
+          className="max-h-64 overflow-auto whitespace-pre-wrap rounded-sm border border-borde bg-papel/60 px-3 py-2 font-mono text-xs text-hueso"
+        >
+          {salida}
+        </pre>
+      ))}
+    </div>
+  )
+}
+
 /** Resultado real de la ejecución post-confirmación (RC: el daemon ejecuta). */
 export function ResultadoEjecucion({
   executionId,
   success,
   detail,
+  outputs,
 }: {
   executionId?: string
   success?: boolean
   detail?: string
+  outputs?: string[]
 }) {
   if (executionId === undefined) return null
   if (success === undefined) {
@@ -69,13 +88,15 @@ export function ResultadoEjecucion({
     )
   }
   return (
-    <span className="text-sm">
+    // div (no span): Salidas renderiza bloques <pre> y anidar block en inline es DOM inválido
+    <div className="min-w-0 flex-1 text-sm">
       {success ? (
         <span className="text-riesgo-a">Ejecutado</span>
       ) : (
         <span className="text-riesgo-d">Falló</span>
       )}{' '}
       <span className="font-mono text-xs text-humo">{detail}</span>
-    </span>
+      <Salidas outputs={outputs} />
+    </div>
   )
 }

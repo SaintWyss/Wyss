@@ -68,6 +68,7 @@ type Phase =
       executionId?: string
       success?: boolean
       detail?: string
+      outputs?: string[]
     }
   | { kind: 'error'; error: string; accion: string }
 
@@ -88,6 +89,7 @@ function Documento({ pending, daemonAlive }: { pending: Pending; daemonAlive: bo
           executionId: result.execution_id,
           success: result.success,
           detail: result.detail,
+          outputs: result.outputs,
         })
       } else {
         setPhase({ kind: 'resuelto', resolucion: 'rechazado' })
@@ -216,6 +218,7 @@ function Documento({ pending, daemonAlive }: { pending: Pending; daemonAlive: bo
             executionId={phase.executionId}
             success={phase.success}
             detail={phase.detail}
+            outputs={phase.outputs}
           />
         </footer>
       )}

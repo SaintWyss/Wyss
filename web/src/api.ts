@@ -51,6 +51,8 @@ export interface AskResult {
   // outcome 'executed' (nivel A con executor real, RC): resultado honesto
   success?: boolean
   detail?: string
+  // PR-11: salidas visibles de los pasos de lectura (file.read/list/stat, git)
+  outputs?: string[]
 }
 
 export interface ConfirmResult {
@@ -60,6 +62,7 @@ export interface ConfirmResult {
   // presentes cuando el daemon ejecutó de verdad (RC: PlanExecutor cableado)
   success?: boolean
   detail?: string
+  outputs?: string[]
 }
 
 export interface KbFreshness {

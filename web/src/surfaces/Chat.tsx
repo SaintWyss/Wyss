@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, WyssApiError, type AskResult, type RiskLevel } from '../api'
 import { useDictado } from '../dictado'
-import { ErrorNote, ResultadoEjecucion, RiskChip } from '../ui'
+import { ErrorNote, ResultadoEjecucion, RiskChip, Salidas } from '../ui'
 import { Sello, type Resolucion } from '../documento'
 
 interface Mensaje {
@@ -166,14 +166,15 @@ function Respuesta({ ask, daemonAlive }: { ask: AskResult; daemonAlive: boolean 
   }
   if (ask.outcome === 'executed') {
     return (
-      <p className="text-sm">
+      <div className="text-sm">
         {ask.success ? (
           <span className="text-riesgo-a">Ejecutado (nivel A)</span>
         ) : (
           <span className="text-riesgo-d">Falló la ejecución</span>
         )}{' '}
         <span className="font-mono text-xs text-humo">{ask.detail}</span>
-      </p>
+        <Salidas outputs={ask.outputs} />
+      </div>
     )
   }
   if (ask.outcome === 'degraded') {
@@ -205,6 +206,7 @@ function PropuestaInline({
     executionId?: string
     success?: boolean
     detail?: string
+    outputs?: string[]
   }>({})
 
   const send = async (approve: boolean) => {
@@ -217,6 +219,7 @@ function PropuestaInline({
           executionId: result.execution_id,
           success: result.success,
           detail: result.detail,
+          outputs: result.outputs,
         })
       } else {
         setResolucion('rechazado')
