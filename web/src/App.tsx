@@ -74,6 +74,7 @@ export default function App() {
   const [surface, navigate] = useHashSurface()
   const [sessionExpired, setSessionExpired] = useState(false)
   const [daemonAlive, setDaemonAlive] = useState<boolean | null>(null)
+  const [bridgeError, setBridgeError] = useState<string | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
   const [kbs, setKbs] = useState<KbFreshness[]>([])
 
@@ -91,8 +92,15 @@ export default function App() {
         if (!active) return
         setDaemonAlive(daemon.alive)
         setPendingCount(pending.pending.length)
-      } catch {
-        // errores de red del polling no interrumpen: el strip queda como estaba
+        setBridgeError(null)
+      } catch (e) {
+        // El polling no interrumpe la UI, pero el motivo tiene que verse:
+        // "bridge inaccesible (403 origen)" ≠ "daemon apagado" — el smoke
+        // físico del teléfono fue indiagnosticable por tragar este error.
+        if (!active) return
+        setBridgeError(
+          e instanceof WyssApiError ? `${e.message} — ${e.accion}` : 'error de red',
+        )
       }
     }
     void tick()
@@ -197,7 +205,14 @@ export default function App() {
             <span className="display mr-1 text-sm font-bold tracking-tight md:hidden">
               WYSS
             </span>
-            {daemonAlive === null ? (
+            {bridgeError !== null ? (
+              <>
+                <span aria-hidden className="text-riesgo-d">
+                  ●
+                </span>
+                <span className="text-hueso">bridge: {bridgeError}</span>
+              </>
+            ) : daemonAlive === null ? (
               <span className="text-humo">conectando…</span>
             ) : daemonAlive ? (
               <>
