@@ -19,6 +19,13 @@ from core.ports.execution import PlanRunner
 from core.ports.orchestrator import OrchestratorPort
 from orchestrator.dispatcher import dispatch, ttl_for_risk
 from orchestrator.pending_store import PendingStore
+from orchestrator.routine_store import Routine, RoutineStore
+from orchestrator.scheduler import (
+    RoutineScheduler,
+    preview_next_fires,
+    register_routines,
+    validate_schedule,
+)
 from orchestrator.ttl_reaper import ttl_reaper
 
 JsonDict = dict[str, Any]
@@ -32,6 +39,7 @@ class RunningDaemon:
     server: asyncio.AbstractServer
     socket_path: Path
     reaper_task: asyncio.Task[None]
+    scheduler: RoutineScheduler
 
     async def aclose(self) -> None:
         """Cierra server, background task y socket."""
@@ -40,6 +48,7 @@ class RunningDaemon:
         self.reaper_task.cancel()
         with suppress(asyncio.CancelledError):
             await self.reaper_task
+        self.scheduler.shutdown(wait=False)
         self.socket_path.unlink(missing_ok=True)
 
 
@@ -53,18 +62,27 @@ class DaemonServer:
         orchestrator: OrchestratorPort,
         pending_store: PendingStore,
         audit: AuditPort,
+        routine_store: RoutineStore,
+        scheduler: RoutineScheduler,
         runner: PlanRunner | None = None,
     ) -> None:
         self._engine = engine
         self._orchestrator = orchestrator
         self._pending_store = pending_store
         self._audit = audit
+        self._routine_store = routine_store
+        self._scheduler = scheduler
         self._runner = runner
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
             "confirm": self._confirm,
             "status": self._status,
             "audit": self._audit_events,
+            "routine.add": self._routine_add,
+            "routine.list": self._routine_list,
+            "routine.pause": self._routine_pause,
+            "routine.resume": self._routine_resume,
+            "routine.delete": self._routine_delete,
         }
 
     async def handle(
@@ -268,6 +286,77 @@ class DaemonServer:
         del params
         return {"events": []}
 
+    async def _routine_add(self, params: Mapping[str, Any]) -> JsonDict:
+        name = str(params.get("name", "")).strip()
+        schedule_kind = str(params.get("schedule_kind", "")).strip()
+        schedule_expr = str(params.get("schedule_expr", "")).strip()
+        plan_json = str(params.get("plan_json", "")).strip()
+        catch_up = bool(params.get("catch_up", True))
+        if not name:
+            raise ValueError("name requerido")
+        if not plan_json:
+            raise ValueError("plan_json requerido")
+        validate_schedule(schedule_kind, schedule_expr)
+        _plan_from_json(plan_json)
+        routine_id = self._routine_store.add(
+            name,
+            schedule_kind,
+            schedule_expr,
+            plan_json,
+            catch_up=catch_up,
+        )
+        routine = self._routine_store.get(routine_id)
+        if routine is None:
+            raise RuntimeError("rutina persistida no encontrada")
+        self._scheduler.add_routine(routine)
+        self._audit.log(
+            AuditEvent.new(
+                task_id=f"routine-{routine_id}",
+                actor_type=ActorType.OWNER,
+                actor_id="owner",
+                event_type=AuditEventType.COMMAND_RECEIVED,
+                message="routine.add",
+                payload={
+                    "routine_id": routine_id,
+                    "routine_name": name,
+                    "schedule_kind": schedule_kind,
+                    "schedule_expr": schedule_expr,
+                    "catch_up": catch_up,
+                },
+            )
+        )
+        preview = preview_next_fires(schedule_kind, schedule_expr)
+        return {"routine_id": routine_id, "preview": [item.isoformat() for item in preview]}
+
+    async def _routine_list(self, params: Mapping[str, Any]) -> JsonDict:
+        del params
+        routines = [_routine_to_json(routine) for routine in self._routine_store.list_all()]
+        return {"routines": routines}
+
+    async def _routine_pause(self, params: Mapping[str, Any]) -> JsonDict:
+        routine_id = _routine_id_param(params)
+        ok = self._routine_store.pause(routine_id)
+        if ok:
+            self._scheduler.pause_job(routine_id)
+        return {"ok": ok}
+
+    async def _routine_resume(self, params: Mapping[str, Any]) -> JsonDict:
+        routine_id = _routine_id_param(params)
+        ok = self._routine_store.resume(routine_id)
+        if ok:
+            routine = self._routine_store.get(routine_id)
+            if routine is not None:
+                self._scheduler.add_routine(routine)
+            self._scheduler.resume_job(routine_id)
+        return {"ok": ok}
+
+    async def _routine_delete(self, params: Mapping[str, Any]) -> JsonDict:
+        routine_id = _routine_id_param(params)
+        ok = self._routine_store.delete(routine_id)
+        if ok:
+            self._scheduler.remove_routine(routine_id)
+        return {"ok": ok}
+
     async def _safe_health_check(self) -> bool:
         try:
             return await self._orchestrator.health_check()
@@ -296,6 +385,8 @@ async def start_daemon(
     orchestrator: OrchestratorPort,
     pending_store: PendingStore,
     audit: AuditPort,
+    routine_store: RoutineStore,
+    scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
 ) -> RunningDaemon:
@@ -307,14 +398,31 @@ async def start_daemon(
         orchestrator=orchestrator,
         pending_store=pending_store,
         audit=audit,
+        routine_store=routine_store,
+        scheduler=scheduler,
         runner=runner,
     )
+    scheduler.set_on_queued(daemon._execute_plan if runner is not None else None)
     server = await asyncio.start_unix_server(daemon.handle, str(socket_path))
     os.chmod(socket_path, 0o600)
     reaper_task = asyncio.create_task(
         ttl_reaper(pending_store, audit, interval_s=reaper_interval_s)
     )
-    return RunningDaemon(server=server, socket_path=socket_path, reaper_task=reaper_task)
+    await register_routines(
+        scheduler,
+        routine_store,
+        engine=engine,
+        pending_store=pending_store,
+        audit=audit,
+        on_queued=daemon._execute_plan if runner is not None else None,
+    )
+    scheduler.start()
+    return RunningDaemon(
+        server=server,
+        socket_path=socket_path,
+        reaper_task=reaper_task,
+        scheduler=scheduler,
+    )
 
 
 async def run_daemon(
@@ -324,6 +432,8 @@ async def run_daemon(
     orchestrator: OrchestratorPort,
     pending_store: PendingStore,
     audit: AuditPort,
+    routine_store: RoutineStore,
+    scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
 ) -> None:
@@ -334,6 +444,8 @@ async def run_daemon(
         orchestrator=orchestrator,
         pending_store=pending_store,
         audit=audit,
+        routine_store=routine_store,
+        scheduler=scheduler,
         runner=runner,
         reaper_interval_s=reaper_interval_s,
     )
@@ -368,6 +480,28 @@ def _confirmation_matches(level: RiskLevel, response: str) -> bool:
     if level == RiskLevel.C:
         return response == "CONFIRMAR"
     return False
+
+
+def _routine_id_param(params: Mapping[str, Any]) -> str:
+    routine_id = str(params.get("routine_id", "")).strip()
+    if not routine_id:
+        raise ValueError("routine_id requerido")
+    return routine_id
+
+
+def _routine_to_json(routine: Routine) -> JsonDict:
+    return {
+        "id": routine.id,
+        "name": routine.name,
+        "schedule": {
+            "kind": routine.schedule_kind,
+            "expr": routine.schedule_expr,
+        },
+        "status": routine.status,
+        "catch_up": routine.catch_up,
+        "last_fired_at": routine.last_fired_at,
+        "last_outcome": routine.last_outcome,
+    }
 
 
 def _plan_from_json(raw: str) -> Plan:

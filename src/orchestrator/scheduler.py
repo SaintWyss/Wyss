@@ -8,7 +8,7 @@ rutina persistida y vuelve a pasar por el gate de politica compartido.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -30,6 +30,7 @@ ROUTINE_TTL_SECONDS = 24 * 60 * 60
 MIN_INTERVAL_SECONDS = 60
 MISFIRE_GRACE_SECONDS = 5 * 60
 _MAX_MISSED_COUNT = 10_000
+QueuedPlanCallback = Callable[[Plan], Awaitable[dict[str, object]]]
 
 
 def routine_ttl_for(level: RiskLevel) -> int:
@@ -96,6 +97,7 @@ async def _fire_routine(
     pending_store: PendingStore,
     audit: AuditPort,
     routine_store: RoutineStore,
+    on_queued: QueuedPlanCallback | None = None,
 ) -> None:
     """Dispara una rutina por el gate normal de politica y audita fallos."""
     try:
@@ -112,6 +114,10 @@ async def _fire_routine(
             ttl_for=routine_ttl_for,
         )
         outcome = str(result.get("outcome", "unknown"))
+        execution_result: dict[str, object] | None = None
+        if outcome == "queued" and on_queued is not None:
+            execution_result = await on_queued(plan)
+            outcome = "executed" if execution_result.get("success") is True else "failed"
         audit.log(
             AuditEvent.new(
                 task_id=plan.task_id,
@@ -125,6 +131,16 @@ async def _fire_routine(
                     "outcome": outcome,
                     "risk_level": decision.risk_level.name,
                     "policy_outcome": decision.outcome.name,
+                    "execution_id": (
+                        execution_result.get("execution_id")
+                        if execution_result is not None
+                        else None
+                    ),
+                    "execution_success": (
+                        execution_result.get("success")
+                        if execution_result is not None
+                        else None
+                    ),
                 },
             )
         )
@@ -156,11 +172,13 @@ class RoutineScheduler:
         pending_store: PendingStore,
         audit: AuditPort,
         routine_store: RoutineStore,
+        on_queued: QueuedPlanCallback | None = None,
     ) -> None:
         self._engine = engine
         self._pending_store = pending_store
         self._audit = audit
         self._routine_store = routine_store
+        self._on_queued = on_queued
         self._scheduler = AsyncIOScheduler(timezone=ARG_TZ)
 
     def add_routine(self, routine: Routine) -> None:
@@ -185,19 +203,27 @@ class RoutineScheduler:
 
     def pause_job(self, routine_id: str) -> None:
         """Pausa un job registrado."""
-        self._scheduler.pause_job(_job_id(routine_id))
+        job_id = _job_id(routine_id)
+        if self._scheduler.get_job(job_id) is not None:
+            self._scheduler.pause_job(job_id)
 
     def resume_job(self, routine_id: str) -> None:
         """Reanuda un job registrado."""
-        self._scheduler.resume_job(_job_id(routine_id))
+        job_id = _job_id(routine_id)
+        if self._scheduler.get_job(job_id) is not None:
+            self._scheduler.resume_job(job_id)
+
+    def set_on_queued(self, on_queued: QueuedPlanCallback | None) -> None:
+        """Configura el callback opcional para ejecutar planes A encolados."""
+        self._on_queued = on_queued
 
     def start(self) -> None:
         """Arranca APScheduler en el loop asyncio actual."""
         self._scheduler.start()
 
-    def shutdown(self) -> None:
+    def shutdown(self, *, wait: bool = False) -> None:
         """Detiene APScheduler sin esperar jobs en curso."""
-        self._scheduler.shutdown(wait=False)
+        self._scheduler.shutdown(wait=wait)
 
     async def _run_routine(self, routine_id: str) -> None:
         routine = self._routine_store.get(routine_id)
@@ -209,6 +235,7 @@ class RoutineScheduler:
             pending_store=self._pending_store,
             audit=self._audit,
             routine_store=self._routine_store,
+            on_queued=self._on_queued,
         )
 
 
@@ -220,6 +247,7 @@ async def register_routines(
     pending_store: PendingStore,
     audit: AuditPort,
     now: datetime | None = None,
+    on_queued: QueuedPlanCallback | None = None,
 ) -> None:
     """Registra rutinas activas y aplica catch-up coalescente al boot."""
     boot_now = _to_tz(now if now is not None else datetime.now(ARG_TZ), ARG_TZ)
@@ -232,6 +260,7 @@ async def register_routines(
                 pending_store=pending_store,
                 audit=audit,
                 routine_store=routine_store,
+                on_queued=on_queued,
             )
         elif missed > 0:
             audit.log(

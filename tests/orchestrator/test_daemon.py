@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,6 +15,8 @@ from core.policy import CognitivePolicyEngine
 from orchestrator.daemon import DaemonServer, start_daemon
 from orchestrator.dispatcher import dispatch
 from orchestrator.pending_store import PendingStore
+from orchestrator.routine_store import RoutineStore
+from orchestrator.scheduler import RoutineScheduler
 
 from .conftest import FakeAudit, FakeOrchestrator
 
@@ -46,6 +49,29 @@ class _MemoryWriter:
         return None
 
 
+@pytest.fixture
+def routine_store(tmp_path: Path) -> Iterator[RoutineStore]:
+    store = RoutineStore(tmp_path / "routines.db")
+    try:
+        yield store
+    finally:
+        store.close()
+
+
+def _routine_scheduler(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    routine_store: RoutineStore,
+) -> RoutineScheduler:
+    return RoutineScheduler(
+        engine=engine,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+    )
+
+
 async def _handle_rpc(
     daemon: DaemonServer, method: str, params: dict[str, object]
 ) -> dict[str, Any]:
@@ -67,6 +93,7 @@ async def test_stale_socket_cleanup(
     monkeypatch: pytest.MonkeyPatch,
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
+    routine_store: RoutineStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -86,6 +113,7 @@ async def test_stale_socket_cleanup(
 
     monkeypatch.setattr(asyncio, "open_unix_connection", fake_open_unix_connection)
     monkeypatch.setattr(asyncio, "start_unix_server", fake_start_unix_server)
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
 
     running = await start_daemon(
         socket_path,
@@ -93,6 +121,8 @@ async def test_stale_socket_cleanup(
         orchestrator=fake_orchestrator,
         pending_store=pending_store,
         audit=fake_audit,
+        routine_store=routine_store,
+        scheduler=scheduler,
         reaper_interval_s=3600,
     )
     try:
@@ -106,6 +136,7 @@ async def test_stale_socket_cleanup(
 async def test_ask_round_trip(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
+    routine_store: RoutineStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -115,6 +146,8 @@ async def test_ask_round_trip(
         orchestrator=fake_orchestrator,
         pending_store=pending_store,
         audit=fake_audit,
+        routine_store=routine_store,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
     )
     response = await _handle_rpc(daemon, "ask", {"instruction": "leer /tmp/source.txt"})
 
@@ -126,6 +159,136 @@ async def test_ask_round_trip(
         AuditEventType.PLAN_CREATED,
         AuditEventType.POLICY_DECISION,
     }
+
+
+async def test_routine_handlers_round_trip_via_rpc(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+) -> None:
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        scheduler=scheduler,
+    )
+
+    added = await _handle_rpc(
+        daemon,
+        "routine.add",
+        {
+            "name": "lectura",
+            "schedule_kind": "interval",
+            "schedule_expr": "300",
+            "plan_json": _plan_json(),
+            "catch_up": True,
+        },
+    )
+    assert "error" not in added
+    routine_id = str(added["result"]["routine_id"])
+    assert added["result"]["preview"]
+
+    listed = await _handle_rpc(daemon, "routine.list", {})
+    routines = listed["result"]["routines"]
+    assert len(routines) == 1
+    assert routines[0]["id"] == routine_id
+    assert routines[0]["status"] == "active"
+    assert routines[0]["schedule"] == {"kind": "interval", "expr": "300"}
+    assert routines[0]["last_fired_at"] is None
+    assert routines[0]["last_outcome"] is None
+
+    paused = await _handle_rpc(daemon, "routine.pause", {"routine_id": routine_id})
+    assert paused["result"] == {"ok": True}
+    assert _loaded_status(routine_store, routine_id) == "paused"
+
+    resumed = await _handle_rpc(daemon, "routine.resume", {"routine_id": routine_id})
+    assert resumed["result"] == {"ok": True}
+    assert _loaded_status(routine_store, routine_id) == "active"
+
+    deleted = await _handle_rpc(daemon, "routine.delete", {"routine_id": routine_id})
+    assert deleted["result"] == {"ok": True}
+    assert routine_store.get(routine_id) is None
+
+
+async def test_routine_add_invalid_schedule_returns_rpc_error(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+) -> None:
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        scheduler=scheduler,
+    )
+    response = await _handle_rpc(
+        daemon,
+        "routine.add",
+        {
+            "name": "rapida",
+            "schedule_kind": "interval",
+            "schedule_expr": "59",
+            "plan_json": _plan_json(),
+            "catch_up": True,
+        },
+    )
+    assert "error" in response
+    assert "minimo 60s" in response["error"]["message"]
+    assert routine_store.list_all() == []
+
+
+async def test_aclose_shutdowns_scheduler_without_waiting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+) -> None:
+    socket_path = tmp_path / "wyss.sock"
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    original_shutdown = scheduler.shutdown
+    waits: list[bool] = []
+
+    def spy_shutdown(*, wait: bool = False) -> None:
+        waits.append(wait)
+        original_shutdown(wait=wait)
+
+    monkeypatch.setattr(scheduler, "shutdown", spy_shutdown)
+
+    async def fake_start_unix_server(handler: object, path: str) -> _FakeAsyncioServer:
+        del handler
+        assert path == str(socket_path)
+        socket_path.write_text("socket", encoding="utf-8")
+        return _FakeAsyncioServer()
+
+    monkeypatch.setattr(asyncio, "start_unix_server", fake_start_unix_server)
+    running = await start_daemon(
+        socket_path,
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        scheduler=scheduler,
+        reaper_interval_s=3600,
+    )
+
+    await asyncio.wait_for(running.aclose(), timeout=1)
+
+    assert waits == [False]
+    assert not socket_path.exists()
 
 
 async def test_dispatch_d_rejects_and_audits(
@@ -151,6 +314,32 @@ async def test_dispatch_d_rejects_and_audits(
     assert result == {"outcome": "rejected", "reasons": ["denylist: disk-format"]}
     assert pending_store.load_pending() == []
     assert fake_audit.events[-1].event_type == AuditEventType.POLICY_DECISION
+
+
+def _plan_json() -> str:
+    return json.dumps(
+        {
+            "task_id": "stored-task",
+            "summary": "leer archivo",
+            "steps": [
+                {
+                    "type": "file.read",
+                    "target": "/tmp/source.txt",
+                    "parameters": {},
+                    "on_error": "abort",
+                    "retry_params": None,
+                }
+            ],
+            "rationale": "test",
+            "estimated_risk": None,
+        }
+    )
+
+
+def _loaded_status(store: RoutineStore, routine_id: str) -> str:
+    routine = store.get(routine_id)
+    assert routine is not None
+    return routine.status
 
 
 async def test_dispatch_b_persists_pending(

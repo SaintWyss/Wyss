@@ -79,10 +79,14 @@ from orchestrator.daemon import run_daemon
 from orchestrator.llm_orchestrator import LLMOrchestrator
 from orchestrator.pending_store import PendingStore
 from orchestrator.plan_renderer import prompt_confirmation
+from orchestrator.routine_store import RoutineStore
+from orchestrator.scheduler import RoutineScheduler, preview_next_fires, validate_schedule
 
 app = typer.Typer(help="Wyss CLI")
 fin_app = typer.Typer(help="Ledger de finanzas")
+routine_app = typer.Typer(help="Rutinas programadas")
 app.add_typer(fin_app, name="fin")
+app.add_typer(routine_app, name="routine")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -391,12 +395,29 @@ def start(
     """Levanta el daemon Wyss sobre Unix socket."""
     audit: SqliteAuditLogger | None = None
     pending_store: PendingStore | None = None
+    routine_store: RoutineStore | None = None
     try:
         settings = load_settings(config)
         audit = SqliteAuditLogger(settings.audit_db)
         pending_store = PendingStore(_pending_db_path(settings))
         engine = CognitivePolicyEngine(settings.policy)
-        asyncio.run(_run_start_daemon(settings, engine, pending_store, audit))
+        routine_store = RoutineStore(_routine_db_path(settings))
+        scheduler = RoutineScheduler(
+            engine=engine,
+            pending_store=pending_store,
+            audit=audit,
+            routine_store=routine_store,
+        )
+        asyncio.run(
+            _run_start_daemon(
+                settings,
+                engine,
+                pending_store,
+                audit,
+                routine_store,
+                scheduler,
+            )
+        )
     except typer.Exit:
         # typer.Exit hereda de RuntimeError: sin este re-raise lo tragaría el except de abajo.
         raise
@@ -422,6 +443,8 @@ def start(
         stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     finally:
+        if routine_store is not None:
+            routine_store.close()
         if pending_store is not None:
             pending_store.close()
         if audit is not None:
@@ -456,6 +479,8 @@ async def _run_start_daemon(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     audit: SqliteAuditLogger,
+    routine_store: RoutineStore,
+    scheduler: RoutineScheduler,
 ) -> None:
     runner, journal = _build_plan_runner(settings, engine, audit)
     try:
@@ -466,6 +491,8 @@ async def _run_start_daemon(
                 orchestrator=_DeterministicOrchestrator(),
                 pending_store=pending_store,
                 audit=audit,
+                routine_store=routine_store,
+                scheduler=scheduler,
                 runner=runner,
             )
             return
@@ -483,6 +510,8 @@ async def _run_start_daemon(
                 orchestrator=LLMOrchestrator(gateway, tier=settings.orchestrator.tier),
                 pending_store=pending_store,
                 audit=audit,
+                routine_store=routine_store,
+                scheduler=scheduler,
                 runner=runner,
             )
     finally:
@@ -577,6 +606,159 @@ def confirm(
     finally:
         if pending_store is not None:
             pending_store.close()
+
+
+@routine_app.command("add")
+def routine_add(
+    name: str,
+    schedule_kind: str,
+    schedule_expr: str,
+    plan_json: Annotated[
+        str,
+        typer.Option("--plan-json", help="Plan serializado en el formato interno de Wyss."),
+    ],
+    catch_up: Annotated[
+        bool,
+        typer.Option("--catch-up/--no-catch-up", help="Ejecuta una vez si hubo disparos perdidos."),
+    ] = True,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Crea una rutina tras mostrar las próximas ejecuciones."""
+    try:
+        settings = load_settings(config)
+        validate_schedule(schedule_kind, schedule_expr)
+        _plan_from_json(plan_json)
+        preview = preview_next_fires(schedule_kind, schedule_expr)
+        _print_routine_preview(preview)
+        if not typer.confirm("Guardar rutina?", default=False):
+            console.print("Rutina no guardada.")
+            return
+        result = asyncio.run(
+            _json_rpc_call(
+                _socket_path(settings),
+                "routine.add",
+                {
+                    "name": name,
+                    "schedule_kind": schedule_kind,
+                    "schedule_expr": schedule_expr,
+                    "plan_json": plan_json,
+                    "catch_up": catch_up,
+                },
+            )
+        )
+        console.print(f"Rutina creada: {result.get('routine_id')}", style="green")
+    except typer.Exit:
+        raise
+    except (FileNotFoundError, ConnectionRefusedError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, RuntimeError, ValueError, KeyError) as exc:
+        _error_panel(str(exc), "revisá el schedule y el plan; luego reintentá")
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+
+
+@routine_app.command("list")
+def routine_list(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista rutinas programadas."""
+    try:
+        settings = load_settings(config)
+        result = asyncio.run(_json_rpc_call(_socket_path(settings), "routine.list", {}))
+        routines = result.get("routines", [])
+        if not isinstance(routines, list):
+            raise RuntimeError("respuesta de rutinas inválida")
+        _print_routines_table(routines)
+    except (FileNotFoundError, ConnectionRefusedError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, RuntimeError) as exc:
+        _error_panel(str(exc), "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+
+
+@routine_app.command("pause")
+def routine_pause(
+    routine_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Pausa una rutina."""
+    _routine_mutation("routine.pause", routine_id, "Rutina pausada", config)
+
+
+@routine_app.command("resume")
+def routine_resume(
+    routine_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Reanuda una rutina."""
+    _routine_mutation("routine.resume", routine_id, "Rutina reanudada", config)
+
+
+@routine_app.command("rm")
+def routine_rm(
+    routine_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Borra una rutina."""
+    _routine_mutation("routine.delete", routine_id, "Rutina borrada", config)
+
+
+def _routine_mutation(method: str, routine_id: str, success_message: str, config: Path) -> None:
+    try:
+        settings = load_settings(config)
+        result = asyncio.run(
+            _json_rpc_call(_socket_path(settings), method, {"routine_id": routine_id})
+        )
+        if result.get("ok"):
+            console.print(f"{success_message}: {routine_id}", style="green")
+            return
+        _error_panel(
+            f"rutina no encontrada: {routine_id}",
+            "listá disponibles con: wyss routine list",
+        )
+        raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
+    except (FileNotFoundError, ConnectionRefusedError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, RuntimeError) as exc:
+        _error_panel(str(exc), "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
@@ -1388,12 +1570,59 @@ def _format_available_kbs(kb_ids: Sequence[str]) -> str:
     return ", ".join(kb_ids)
 
 
+def _print_routine_preview(fires: Sequence[datetime]) -> None:
+    table = Table(title="Próximas ejecuciones (hora Argentina)")
+    table.add_column("#", justify="right")
+    table.add_column("fecha")
+    for index, fire in enumerate(fires, start=1):
+        table.add_row(str(index), fire.isoformat(timespec="minutes"))
+    console.print(table)
+
+
+def _print_routines_table(routines: Sequence[object]) -> None:
+    if not routines:
+        _empty_state(
+            "Sin rutinas programadas.",
+            "wyss routine add <nombre> <cron|interval> <expr> --plan-json '{...}'",
+        )
+        return
+    table = Table(title="Rutinas")
+    table.add_column("id", no_wrap=True)
+    table.add_column("nombre")
+    table.add_column("schedule")
+    table.add_column("status")
+    table.add_column("last_fired_at")
+    table.add_column("last_outcome")
+    for item in routines:
+        if not isinstance(item, Mapping):
+            continue
+        table.add_row(
+            str(item.get("id", "")),
+            str(item.get("name", "")),
+            _format_routine_schedule(item.get("schedule")),
+            str(item.get("status", "")),
+            str(item.get("last_fired_at") or "nunca"),
+            str(item.get("last_outcome") or "-"),
+        )
+    console.print(table)
+
+
+def _format_routine_schedule(schedule: object) -> str:
+    if not isinstance(schedule, Mapping):
+        return "-"
+    return f"{schedule.get('kind', '-')}: {schedule.get('expr', '-')}"
+
+
 def _socket_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "wyss.sock"
 
 
 def _pending_db_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "pending.db"
+
+
+def _routine_db_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "routines.db"
 
 
 async def _json_rpc_call(

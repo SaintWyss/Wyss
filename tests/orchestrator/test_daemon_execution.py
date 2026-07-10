@@ -24,6 +24,8 @@ from execution.journal import UndoJournal
 from execution.shell import ShellAdapter
 from orchestrator.daemon import DaemonServer
 from orchestrator.pending_store import PendingStore
+from orchestrator.routine_store import RoutineStore
+from orchestrator.scheduler import RoutineScheduler
 
 from .conftest import FakeAudit
 
@@ -110,6 +112,8 @@ def _daemon(
         orchestrator=_PlanOrchestrator(plan),
         pending_store=pending_store,
         audit=audit,
+        routine_store=cast(RoutineStore, object()),
+        scheduler=cast(RoutineScheduler, object()),
         runner=runner,
     )
 
