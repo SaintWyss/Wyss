@@ -19,7 +19,7 @@
 - [x] **Phase 6: Capa de Ejecución** - Acciones reales (fs/shell/git) con undo + 2da muralla
 - [x] **Phase 7: Modelo de Agentes** - AgentBase config-driven + permisos estructurales
 - [x] **Phase 8: Primer Agente (Finanzas)** - Pellegrini coach + ledger SQLite
-- [ ] **Phase 9: Routine Scheduler** - Rutinas programadas que caen a la bandeja por política
+- [x] **Phase 9: Routine Scheduler** - Rutinas programadas que caen a la bandeja por política
 - [ ] **Phase 10: Notion Adapter** - Leer/escribir Notion como acciones gateadas
 - [ ] **Phase 11: Owner Memory** - Memoria persistente, editable y trust-tiered
 - [ ] **Phase 12: Daily Assistant** - Digest diario proactivo (solo lectura)
@@ -90,13 +90,13 @@
   3. El owner lista, pausa, reanuda y borra rutinas, y ve el último resultado de cada una
   4. Tras downtime del daemon, las rutinas perdidas se coalescen con catch-up explícito — jamás doble-fire
   5. Cada disparo queda auditado: trigger, plan, decisión de política y resultado
-**Plans**: 5 plans
+**Plans**: 5/5 complete
 Plans:
-- [ ] 09-01-PLAN.md — apscheduler dep (gate de legitimidad) + AuditEventType.ROUTINE_TRIGGERED
-- [ ] 09-02-PLAN.md — RoutineStore (SQLite WAL, CRUD, mark_fired atómico) [SCHED-03]
-- [ ] 09-03-PLAN.md — RoutineScheduler: gate de política + TTL 24h + catch-up + auditoría [SCHED-01/02/04/05]
-- [ ] 09-04-PLAN.md — handlers routine.* del daemon + sub-app CLI `wyss routine` [SCHED-01/03]
-- [ ] 09-05-PLAN.md — checkpoint: smoke de reloj real (rutina → bandeja, sin auto-exec, auditada)
+- [x] 09-01-PLAN.md — apscheduler dep (gate de legitimidad) + AuditEventType.ROUTINE_TRIGGERED
+- [x] 09-02-PLAN.md — RoutineStore (SQLite WAL, CRUD, mark_fired atómico) [SCHED-03]
+- [x] 09-03-PLAN.md — RoutineScheduler: gate de política + TTL 24h + catch-up + auditoría [SCHED-01/02/04/05]
+- [x] 09-04-PLAN.md — handlers routine.* del daemon + sub-app CLI `wyss routine` [SCHED-01/03]
+- [x] 09-05-PLAN.md — checkpoint: smoke de reloj real (rutina → bandeja, sin auto-exec, auditada)
 **Research flags**: catch-up policy post-downtime (planning), timezone entre máquinas (testing)
 
 #### Phase 10: Notion Adapter

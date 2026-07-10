@@ -9,11 +9,11 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### Scheduler / Rutinas (SCHED)
 
-- [ ] **SCHED-01**: Owner puede crear una rutina programada (cron u hora fija) desde CLI o web, con preview legible del schedule antes de guardar
-- [ ] **SCHED-02**: Una rutina que dispara genera un Plan que pasa por la política: A ejecuta directo, B/C caen a la bandeja como propuesta — jamás auto-ejecución (cierra MULTI-02)
-- [ ] **SCHED-03**: Owner puede listar, pausar, reanudar y borrar rutinas, y ver el último resultado de cada una
-- [ ] **SCHED-04**: Tras downtime del daemon, las rutinas perdidas se manejan con política de catch-up explícita (coalesce; jamás doble-fire)
-- [ ] **SCHED-05**: Toda ejecución de rutina queda auditada: trigger, plan, decisión de política, resultado
+- [x] **SCHED-01**: Owner puede crear una rutina programada (cron u hora fija) desde CLI o web, con preview legible del schedule antes de guardar
+- [x] **SCHED-02**: Una rutina que dispara genera un Plan que pasa por la política: A ejecuta directo, B/C caen a la bandeja como propuesta — jamás auto-ejecución (cierra MULTI-02)
+- [x] **SCHED-03**: Owner puede listar, pausar, reanudar y borrar rutinas, y ver el último resultado de cada una
+- [x] **SCHED-04**: Tras downtime del daemon, las rutinas perdidas se manejan con política de catch-up explícita (coalesce; jamás doble-fire)
+- [x] **SCHED-05**: Toda ejecución de rutina queda auditada: trigger, plan, decisión de política, resultado
 
 ### Notion adapter (NOTION)
 
@@ -77,11 +77,11 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 
 | REQ | Phase | Status |
 |-----|-------|--------|
-| SCHED-01 | Phase 9 — Routine Scheduler | Pending |
-| SCHED-02 | Phase 9 — Routine Scheduler | Pending |
-| SCHED-03 | Phase 9 — Routine Scheduler | Pending |
-| SCHED-04 | Phase 9 — Routine Scheduler | Pending |
-| SCHED-05 | Phase 9 — Routine Scheduler | Pending |
+| SCHED-01 | Phase 9 — Routine Scheduler | Complete |
+| SCHED-02 | Phase 9 — Routine Scheduler | Complete |
+| SCHED-03 | Phase 9 — Routine Scheduler | Complete |
+| SCHED-04 | Phase 9 — Routine Scheduler | Complete |
+| SCHED-05 | Phase 9 — Routine Scheduler | Complete |
 | NOTION-01 | Phase 10 — Notion Adapter | Pending |
 | NOTION-02 | Phase 10 — Notion Adapter | Pending |
 | NOTION-03 | Phase 10 — Notion Adapter | Pending |
