@@ -90,7 +90,13 @@
   3. El owner lista, pausa, reanuda y borra rutinas, y ve el último resultado de cada una
   4. Tras downtime del daemon, las rutinas perdidas se coalescen con catch-up explícito — jamás doble-fire
   5. Cada disparo queda auditado: trigger, plan, decisión de política y resultado
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 09-01-PLAN.md — apscheduler dep (gate de legitimidad) + AuditEventType.ROUTINE_TRIGGERED
+- [ ] 09-02-PLAN.md — RoutineStore (SQLite WAL, CRUD, mark_fired atómico) [SCHED-03]
+- [ ] 09-03-PLAN.md — RoutineScheduler: gate de política + TTL 24h + catch-up + auditoría [SCHED-01/02/04/05]
+- [ ] 09-04-PLAN.md — handlers routine.* del daemon + sub-app CLI `wyss routine` [SCHED-01/03]
+- [ ] 09-05-PLAN.md — checkpoint: smoke de reloj real (rutina → bandeja, sin auto-exec, auditada)
 **Research flags**: catch-up policy post-downtime (planning), timezone entre máquinas (testing)
 
 #### Phase 10: Notion Adapter
@@ -191,7 +197,7 @@ Sin orphans, sin duplicados. MULTI-02 (nada B/C se auto-ejecuta) se cierra en Ph
 | 6. Capa de Ejecución | v0.1 | 5/5 | Complete | 2026-06-13 |
 | 7. Modelo de Agentes | v0.1 | 5/5 | Complete | 2026-06-16 |
 | 8. Primer Agente (Finanzas) | v0.1 | 4/4 | Complete | 2026-06-17 |
-| 9. Routine Scheduler | v1.0 | 0/TBD | Not started | - |
+| 9. Routine Scheduler | v1.0 | 0/5 | Planned | - |
 | 10. Notion Adapter | v1.0 | 0/TBD | Not started | - |
 | 11. Owner Memory | v1.0 | 0/TBD | Not started | - |
 | 12. Daily Assistant | v1.0 | 0/TBD | Not started | - |
