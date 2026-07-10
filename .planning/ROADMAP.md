@@ -1,237 +1,206 @@
-# Wyss — Roadmap v0.1
+# Roadmap: Wyss
 
-**Estructura:** Horizontal Layers (capas técnicas completas, ensamblaje progresivo)
-**Granularidad:** fine — 10 fases
-**Orden:** derivado del build order de `research/ARCHITECTURE.md` — dependencias técnicas reales, no las 5 fases del prompt original (que se mapean: prompt F1 → fases 3-4; F2 → 5-6; F3 → 7-8; F4 → 9; F5 → 10)
-**Regla:** cada fase entrega valor verificable antes de avanzar. Criterio transversal de `docs/16`: nada se acepta con acción sin auditar, acceso sin habilitación, vía para ejecutar D, o secreto enviado afuera.
+## Milestones
 
----
+- ✅ **v0.1 Demo técnica** — Phases 1-8 (shipped 2026-07-10, tagged v0.1.0)
+- 🚧 **v1.0 Producto final — app móvil + asistente diario** — Phases 9-15 (in progress)
 
-## Fases
+**Regla transversal inviolable:** nada B/C se auto-ejecuta — todo productor de planes (rutinas, intake, agentes) pasa por `CognitivePolicyEngine` y cae a la bandeja; el owner sella. Nivel D absoluto.
+
+**Estructura v1.0:** vertical slices ordenados por dependencia (research/SUMMARY.md, confidence HIGH). Sin un segundo camino de ejecución: cada feature reusa `dispatch()` (nuevo productor de Plan) o el patrón Tool adapter (nueva Action gateada).
+
+## Phases
+
+- [x] **Phase 1: Fundaciones** - Núcleo hexagonal, política cognitiva A/D, auditoría
+- [x] **Phase 2: Gateway de Modelos** - Salida única a IA con minimización + costo + tracing
+- [x] **Phase 3: Pipeline de Ingesta** - Indexado incremental FTS5 + vectores, secretos excluidos
+- [x] **Phase 4: Búsqueda Híbrida** - Encontrar cualquier archivo en segundos (RRF)
+- [x] **Phase 5: Orquestador Daemon** - Daemon persistente, planes, confirmaciones
+- [x] **Phase 6: Capa de Ejecución** - Acciones reales (fs/shell/git) con undo + 2da muralla
+- [x] **Phase 7: Modelo de Agentes** - AgentBase config-driven + permisos estructurales
+- [x] **Phase 8: Primer Agente (Finanzas)** - Pellegrini coach + ledger SQLite
+- [ ] **Phase 9: Routine Scheduler** - Rutinas programadas que caen a la bandeja por política
+- [ ] **Phase 10: Notion Adapter** - Leer/escribir Notion como acciones gateadas
+- [ ] **Phase 11: Owner Memory** - Memoria persistente, editable y trust-tiered
+- [ ] **Phase 12: Daily Assistant** - Digest diario proactivo (solo lectura)
+- [ ] **Phase 13: Intake n8n** - Webhook externo → propuesta → bandeja con bearer token
+- [ ] **Phase 14: Web PC Polish** - Glow-up desktop + superficies de rutinas/digest/memoria
+- [ ] **Phase 15: Mobile APK** - Capacitor + pairing QR + cert pinning TOFU
+
+## Phase Details
+
+<details>
+<summary>✅ v0.1 Demo técnica (Phases 1-8) — SHIPPED 2026-07-10 (tag v0.1.0)</summary>
 
 ### Phase 1: Fundaciones
-
-**Goal:** Núcleo hexagonal puro: dominio, ports, auditoría y política cognitiva — sin IO, completamente testeado.
-**Requirements:** POL-01, POL-02, POL-03, POL-04, POL-05, AUD-01 (esquema)
-**Success Criteria**:
-
-1. Los 14 ports de `research/ARCHITECTURE.md` existen como Protocols en `core/ports/` y mypy strict pasa en `core/`
-2. El CognitivePolicyEngine clasifica planes dorados en A/B/C/D correctamente — D por denylist determinística, sin LLM
-3. Un plan compuesto de pasos menores que agregan a nivel D se clasifica D (test de bypass por composición)
-4. AuditLogger escribe eventos a SQLite y todo componente posterior lo recibe inyectado (firma verificada por tests)
-5. La config TOML se valida con Pydantic al boot — config inválida = fail-fast con error legible
-
-**Plans:** 6/6 plans complete
-
-- [x] 01-01-PLAN.md — toolchain uv + esqueleto multi-paquete
-- [x] 01-02-PLAN.md — dominio frozen + 14 ports (interfaces primero)
-- [x] 01-03-PLAN.md — SqliteAuditLogger append-only (AUD-01)
-- [x] 01-04-PLAN.md — fix CR-01: rechazo D no salteable por valor + isinstance (POL-03)
-- [x] 01-05-PLAN.md — CognitivePolicyEngine + denylist built-in + golden/composición (POL-03/04/05)
-- [x] 01-06-PLAN.md — bootstrap config Pydantic→dominio, fail-fast, denylist aditiva (POL-04/05)
+**Goal**: Núcleo hexagonal puro — dominio, ports, auditoría, política cognitiva A/D sin IO.
+**Requirements**: POL-01..05, AUD-01
+**Plans**: 6/6 complete
 
 ### Phase 2: Gateway de Modelos
-
-**Goal:** Único punto de salida a IA externa, con minimización de contexto, gate de costo y tracing — antes de que exista cualquier consumidor.
-**Requirements:** GATE-01, GATE-02, GATE-03, GATE-04, GATE-05
-**Success Criteria**:
-
-1. Dos proveedores configurables e intercambiables vía config sin tocar código (probado con FakeProvider en tests)
-2. El Context Minimizer redacta secretos plantados antes de cada llamada — el fixture "secreto trampa" nunca aparece en un payload saliente
-3. El Cost Tracker bloquea la llamada cuando el presupuesto se agota (gate, no reporte)
-4. Cada llamada deja trace consultable: prompt, output, latencia, tokens, costo
-5. EmbeddingProvider funciona con al menos un proveedor real y uno fake
+**Goal**: Único punto de salida a IA externa con minimización de contexto, gate de costo y tracing.
+**Requirements**: GATE-01..05, ORCH-06, ORCH-07
+**Plans**: complete
 
 ### Phase 3: Pipeline de Ingesta
-
-**Goal:** Escanear, extraer e indexar archivos en FTS5 de forma incremental, reanudable y con secretos excluidos.
-**Requirements:** KNOW-01, KNOW-02, KNOW-03, KNOW-06, KNOW-07, KNOW-08, KNOW-09, KNOW-11
-**Success Criteria**:
-
-1. `wyss index <ruta>` escanea, extrae e indexa PDF/DOCX/TXT/MD/código/CSV/XLSX; imágenes y video como metadatos
-2. Re-correr sobre 10 archivos modificados no re-procesa el resto (incremental por size+mtime→hash)
-3. Matar el proceso a mitad de escaneo y relanzar continúa donde quedó (estado por archivo en SQLite)
-4. El secreto plantado en la BC trampa no aparece en el índice (prueba dirigida)
-5. `--estimate` proyecta chunks y costo antes de llamar a la API; la indexación muestra progreso con ETA
-6. Registrar un extractor nuevo no modifica una línea del pipeline (test de extensibilidad)
-
-**Plans:** 7/7 plans complete
-
-- [x] 03-01-PLAN.md — fundación: deps + dominio de ingesta + errores + sección [ingest] + scaffolding de tests (Wave 0)
-- [x] 03-02-PLAN.md — StateStore: index.db WAL fail-fast + incremental (KNOW-02) + reanudable (KNOW-03)
-- [x] 03-03-PLAN.md — SecretFilter de 3 capas, puro e inyectado (KNOW-07)
-- [x] 03-04-PLAN.md — Scanner + ExtractorRegistry (plugin pattern) + 6 extractores (KNOW-06)
-- [x] 03-05-PLAN.md — TokenChunker + FTS5Index (external content) + ChromaVectorIndex por kb_id (KNOW-01/KNOW-11)
-- [x] 03-06-PLAN.md — IngestPipeline: secret-gate + reanudabilidad + estimate/dry-run + extensibilidad (prueba dirigida, criterio 4/6)
-- [x] 03-07-PLAN.md — CLI wyss index: composition root + flags + progreso Rich + exit codes (KNOW-08/09/11)
+**Goal**: Escanear/extraer/indexar archivos en FTS5 + vectores, incremental y con secretos excluidos.
+**Requirements**: KNOW-01, KNOW-02, KNOW-03, KNOW-06, KNOW-07, KNOW-08, KNOW-09, KNOW-11
+**Plans**: 7/7 complete
 
 ### Phase 4: Búsqueda Híbrida
-
-**Goal:** Encontrar cualquier archivo en segundos — FTS5 + semántica fusionadas. El primer valor real para el owner.
-**Requirements:** KNOW-04, KNOW-05, KNOW-10, AUD-03
-**Success Criteria**:
-
-1. `wyss search "<consulta>"` responde en < 5 segundos sobre el volumen indexado
-2. Cada resultado trae ruta exacta, extracto, fuente y fecha
-3. La búsqueda funciona sin vectores (FTS5 solo) y mejora con ellos (fusión RRF)
-4. Toda consulta queda auditada
-5. El eval set dorado (N consultas → archivo esperado) corre en CI y pasa
-
-**Plans:** 3/3 plans complete
-
-- [x] 04-01-PLAN.md — base pura: rrf_merge + Hit.date + frescura StateStore + corpus dorado N=20 + scaffolds de test (Wave 0)
-- [x] 04-02-PLAN.md — HybridRetrieval: fusión RRF + degradación D-44 + auditoría + date(mtime) (KNOW-04/05)
-- [x] 04-03-PLAN.md — CLI search/status: salida Rich/JSON (D-43) + banner degradado (D-44) + footer/status (D-47) + gate dorado hit@1 (AUD-03)
+**Goal**: Encontrar cualquier archivo en segundos — FTS5 + semántica fusionadas (RRF).
+**Requirements**: KNOW-04, KNOW-05, KNOW-10, AUD-03
+**Plans**: 3/3 complete
 
 ### Phase 5: Orquestador Daemon
-
-**Goal:** Proceso persistente que recibe lenguaje natural, clasifica intención, genera planes y gestiona confirmaciones — política cognitiva operativa de punta a punta.
-**Requirements:** ORCH-01, ORCH-02, ORCH-03, ORCH-04, ORCH-05, ORCH-06, ORCH-07, POL-06, AUD-02
-**Success Criteria**:
-
-1. `wyss start` levanta el daemon; sobrevive a socket huérfano; systemd lo reinicia ante fallo
-2. `wyss ask` clasifica ≥ 9 categorías de intención; lo ambiguo pide aclaración en vez de asumir
-3. Toda tarea modificadora muestra plan legible; B pide [s/N], C exige "CONFIRMAR", D se rechaza con explicación y queda auditado
-4. Reiniciar el daemon no pierde confirmaciones ni propuestas pendientes (colas en SQLite)
-5. El eval del clasificador de política corre en CI — un falso-A rompe el build
-6. `wyss audit` permite al owner consultar el historial
-
-**Plans:** 5 plans (4/5 complete; 05-05 BLOQUEADO por A2)
-
-- [x] 05-01-PLAN.md — Wave 0: verificación empírica Hermes/MCP/Docker/FastMCP + scaffolding de tests (VEREDICTO STOP-PARCIAL: A1 PASS, A2 FAIL, A3/A4 parcial)
-- [x] 05-02-PLAN.md — dominio puro: Action.on_error + OrchestratorPort + IntentClassification + gate dorado POL-06
-- [x] 05-03-PLAN.md — PendingStore SQLite + plan_renderer (B/C) + ttl_reaper (ORCH-05/06)
-- [x] 05-04-PLAN.md — daemon asyncio + dispatcher fail-closed + CLI start/ask/confirm/audit (ORCH-01/02, AUD-02)
-- [ ] 05-05-PLAN.md — HermesOrchestrator adapter + IntentRouter + MCP server gateado (ORCH-03/04, D-59) — **BLOQUEADO**: A2 FAIL (no hay imagen Hermes publicada; requiere clonar+`docker build` + cerrar A3 disabled_toolsets + regla UFW). Ver 05-EMPIRICAL.md §revisiones.
+**Goal**: Proceso persistente que recibe lenguaje natural, clasifica intención, genera planes y gestiona confirmaciones.
+**Requirements**: ORCH-01..05, POL-06, AUD-02
+**Plans**: 5 plans (05-05 HermesOrchestrator BLOQUEADO por A2 — sin imagen Hermes publicada)
 
 ### Phase 6: Capa de Ejecución
-
-**Goal:** Acciones reales sobre el entorno (archivos, shell, git) con verificación posterior, undo y segunda muralla de riesgo.
-**Requirements:** EXEC-01, EXEC-02, EXEC-03, EXEC-04
-**Success Criteria**:
-
-1. FileSystemAdapter ejecuta un plan real con confirmación B de punta a punta (Milestone B del research)
-2. Toda acción modificadora se verifica después (conteos/hashes) y el resultado queda auditado
-3. Borrar = papelera; el journal registra origen→destino con operación inversa aplicable
-4. El adapter re-verifica el nivel de riesgo antes de ejecutar — un plan adulterado post-política se bloquea
-5. ShellAdapter solo ejecuta comandos de la allowlist
-
-**Plans:** 5/5 plans complete
-Plans:
-**Wave 1**
-
-- [x] 06-01-PLAN.md — Wave 0: send2trash dep + tests/execution infra + NTFS empirical stub
-- [x] 06-02-PLAN.md — UndoJournal SQLite-WAL: record/restore inverse ops (D-65)
-- [x] 06-03-PLAN.md — ShellAdapter + GitAdapter: binary/subcommand allowlist, argv exec (D-66)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 06-04-PLAN.md — FileSystemAdapter: second wall (D-68) + per-type verify (D-67) + send2trash/journal
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 06-05-PLAN.md — PlanExecutor: dispatch + on_error ABORT/RETRY/ESCALATE (D-69) + package exports
+**Goal**: Acciones reales (archivos, shell, git) con verificación posterior, undo y segunda muralla.
+**Requirements**: EXEC-01..04
+**Plans**: 5/5 complete
 
 ### Phase 7: Modelo de Agentes
+**Goal**: AgentBase + registro config-driven + permisos estructurales — instanciar agentes sin código nuevo.
+**Requirements**: AGENT-01..06, AGENT-08, POL-07
+**Plans**: 5/5 complete
 
-**Goal:** AgentBase + registro config-driven + permisos estructurales — la maquinaria para instanciar agentes sin código nuevo.
-**Requirements:** AGENT-01, AGENT-02, AGENT-03, AGENT-04, AGENT-05, AGENT-06, AGENT-08, POL-07
-**Success Criteria**:
+### Phase 8: Primer Agente de Dominio (Finanzas) — Pellegrini
+**Goal**: Owner carga ingresos/gastos (CLI + conversacional) y Pellegrini los analiza.
+**Requirements**: AGENT-07, AGENT-09
+**Plans**: 4/4 complete (checkpoint owner APROBADO 2026-06-17; deuda: calibración de prosa advisory con LLM real)
 
-1. Un agente nuevo se crea agregando una entrada en config — cero código nuevo (probado con agente de prueba)
-2. Intento de acceso a BC sin permiso → bloqueado estructuralmente (scoped facade) + auditado
-3. Revocar un permiso surte efecto en la siguiente query, sin reiniciar nada
-4. Un agente no puede invocar a otro ni modificar su propia config/presupuesto (tests de ausencia)
-5. El contenido recuperado se marca como dato no confiable y un documento con instrucciones inyectadas no altera el plan (test anti-injection)
-6. La memoria del agente persiste preferencias y solo el owner/extracción supervisada la escribe
+</details>
 
-**Plans:** 5/5 plans complete
+### 🚧 v1.0 Producto final (Phases 9-15)
 
-**Wave 0** (test scaffold + frontera arquitectónica)
+**Milestone Goal:** Wyss deja de ser demo técnica: APK Android instalable + web PC pulida + asistente diario real (rutinas, Notion, memoria, intake automático), sin introducir un segundo camino de ejecución.
 
-- [x] 07-01-PLAN.md — PlanRunner port + scaffold tests/agents/ + fixture dorado injection (Nyquist RED)
+> Nota de historial: las viejas fases 9 (Multi-agente y Rutinas) y 10 (Modo Equipo) del roadmap v0.1 nunca se construyeron. Su parte de rutinas se absorbe en la nueva **Phase 9 (Routine Scheduler)** sin multi-agente pleno (cierra MULTI-02); Modo Equipo (TEAM-01/02) queda **fuera de scope** de v1.0 (post-v1.0).
 
-**Wave 1** (componentes ortogonales — files disjuntos)
+#### Phase 9: Routine Scheduler
+**Goal**: El owner puede programar rutinas recurrentes que disparan Planes por el mismo gate de política — las propuestas B/C caen a la bandeja, jamás auto-ejecutan.
+**Depends on**: Phase 5 (daemon + dispatch), Phase 6 (ejecución), Phase 8 (existente)
+**Requirements**: SCHED-01, SCHED-02, SCHED-03, SCHED-04, SCHED-05
+**Success Criteria** (what must be TRUE):
+  1. El owner crea una rutina (cron u hora fija) desde CLI o web y ve un preview legible del schedule antes de guardar
+  2. Cuando una rutina dispara, las acciones A ejecutan directo y las B/C caen a la bandeja como propuesta — nunca auto-ejecución (cierra MULTI-02)
+  3. El owner lista, pausa, reanuda y borra rutinas, y ve el último resultado de cada una
+  4. Tras downtime del daemon, las rutinas perdidas se coalescen con catch-up explícito — jamás doble-fire
+  5. Cada disparo queda auditado: trigger, plan, decisión de política y resultado
+**Plans**: TBD
+**Research flags**: catch-up policy post-downtime (planning), timezone entre máquinas (testing)
 
-- [x] 07-02-PLAN.md — AgentMemory (D-71) + SQLitePermissionStore + ScopedRetrieval pre-retrieval sin cache (D-72, AGENT-03/04/08)
-- [x] 07-03-PLAN.md — bootstrap AgentConfigModel extra=forbid + WyssSettings.agents (D-73, AGENT-02)
+#### Phase 10: Notion Adapter
+**Goal**: El owner puede leer y escribir contenido de Notion como acciones gateadas por política, con preview de writes.
+**Depends on**: Phase 9 (patrón de dispatch), gateway/política existentes
+**Requirements**: NOTION-01, NOTION-02, NOTION-03, NOTION-04
+**Success Criteria** (what must be TRUE):
+  1. El owner pide en lenguaje natural leer una página/database de Notion y ve el contenido (nivel A con base_levels explícito para notion.*)
+  2. El owner pide crear/editar en Notion y el write cae como propuesta B/C con preview del cambio antes de confirmar
+  3. El adapter respeta rate limits (retry/backoff en 429) y pagina resultados completos
+  4. El token de Notion vive en config/.env (nunca en repo) y toda llamada queda auditada
+**Plans**: TBD
+**Research flags**: base_levels específicos de notion.* (planning), paginación/429 testear temprano
 
-**Wave 2** (núcleo)
+#### Phase 11: Owner Memory
+**Goal**: El owner tiene una memoria persistente, editable y trust-tiered que alimenta al planner como DATO, no como instrucción.
+**Depends on**: Phase 9. Debe existir ANTES de la Phase 13 (intake externo) — el trust-tiering previene laundering de prompt-injection.
+**Requirements**: MEM-01, MEM-02, MEM-03, MEM-04
+**Success Criteria** (what must be TRUE):
+  1. El owner le dice a wyss que recuerde un hecho/preferencia y persiste (write = acción gateada ≥B)
+  2. El owner ve, edita y borra su memoria — legible, nunca un blob opaco
+  3. La memoria distingue trust tiers (owner-stated vs ingested-external); el contenido externo jamás se recuerda sin confirmación
+  4. El contenido recordado se inyecta como DATO (no instrucción) en los prompts del planner — un fact con instrucciones inyectadas no altera el plan (test anti-injection)
+**Plans**: TBD
+**Research flags**: formato de trust-tier markers (planning)
 
-- [x] 07-04-PLAN.md — ConfiguredAgent: ciclo _run sin recursión + anti-injection untrusted_content + segunda muralla + test dorado (AGENT-01/05/06, POL-07/D-70)
+#### Phase 12: Daily Assistant
+**Goal**: El owner recibe un digest diario proactivo y de solo lectura que compone bandeja + Pellegrini + fallas de rutinas.
+**Depends on**: Phase 9 (rutina programada 08:00), Phase 11 (memoria), Phase 8 (ledger Pellegrini)
+**Requirements**: DAILY-01, DAILY-02, DAILY-03
+**Success Criteria** (what must be TRUE):
+  1. El owner recibe un digest diario a hora configurable con pendientes de bandeja, snapshot Pellegrini y fallas de rutinas
+  2. El digest es solo lectura (nivel A) — nunca ejecuta ni propone writes por sí solo
+  3. El owner ve el digest del día en la web y puede pedirlo on-demand
+**Plans**: TBD
 
-**Wave 3** (ensamblaje + gate)
+#### Phase 13: Intake n8n
+**Goal**: Workflows n8n externos pueden postear propuestas que rutean por el gate de política hasta la bandeja, con bearer token dedicado.
+**Depends on**: Phase 11 (trust-tiering de memoria debe existir antes del intake externo), Phase 9 (dispatch)
+**Requirements**: INTAKE-01, INTAKE-02, INTAKE-03
+**Success Criteria** (what must be TRUE):
+  1. Un workflow n8n postea a `POST /api/intake` con bearer token dedicado — nunca la cookie del pairing
+  2. Toda propuesta de intake pasa por la política y cae a la bandeja como B/C — jamás auto-ejecuta
+  3. El endpoint tiene rate limit propio y rechaza sin token válido (401 auditado, sin loguear el token)
+**Plans**: TBD
 
-- [x] 07-05-PLAN.md — AgentRegistry config-driven + conformance + exports + full suite gate (AGENT-02)
+#### Phase 14: Web PC Polish
+**Goal**: El owner gestiona rutinas, digest y memoria desde una web desktop cohesiva y con glow-up de página entera.
+**Depends on**: Phase 9 (rutinas), Phase 11 (memoria), Phase 12 (digest)
+**Requirements**: WEB-01, WEB-02, WEB-03, WEB-04
+**Success Criteria** (what must be TRUE):
+  1. El owner ve y gestiona rutinas desde la web (lista, estado, pausar/reanudar)
+  2. El owner ve el digest diario en la web
+  3. El owner edita su memoria desde la web
+  4. La UI desktop recibe un glow-up cohesivo de página entera: aprovecha la pantalla grande, jerarquía clara, sin huecos de layout
+**Plans**: TBD
+**UI hint**: yes
 
-### Phase 8: Primer Agente de Dominio (Finanzas) — Pellegrini, coach + ledger
-
-**Goal:** As a owner, I want to cargar mis ingresos y gastos (CLI y conversacional) y que Pellegrini los analice, so that sepa a dónde se va mi plata y pueda ser económicamente estable.
-**Mode:** mvp
-**Requirements:** AGENT-07, AGENT-09
-**Success Criteria**:
-
-1. El owner carga ingresos/gastos al ledger por dos vías (comando CLI determinístico + acción conversacional owner-instruida que pasa por el policy engine); persisten en SQLite.
-2. Pellegrini existe como config (`[[agents]]`: identidad pellegrini, dominio finanzas, modelo económico, presupuesto $5) y lee el ledger — cero código de agente nuevo (D-73).
-3. Completa ≥ 3 tareas reales de asesoría E2E ("¿dónde se me va la plata?", "armá mi presupuesto mensual", "¿cuánto puedo ahorrar?"), reportando al orquestador (daemon dispatcher + FakeOrchestrator) y todo queda auditado.
-4. Agotado su presupuesto de IA, sus llamadas se bloquean (gate per-agente de `gateway/cost.py` cableado desde config y verificado).
-
-**Plans:** 4/4 plans executed
-
-**Wave 1**
-- [x] 08-01-PLAN.md — Wave 0: scaffolds RED (7 tests) + plumbing (llm_judge marker, import-linter `ledger`, config/config.toml con Pellegrini + budget cableado)
-
-**Wave 2** *(blocked on Wave 1)*
-- [x] 08-02-PLAN.md — ledger: Transaccion (dominio) + LedgerPort (Protocol) + SqliteLedgerStore (WAL NORMAL, agregaciones SQL deterministas) (AGENT-09)
-
-**Wave 3** *(blocked on Wave 2)*
-- [x] 08-03-PLAN.md — CLI `wyss fin add-ingreso/add-gasto/ver` determinístico + finance.* en _BASE_LEVELS + budget cableado desde [[agents]] al cost gate (AGENT-07/criterio #1/#4)
-
-**Wave 4** *(blocked on Wave 3)*
-- [x] 08-04-PLAN.md — LedgerRetrieval (adapter del port Retrieval, cero código de agente) + 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher + budget cutoff (AGENT-07/AGENT-09/criterios #2/#3) — **código GREEN (gate 424 passed); checkpoint owner APROBADO 2026-06-17 sobre evidencia determinística** (`fin` en vivo: superávit $120k correcto, agregación SQL por categoría exacta). **Deuda diferida:** calibración de prosa advisory (D3/D6) pendiente — requiere LiteLLM :4000 levantado + `config/.env` (hoy down por perf-tuning) o el daemon Hermes real (plan 05-05, BLOCKED). `judge_advisory_quality` usa rúbrica determinística de respaldo, no LLM real.
-
-### Phase 9: Multi-agente y Rutinas
-
-**Goal:** Varios agentes conviviendo + rutinas programadas con bandeja de aprobaciones — operación desatendida segura.
-**Requirements:** ROUT-01, ROUT-02, ROUT-03, ROUT-04, ROUT-05, ROUT-06, ROUT-07
-**Success Criteria**:
-
-1. Dos o más agentes operan en simultáneo sin interferirse
-2. Una tarea multi-dominio se divide, delega y consolida correctamente
-3. La rutina semanal (lunes 8:00) corre por scheduler; sus acciones B/C quedan como propuestas en la bandeja, nunca auto-ejecutadas, y el owner es notificado
-4. Una rutina no se duplica ante reinicio del scheduler (idempotencia por ventana)
-5. Una tarea multi-paso interrumpida en el paso N retoma desde N
-6. Las 4 BC (Personal, RAGcorp, Beca #1, Beca #2) conectadas con habilitaciones selectivas
-
-### Phase 10: Modo Equipo
-
-**Goal:** Trabajadores humanos interactuando con agentes asignados, sin acceso al núcleo.
-**Requirements:** TEAM-01, TEAM-02, TEAM-03, TEAM-04, TEAM-05
-**Success Criteria**:
-
-1. Un trabajador interactúa con su agente asignado por interfaz separada — sin ver núcleo ni auditoría completa
-2. Solo accede a los agentes que el owner le asignó
-3. Intento de exceder el rol escala al owner (probado explícitamente)
-4. El agente extrae estado/intención de reportes del trabajador y actualiza el tablero
-5. Todo input de trabajador se trata como contenido no confiable (anti-injection endurecido)
-
----
+#### Phase 15: Mobile APK
+**Goal**: El owner instala un APK Android que abre wyss como app nativa contra el bridge, pareado por QR con cert pinning, con paridad de confirmación B/C.
+**Depends on**: Phase 14 (paridad de superficie web)
+**Requirements**: APK-01, APK-02, APK-03, APK-04, APK-05, APK-06
+**Success Criteria** (what must be TRUE):
+  1. El owner instala un APK que abre wyss como app nativa apuntando al mismo origen del bridge (`server.url`) — sin bundle local, sin aflojar allowlist de Host/Origin ni CORS
+  2. Pairing por QR: la app escanea un QR con URL del bridge + fingerprint del cert y queda pareada sin tipear nada
+  3. La app confía SOLO en el cert cuya huella vino en el QR (TOFU pinning en `onReceivedSslError`); cert distinto = bloqueo con aviso, jamás proceed ciego
+  4. El owner confirma propuestas B/C desde la app con paridad funcional respecto a la web (gate CONFIRMAR incluido)
+  5. Ante server caído o IP cambiada, la app muestra un error accionable y permite re-pairing
+**Plans**: TBD
+**Research flags**: HIGH — spike de cert pinning + schema del QR payload ANTES de construir
+**UI hint**: yes
 
 ## Coverage
 
-55/55 requirements v1 mapeados a exactamente una fase. Verificación:
+**v1.0: 25/25 requirements mapeados a exactamente una fase.**
 
-- KNOW: 01-03, 06-09, 11 → P3 · 04, 05, 10 → P4
-- ORCH: 01-07 → P5
-- POL: 01-05 → P1 · 06 → P5 · 07 → P7
-- GATE: 01-05 → P2
-- AGENT: 01-06, 08 → P7 · 07, 09 → P8
-- EXEC: 01-04 → P6
-- ROUT: 01-07 → P9
-- TEAM: 01-05 → P10
-- AUD: 01 → P1 · 02 → P5 · 03 → P4
+- SCHED-01..05 → Phase 9
+- NOTION-01..04 → Phase 10
+- MEM-01..04 → Phase 11
+- DAILY-01..03 → Phase 12
+- INTAKE-01..03 → Phase 13
+- WEB-01..04 → Phase 14
+- APK-01..06 → Phase 15
 
-## Milestones del research
+Sin orphans, sin duplicados. MULTI-02 (nada B/C se auto-ejecuta) se cierra en Phase 9. TEAM-01/02, PUSH-01, REMOTE-01, NSYNC-01 = fuera de scope v1.0 (ver REQUIREMENTS.md).
 
-- **Milestone A** (fin P4): búsqueda instantánea standalone — el valor que el owner usa todos los días
-- **Milestone B** (fin P6): primer plan real ejecutado con confirmación — la política cognitiva probada en el mundo real
+## Progress
+
+**Execution Order:** 9 → 10 → 11 → 12 → 13 → 14 → 15
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Fundaciones | v0.1 | 6/6 | Complete | 2026-06-11 |
+| 2. Gateway de Modelos | v0.1 | complete | Complete | 2026-06-12 |
+| 3. Pipeline de Ingesta | v0.1 | 7/7 | Complete | 2026-06-12 |
+| 4. Búsqueda Híbrida | v0.1 | 3/3 | Complete | 2026-06-13 |
+| 5. Orquestador Daemon | v0.1 | 4/5 | Complete (05-05 blocked) | 2026-06-13 |
+| 6. Capa de Ejecución | v0.1 | 5/5 | Complete | 2026-06-13 |
+| 7. Modelo de Agentes | v0.1 | 5/5 | Complete | 2026-06-16 |
+| 8. Primer Agente (Finanzas) | v0.1 | 4/4 | Complete | 2026-06-17 |
+| 9. Routine Scheduler | v1.0 | 0/TBD | Not started | - |
+| 10. Notion Adapter | v1.0 | 0/TBD | Not started | - |
+| 11. Owner Memory | v1.0 | 0/TBD | Not started | - |
+| 12. Daily Assistant | v1.0 | 0/TBD | Not started | - |
+| 13. Intake n8n | v1.0 | 0/TBD | Not started | - |
+| 14. Web PC Polish | v1.0 | 0/TBD | Not started | - |
+| 15. Mobile APK | v1.0 | 0/TBD | Not started | - |
+
+## Milestones del research (v1.0)
+
+- **Foundation** (fin Phase 9): todo lo autónomo (Daily, Intake) depende del scheduler probado
+- **Trust boundary** (fin Phase 11): memoria trust-tiered ANTES de que Notion/n8n escriban contenido recordable
+- **Producto final** (fin Phase 15): APK instalado + web pulida + asistente diario operativo

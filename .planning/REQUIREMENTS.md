@@ -73,8 +73,36 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ## Traceability
 
-(La completa el roadmapper.)
+Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin orphans, sin duplicados).
 
-| REQ | Phase |
-|-----|-------|
-| — | — |
+| REQ | Phase | Status |
+|-----|-------|--------|
+| SCHED-01 | Phase 9 — Routine Scheduler | Pending |
+| SCHED-02 | Phase 9 — Routine Scheduler | Pending |
+| SCHED-03 | Phase 9 — Routine Scheduler | Pending |
+| SCHED-04 | Phase 9 — Routine Scheduler | Pending |
+| SCHED-05 | Phase 9 — Routine Scheduler | Pending |
+| NOTION-01 | Phase 10 — Notion Adapter | Pending |
+| NOTION-02 | Phase 10 — Notion Adapter | Pending |
+| NOTION-03 | Phase 10 — Notion Adapter | Pending |
+| NOTION-04 | Phase 10 — Notion Adapter | Pending |
+| MEM-01 | Phase 11 — Owner Memory | Pending |
+| MEM-02 | Phase 11 — Owner Memory | Pending |
+| MEM-03 | Phase 11 — Owner Memory | Pending |
+| MEM-04 | Phase 11 — Owner Memory | Pending |
+| DAILY-01 | Phase 12 — Daily Assistant | Pending |
+| DAILY-02 | Phase 12 — Daily Assistant | Pending |
+| DAILY-03 | Phase 12 — Daily Assistant | Pending |
+| INTAKE-01 | Phase 13 — Intake n8n | Pending |
+| INTAKE-02 | Phase 13 — Intake n8n | Pending |
+| INTAKE-03 | Phase 13 — Intake n8n | Pending |
+| WEB-01 | Phase 14 — Web PC Polish | Pending |
+| WEB-02 | Phase 14 — Web PC Polish | Pending |
+| WEB-03 | Phase 14 — Web PC Polish | Pending |
+| WEB-04 | Phase 14 — Web PC Polish | Pending |
+| APK-01 | Phase 15 — Mobile APK | Pending |
+| APK-02 | Phase 15 — Mobile APK | Pending |
+| APK-03 | Phase 15 — Mobile APK | Pending |
+| APK-04 | Phase 15 — Mobile APK | Pending |
+| APK-05 | Phase 15 — Mobile APK | Pending |
+| APK-06 | Phase 15 — Mobile APK | Pending |

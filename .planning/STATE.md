@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Producto final — app móvil + asistente diario
-status: planning
-last_updated: "2026-07-10T15:53:19.028Z"
+status: roadmap_complete
+last_updated: "2026-07-10T00:00:00.000Z"
 last_activity: 2026-07-10
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,59 +17,58 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-10)
+See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** Encontrar cualquier cosa en 2 TB en segundos + delegar tareas a agentes con control total y auditoría de todo.
-**Current focus:** Phase 8 — primer agente de dominio (finanzas)
+**Current focus:** Milestone v1.0 — roadmap creado (7 fases, 9-15). Próximo: `/gsd:plan-phase 9` (Routine Scheduler).
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 9 — Routine Scheduler (Not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-10 — Milestone v1.0 started
+Status: Roadmap v1.0 completo, esperando planning de Phase 9
+Last activity: 2026-07-10 — Roadmap v1.0 creado (Scheduler → Notion → Memory → Daily → Intake → Web → APK)
+
+## v1.0 Roadmap (Phases 9-15)
+
+Orden por dependencia (research/SUMMARY.md, confidence HIGH). Regla inviolable: nada B/C se auto-ejecuta.
+
+| Phase | Goal | Requirements | Research flag |
+|-------|------|--------------|---------------|
+| 9. Routine Scheduler | Rutinas programadas → bandeja por política (cierra MULTI-02) | SCHED-01..05 | catch-up + timezone (planning/test) |
+| 10. Notion Adapter | Leer/escribir Notion como acciones gateadas | NOTION-01..04 | MEDIUM — base_levels + 429 |
+| 11. Owner Memory | Memoria persistente, editable, trust-tiered | MEM-01..04 | MEDIUM — trust-tier markers |
+| 12. Daily Assistant | Digest diario proactivo (solo lectura) | DAILY-01..03 | none |
+| 13. Intake n8n | Webhook externo → propuesta → bandeja (bearer token) | INTAKE-01..03 | none |
+| 14. Web PC Polish | Glow-up desktop + superficies rutinas/digest/memoria | WEB-01..04 | none (UI phase) |
+| 15. Mobile APK | Capacitor + pairing QR + cert pinning TOFU | APK-01..06 | HIGH — spike cert + QR schema |
+
+**Coverage:** 25/25 requirements mapeados a exactamente una fase. Sin orphans.
 
 ## Decisions Log
 
 | Date | Decision | Context |
 |------|----------|---------|
-| 2026-06-11 | **Fase 1 (resumen):** 12 decisiones — fail-closed D por valor+isinstance, agregados nivel-plan anti-bypass, BUILTIN_DENY no vaciable, WAL fail-fast, ConfigError en dominio | Detalle: `phases/01-fundaciones/01-DECISIONS.md` |
-| 2026-06-12 | **Fase 2 (resumen):** 19 decisiones — gateway fail-closed (SecretDetected sin valor, BUILTIN_SECRET_PATTERNS no vaciable, UnknownTier sin fallback), httpx sin SDK, retry solo en gateway, CostTracker veta pre-llamada, traces.db 0600/90d | Detalle: `phases/02-gateway-de-modelos/02-DECISIONS.md` |
-| 2026-06-17 | **08-04:** Pellegrini lee el ledger via `LedgerRetrieval` (adapter del puerto `Retrieval` sobre `LedgerPort`) inyectado por el hook `scoped_retrieval_factory` — CERO código de agente nuevo en los protegidos (D-73). `agents.pellegrini` es archivo NUEVO de infra (no modifica ConfiguredAgent/AgentRegistry). Hechos pre-agregados SQL como `Hit.snippet` (único canal sin tocar el agente; tradeoff AI-SPEC §4 documentado, deuda diferida). `propuesta_presupuesto = min(gastos, ingresos)` (≤ ingresos, D3). Fix: regex de montos del test RED se tragaba el punto de oración (`$1200.00.`). | Protegidos UNCHANGED (cost.py/gateway.py/dispatcher.py/configured_agent.py/registry.py); gate 424 passed |
-| 2026-06-16 | **08-03:** `agent_budgets` se DERIVA de `[[agents]].budget_usd` (Opción b, cierra RESEARCH Pitfall 1); el valor explícito de `[gateway.agent_budgets]` tiene precedencia. `finance.query=A`/`finance.record=B` (docs/10 §7: no son nivel D). `wyss fin add-ingreso/add-gasto/ver` determinístico contra `ledger.db` propio. | `cost.py` intacto (D-85); el gate ya enforce, solo se cableó |
-| 2026-06-10 | Roadmap de 10 fases por build order técnico, no las 5 fases del prompt | Dependencias reales: gateway antes que indexación (embeddings), fundaciones antes que todo |
-| 2026-06-10 | Las 10 features gap del research incluidas en v1 | Table stakes — se insertan en fases existentes |
-| 2026-06-10 | pymupdf primario para PDF (no PyPDF2) | PyPDF2 deprecado; throughput crítico a 2TB |
-| 2026-06-10 | Clasificación nivel D determinística por denylist | El LLM puede ser persuadido vía contenido indexado; solo puede subir riesgo |
-| 2026-06-10 | Permisos como scoped facades (capability-based) | Filtro estructural antes del retrieval, no checks post-hoc |
-| 2026-06-12 | `SecretFilter` de 3 capas (env_values + built-in patterns + config), fail-closed, excluye pre-indexado | KNOW-07: chunk con secreto detectado se descarta; el contenido sensible nunca entra al FTS5/vector; puro + inyectado; espejo del ContextMinimizer del gateway (03-03) |
-| 2026-06-12 | `IngestRunResult.warnings` campo aditivo con default `()` | Aviso Ollama-down viaja en el resultado sin romper construcciones existentes (patrón D-26); cross-AI exec (03-06) |
-| 2026-06-13 | send2trash sin type stubs → `# type: ignore[import-untyped]` | Mismo patrón que openpyxl en tests/knowledge/; no bloquea mypy strict (06-01) |
-| 2026-06-13 | RecordingEngine.evaluate retorna `object` | Mantiene conftest genérico sin importar PolicyDecision; mypy strict OK (06-01) |
-| 2026-06-13 | `backup_base_dir` inyectable en UndoJournal constructor | Tests usan `tmp_path`, prod usa `data/undo_backups` (06-02) |
-| 2026-06-13 | `restore()` retorna False (no raise) para entry_id missing o status != 'pending' | Safe no-op para doble-restore o rollback parcial (06-02) |
-| 2026-06-13 | `action.target` = binario/subcomando; `action.parameters['args']` = lista de argumentos | Taxonomía Action para ShellAdapter + GitAdapter (06-03) |
-| 2026-06-13 | AllowlistViolation capturada internamente; caller recibe ToolResult(success=False) sin try/except | Interfaz limpia — el bloqueo es un resultado, no una excepción propagada (06-03) |
-| 2026-06-13 | Test shell=True usa AST (ast.walk sobre ast.Call) en lugar de grep de texto | Evita falsos positivos en docstrings que mencionan el término como documentación (06-03) |
-| 2026-06-13 | `shutil.move` prohibido intercambiar con `os.rename`; grep gate enforced (count=0) | EXDEV en cross-FS NTFS↔ext4 — shutil.move es el único camino seguro (06-04) |
-| 2026-06-13 | `_get_str/_get_int` helpers para `Mapping[str, object]` en mypy strict | `int(Mapping.get())` no tiene overload en mypy; helpers con isinstance guards resuelven sin `# type: ignore` (06-04) |
-| 2026-06-13 | trash_path determinado pre-delete via `_expected_trash_path()`; actual re-verificado via `_find_actual_trash_path()` | send2trash puede añadir sufijo numérico en colisiones; dos pasos: journal con expected, verify con actual (06-04) |
-| 2026-06-13 | RETRY pre-ejecutado en run() via _retry_with_backoff: primer intento cuenta en max_attempts — evita N+1 llamadas a execute | PlanExecutor RETRY dispatch inline (06-05) |
-| 2026-06-13 | ExecutorResult dataclass frozen: success, detail, applied_entries tuple, failed_step — informa al caller qué entries quedaron aplicadas | PlanExecutor result type (06-05) |
+| 2026-07-10 | **Roadmap v1.0:** 7 fases (9-15) vertical slices por dependencia; sin segundo camino de ejecución (nuevo productor de Plan reusa dispatch, o Tool adapter gateado) | research/SUMMARY.md HIGH |
+| 2026-07-10 | Memory (Phase 11) DEBE preceder a Intake n8n (Phase 13) | Trust-tiering previene laundering de prompt-injection (Pitfall #3) |
+| 2026-07-10 | Viejas fases 9 (Multi-agente/Rutinas) y 10 (Modo Equipo) del roadmap v0.1 nunca construidas → superadas | Rutinas se absorben en nueva Phase 9 (sin multi-agente pleno); Modo Equipo fuera de scope v1.0 |
+| 2026-07-10 | APK como fase final propia (no merge) | Research flag HIGH: requiere spike de cert-pinning + schema QR antes de construir |
+
+_Decisiones v0.1 (Fases 1-8): ver `phases/*/`-DECISIONS.md y git history._
 
 ## Blockers
 
-(None)
+(None) — nota: plan 05-05 (HermesOrchestrator) quedó BLOQUEADO en v0.1 (sin imagen Hermes publicada); no bloquea v1.0.
 
 ## Notes
 
-- STACK.md y PITFALLS.md del research escritos inline (límite de sesión cortó los agentes) — versiones de libs a confirmar con `uv add` en Fase 1
-- Los stubs existentes en `src/` son placeholders del init original — la Fase 1 define la estructura real (`core/ports/` etc.)
-- Research flags: Fases 3-4 (chunking/embeddings a escala), 7 (memoria + anti-injection) y 10 (canal mensajería) necesitarán research adicional al planificarlas
+- Repo en NTFS (`/mnt/hdd/Data/10_Workspace/projects/wyss`). Roadmapper escribió archivos; el orquestador commitea.
+- Research flags a resolver en planning: base_levels de notion.* (P10), formato trust-tier (P11), catch-up post-downtime (P9), schema QR payload (P15, research previo).
+- Modo LLM activo (qwen vía LiteLLM local); v0.1.0 taggeado 2026-07-10, bridge móvil smoke-aprobado en teléfono real.
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
-- Phase 8 edited: retargeted Belgrano/estudio -> agente de finanzas (owner decision); Belgrano queda posterior
-- Phase 8 re-scoped (discuss): de "agente sobre BC" a MVP vertical "Pellegrini coach de finanzas + ledger SQLite". Owner no tiene docs para indexar; quiere registrar ingresos/gastos y ser asesorado. Capacidad nueva (ledger). Carga híbrida CLI+conversacional. AGENT-07 ya casi hecho en gateway/cost.py
+- 2026-07-10: Milestone v1.0 arranca. Roadmap reestructurado a formato milestone-grouped: v0.1 (fases 1-8) colapsado en `<details>`, v1.0 agrega fases 9-15. Numeración continua (no reinicia).
+- Viejas fases 9-10 (Multi-agente/Rutinas, Modo Equipo) removidas del plan activo: rutinas absorbidas en Phase 9; Modo Equipo diferido post-v1.0.
