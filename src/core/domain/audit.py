@@ -33,6 +33,8 @@ class AuditEventType(StrEnum):
     SPAN_STARTED = "span.started"
     SPAN_COMPLETED = "span.completed"
     SPAN_FAILED = "span.failed"
+    # SCHED-05: disparo de rutina, distinguible de command.received en la traza
+    ROUTINE_TRIGGERED = "routine.triggered"
 
 
 @dataclass(frozen=True, slots=True)
