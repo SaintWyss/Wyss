@@ -155,8 +155,8 @@ vivos. Sin fallback automático entre tiers (D-17). Mejora pendiente: mensaje di
 | **PR-08 Security Re-Audit** | Auditar superficie de ejecución + cerrar gaps denylist + suite prompts peligrosos + fix F3/TTL | **CERRADO** |
 | **PR-09 `wyss undo`** | Undo user-facing (§6) | **CERRADO** |
 | **PR-11 Operator Read Tools** | `file.read/list/stat` + `git.status/log/diff` | **CERRADO** |
-| **PR-10 HTTPS local + voz** | `--tls` self-signed auto (mkcert opcional), cookie Secure, voz destrabada | **CERRADO** (PWA diferida) |
-| **PR-14 v0.1.0 Stable** | Cierre, docs, smoke, tag | v0.1 |
+| **PR-10 HTTPS local + voz** | `--tls` self-signed auto (mkcert opcional), cookie Secure, voz destrabada | **CERRADO** (PWA entregada en PR-14) |
+| **PR-14 v0.1.0 Stable** | Cierre, docs, smoke físico, app web (PWA + login persistente), tag | **CERRADO** — smoke en teléfono real aprobado 2026-07-10 (`docs/releases/WYSS_v0.1.0.md`) |
 | PR-15 Scheduler · PR-16 Notion adapter · PR-17 Daily Assistant · PR-12 Memory · PR-13 Intake n8n | | v0.2 |
 
 Reordenado vs la sugerencia: PR-11 (lectura) antes que PR-10 — un operador que no puede

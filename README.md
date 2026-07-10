@@ -5,8 +5,10 @@
 Sistema de asistencia operativa multi-agente, humano primero.
 
 **Autor:** Santiago Wyss  
-**Estado:** v0.1 RC — loop ask→plan→política→confirmar→ejecutar→auditar verificado E2E con LLM real (ver `docs/releases/WYSS_v0.1_RC.md`)  
-**Versión:** 0.1-rc
+**Estado:** v0.1.0 — loop ask→plan→política→confirmar→ejecutar→auditar verificado E2E con LLM real y smoke físico del bridge móvil aprobado (ver `docs/releases/WYSS_v0.1.0.md`)  
+**Versión:** 0.1.0
+
+**Uso diario:** ver `docs/OPERATOR.md` (arranque, teléfono, troubleshooting).
 
 ---
 
@@ -44,6 +46,9 @@ OWNER
 | Política A-D + auditoría + undo journal + allowlists de ejecución | **Funciona y testeado** (fases 1, 6) |
 | Daemon con bandeja de confirmaciones B/C — `wyss start` / `ask` / `confirm` | **Funciona** (fase 5) |
 | Agentes config-driven + ledger de finanzas (Pellegrini) — `wyss fin` | **Funciona** (fases 7-8) |
+| Deshacer lo aplicado — `wyss undo` (dry-run + confirmación por política, sin bypass) | **Funciona** (PR-09) |
+| Lecturas del operador — `file.read/list/stat`, `git status/log/diff` (salidas capadas, secretos bloqueados) | **Funciona** (PR-11) |
+| UI web + bridge móvil — `wyss web --lan --tls` (HTTPS self-signed, cookie 30 días, PWA instalable, voz) | **Funciona, smoke físico aprobado** (PR-10/14/15) |
 | Conversación con LLM real (`[orchestrator] mode = "llm"`) | **Cableado, opt-in** — pendiente verificación manual con proveedor real |
 | Multi-agente + rutinas (fase 9) · Modo Equipo (fase 10) | **No empezadas** |
 
