@@ -135,3 +135,19 @@ async def test_injection_estimated_risk_cannot_lower_policy_and_bad_category_fai
     assert classification.clarification_needed is True
     assert plan.estimated_risk == RiskLevel.A
     assert decision.risk_level >= RiskLevel.B
+
+
+def test_draft_prompt_incluye_rubrica_de_riesgo() -> None:
+    """Smoke físico: sin rúbrica el LLM estimaba D para un list de /tmp y la
+    política (que solo sube, POL-04) lo convertía en rechazo absoluto."""
+    from core.orchestrator.intent import IntentCategory, IntentClassification
+    from orchestrator.llm_orchestrator import _draft_prompt
+
+    prompt = _draft_prompt(
+        "listame /tmp",
+        IntentClassification(IntentCategory.FILE_OPERATION, 0.9, False),
+    )
+
+    assert "estimated_risk" in prompt
+    assert "rechazo absoluto" in prompt
+    assert "elegí C" in prompt

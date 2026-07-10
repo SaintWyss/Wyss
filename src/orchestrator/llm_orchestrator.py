@@ -106,6 +106,14 @@ def _draft_prompt(instruction: str, intent: IntentClassification) -> str:
         "Taxonomía de action types con prefijo: "
         f"{action_types}. Un type desconocido clasifica C fail-closed en la política, "
         "así que no inventes types.\n"
+        "Rúbrica de estimated_risk (la política determinística puede SUBIR tu estimación, "
+        "nunca bajarla — no sobreestimes):\n"
+        "A = solo lectura/diagnóstico (read, list, stat, git status/log/diff).\n"
+        "B = modificación normal reversible (write, move).\n"
+        "C = alto impacto: borrados, muchos archivos, rutas sensibles.\n"
+        "D = SOLO destrucción irreversible o algo prohibido; D es rechazo absoluto sin "
+        "opción de confirmar. Si dudás entre C y D, elegí C (exige confirmación fuerte "
+        "del owner igual). Si no estás seguro, usá null.\n"
         "Respondé SOLO JSON con este shape exacto: "
         '{"summary": str, "rationale": str, "estimated_risk": "A"|"B"|"C"|"D"|null, '
         '"steps": [{"type": str, "target": str, "parameters": {...}}]}.\n'
