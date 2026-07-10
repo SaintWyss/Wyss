@@ -72,6 +72,13 @@ _READ_CAP_BYTES = 256 * 1024
 _LIST_CAP_ENTRIES = 500
 
 
+def _mount_point(path: Path) -> Path:
+    """Sube hasta el punto de montaje del volumen que contiene `path`."""
+    while not os.path.ismount(path):
+        path = path.parent
+    return path
+
+
 def _sha256(path: Path) -> str:
     """SHA-256 en chunks de 64 KiB. NUNCA hashear 2 TB entero (RESEARCH Anti-Patterns)."""
     h = hashlib.sha256()
@@ -394,27 +401,26 @@ class FileSystemAdapter:
     # Trash path helpers
     # ------------------------------------------------------------------
 
-    def _expected_trash_path(self, path: Path) -> Path:
-        """Determina la ruta esperada en trash según el volumen (RESEARCH Pattern 3).
+    def _trash_base(self, path: Path) -> Path:
+        """Base de trash XDG según volumen — la MISMA regla que aplica send2trash.
 
-        Files en /mnt/hdd van a /mnt/hdd/.Trash-1000/files/
-        Files en ~ van a ~/.local/share/Trash/files/
+        Mismo volumen que $HOME → ~/.local/share/Trash; otro volumen (p.ej.
+        /mnt/hdd, /tmp tmpfs) → <mount>/.Trash-<uid>. Antes esto hardcodeaba
+        /mnt/hdd y home: un delete en /tmp iba a /tmp/.Trash-1000 pero verify
+        buscaba en home → ABORT falso con el archivo ya en trash.
         """
-        path_str = str(path.resolve())
-        if path_str.startswith("/mnt/hdd"):
-            trash_dir = Path("/mnt/hdd/.Trash-1000/files")
-        else:
-            trash_dir = Path.home() / ".local" / "share" / "Trash" / "files"
-        return trash_dir / path.name
+        mount = _mount_point(path.resolve())
+        if mount == _mount_point(Path.home()):
+            return Path.home() / ".local" / "share" / "Trash"
+        return mount / f".Trash-{os.getuid()}"
+
+    def _expected_trash_path(self, path: Path) -> Path:
+        """Determina la ruta esperada en trash según el volumen (RESEARCH Pattern 3)."""
+        return self._trash_base(path) / "files" / path.name
 
     def _expected_trashinfo_path(self, path: Path) -> Path:
         """Determina la ruta esperada del .trashinfo para el archivo."""
-        path_str = str(path.resolve())
-        if path_str.startswith("/mnt/hdd"):
-            trashinfo_dir = Path("/mnt/hdd/.Trash-1000/info")
-        else:
-            trashinfo_dir = Path.home() / ".local" / "share" / "Trash" / "info"
-        return trashinfo_dir / f"{path.name}.trashinfo"
+        return self._trash_base(path) / "info" / f"{path.name}.trashinfo"
 
     def _find_actual_trash_path(self, original_path: Path) -> Path | None:
         """Busca el archivo real en trash tras el send2trash (puede tener sufijo numérico)."""

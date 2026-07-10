@@ -73,6 +73,9 @@ async def dispatch(
         return {
             "outcome": "pending",
             "pending_id": pending_id,
+            # sin esto la SPA defaulteaba el chip a B y no exigía tipear
+            # CONFIRMAR en propuestas C (el gate server-side no dependía de esto)
+            "risk_level": risk.name,
             "plan": plan_to_text(plan, decision),
         }
 

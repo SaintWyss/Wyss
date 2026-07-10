@@ -173,6 +173,9 @@ async def test_dispatch_b_persists_pending(
     result = await dispatch(plan, decision, pending_store=pending_store, audit=fake_audit)
 
     assert result["outcome"] == "pending"
+    # smoke físico: sin risk_level la SPA defaulteaba el chip a B y no exigía
+    # tipear CONFIRMAR en propuestas C
+    assert result["risk_level"] == "B"
     assert "Resumen: mover archivo" in str(result["plan"])
     pending_id = str(result["pending_id"])
     loaded = pending_store.load(pending_id)

@@ -195,6 +195,13 @@ class PlanExecutor:
                 verification: Verification = await adapter.verify(action, result)
                 if not verification.passed:
                     step_failed = True
+                    # detalle honesto: sin esto el ABORT mostraba el detail de
+                    # ÉXITO del execute ("Falló … trashed X" — contradictorio)
+                    result = ToolResult(
+                        success=False,
+                        detail=f"verify falló ({verification.detail}) tras: {result.detail}",
+                        payload=result.payload,
+                    )
 
             # --- Si el paso pasó, acumular entry_id ---
             if not step_failed and entry_id is not None:

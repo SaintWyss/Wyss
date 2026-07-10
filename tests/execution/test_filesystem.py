@@ -301,14 +301,11 @@ def test_delete_verify_absent(adapter: FileSystemAdapter, tmp_path: Path) -> Non
     verification = asyncio.run(adapter.verify(action, result))
     # El archivo debe estar ausente del origen
     assert not target.exists()
-    # verify puede pasar (ausente + en trash) o fallar si trash_path no se encuentra
-    # Lo que SIEMPRE debe cumplirse: el archivo está ausente del origen
-    # (puede fallar la verificación del trash_path dependiendo del filesystem/permisos)
-    # assert verification.passed o verificar que el archivo no existe
-    # En ext4/tmp_path, send2trash generalmente funciona:
-    if verification.passed:
-        assert "absent" in verification.detail or "in trash" in verification.detail
-    # else: aceptable que el trash_path no siempre sea predecible en tests
+    # Y verify DEBE pasar: _trash_base resuelve el trash del volumen real del
+    # target (smoke físico: en /tmp tmpfs el expected hardcodeado apuntaba a
+    # home → ABORT falso con el archivo ya en trash).
+    assert verification.passed, verification.detail
+    assert "absent" in verification.detail or "in trash" in verification.detail
 
 
 def test_delete_no_unlink_in_source(adapter: FileSystemAdapter, tmp_path: Path) -> None:
