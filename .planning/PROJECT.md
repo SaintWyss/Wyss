@@ -10,6 +10,21 @@ Wyss es un sistema de asistencia operativa personal y empresarial basado en arqu
 
 Santiago puede encontrar cualquier cosa en sus 2 TB en segundos, delegar tareas operativas a agentes especializados y mantener control total sobre lo que el sistema ejecuta — con auditoría de todo.
 
+## Current Milestone: v1.0 Producto final — app móvil + asistente diario
+
+**Goal:** Wyss deja de ser demo técnica: app Android instalable (APK) + web PC pulida + asistente diario real (rutinas programadas, Notion, memoria, intake automático).
+
+**Target features:**
+- APK Android — Capacitor envolviendo la SPA existente; pairing por QR; cert self-signed manejado en WebView; build Gradle local
+- Scheduler / rutinas — tareas programadas que caen a la bandeja de confirmación (absorbe la vieja fase 9 sin multi-agente pleno)
+- Notion adapter — leer/escribir páginas Notion como acciones con política
+- Daily Assistant — resumen diario proactivo (agenda, finanzas Pellegrini, pendientes)
+- Memory — memoria persistente del owner entre sesiones
+- Intake n8n — canal de entrada automático (webhooks → bandeja)
+- Web PC pulida — glow-up de la SPA para escritorio
+
+**Key context:** v0.1.0 taggeado 2026-07-10 (bridge móvil smoke-aprobado en teléfono real; PRs 07-14 ejecutados fuera de GSD — ver `docs/architecture/WYSS_MASTER_ARCHITECTURE_AND_ROADMAP.md` y `docs/releases/WYSS_v0.1.0.md`). Modo LLM activo (qwen vía LiteLLM local). Fase 10 vieja (modo equipo) queda fuera de este corte.
+
 ## Requirements
 
 ### Validated
@@ -17,38 +32,37 @@ Santiago puede encontrar cualquier cosa en sus 2 TB en segundos, delegar tareas 
 - [x] **ORCH-06**: El Model Gateway enruta a ≥ 2 proveedores configurables, registra tokens y costo por llamada — Validated in Phase 2: Gateway de Modelos
 - [x] **ORCH-07**: El Context Minimizer filtra secretos y contexto innecesario antes de toda llamada externa — Validated in Phase 2: Gateway de Modelos (gap conocido CR-01 en 02-REVIEW.md: cobertura de patrones a ampliar antes de producción)
 
+- [x] **KNOW-01**: El sistema indexa carpetas/archivos del owner con metadatos + FTS5 + vectores semánticos — Validated in Phases 3-4
+- [x] **KNOW-03**: La re-indexación es incremental (hash + fecha — solo procesa cambios) — Validated in Phase 3
+- [x] **KNOW-04**: Los secretos (.env, *.key, tokens) se detectan y excluyen antes de indexar — Validated in Phase 3 (SecretFilter 3 capas)
+- [x] **KNOW-05**: Toda consulta queda auditada en SQLite — Validated in Phases 3-4
+- [x] **KNOW-06**: Soporte para PDF, DOCX, TXT, MD, PY, JS, TS, CSV, XLSX, imágenes y video/audio (metadatos) — Validated in Phase 3
+- [x] **ORCH-02**: Toda tarea modificadora genera un plan explícito y legible antes de ejecutarse — Validated in Phase 5 + v0.1.0 smoke físico
+- [x] **ORCH-03**: La política cognitiva aplica los 4 niveles (A/B/C/D) — Validated in Phase 1 + PR-08 re-audit (13 deny rules)
+- [x] **ORCH-04**: Nivel D se rechaza con explicación aunque el owner insista — Validated in Phase 1 (BUILTIN_DENY Final) + PR-08
+- [x] **ORCH-05**: El orquestador corre como daemon persistente (Unix socket + JSON-RPC) — Validated in Phase 5 + v0.1.0
+- [x] **AGENT-01**: Los agentes se crean por configuración, sin código nuevo — Validated in Phases 7-8 (Pellegrini config-only)
+- [x] **AGENT-02**: Un agente sin permiso vigente sobre una BC no puede consultar esa BC — Validated in Phase 7 (scoped facades)
+- [x] **AUDIT-01**: Toda acción relevante queda auditada — Validated in Phases 1-8 + PR-08
+
 ### Active
 
-- [ ] **KNOW-01**: El sistema indexa carpetas/archivos del owner con metadatos + FTS5 + vectores semánticos
-- [ ] **KNOW-02**: Una consulta en lenguaje natural resuelve en < 5 segundos sobre cualquier volumen
-- [ ] **KNOW-03**: La re-indexación es incremental (hash + fecha — solo procesa cambios)
-- [ ] **KNOW-04**: Los secretos (.env, *.key, tokens) se detectan y excluyen antes de indexar
-- [ ] **KNOW-05**: Toda consulta queda auditada en SQLite
-- [ ] **KNOW-06**: Soporte para PDF, DOCX, TXT, MD, PY, JS, TS, CSV, XLSX, imágenes y video/audio (metadatos v0.1)
-- [ ] **ORCH-01**: El orquestador clasifica intención en ≥ 9 categorías operativas
-- [ ] **ORCH-02**: Toda tarea modificadora genera un plan explícito y legible antes de ejecutarse
-- [ ] **ORCH-03**: La política cognitiva aplica los 4 niveles (A ejecuta / B confirma simple / C confirma fuerte / D rechaza absoluto)
-- [ ] **ORCH-04**: Nivel D se rechaza con explicación aunque el owner insista — sin excepciones en código
-- [ ] **ORCH-05**: El orquestador corre como daemon persistente (Unix socket + JSON-RPC)
-- [ ] **AGENT-01**: Los agentes se crean por configuración a partir del modelo base, sin código nuevo
-- [ ] **AGENT-02**: Un agente sin permiso vigente sobre una BC no puede consultar esa BC
+- [ ] **KNOW-02**: Una consulta en lenguaje natural resuelve en < 5 segundos sobre cualquier volumen (falta corpus real 2 TB indexado)
+- [ ] **ORCH-01**: El orquestador clasifica intención en ≥ 9 categorías operativas (LLM mode recién activado; calibración pendiente)
 - [ ] **AGENT-03**: Los agentes no se comunican horizontalmente — solo el orquestador divide y consolida
 - [ ] **AGENT-04**: Cada agente persiste preferencias del owner en su dominio (MEMORY.md)
 - [ ] **AGENT-05**: Belgrano (dominio estudio) opera con al menos 3 tareas reales de punta a punta
 - [ ] **MULTI-01**: Múltiples agentes conviven sin interferencia bajo el orquestador
 - [ ] **MULTI-02**: Routine Scheduler ejecuta rutinas programadas; acciones B/C quedan como propuestas, nunca auto-ejecutadas
 - [ ] **MULTI-03**: Las 4 BC del owner (Personal, RAGcorp, Beca Ciber #1, Beca Ciber #2) están conectadas con habilitaciones selectivas
-- [ ] **TEAM-01**: Trabajadores interactúan con agentes asignados sin acceso al núcleo
-- [ ] **TEAM-02**: Intento de exceder rol por trabajador escala al owner (probado explícitamente)
-- [ ] **AUDIT-01**: Toda acción relevante queda auditada: actor, instrucción, plan, decisión de política, confirmación, resultado, costo
 
 ### Out of Scope
 
-- Multiusuario / multiempresa — v1.0+
-- Interfaz móvil o por voz — v0.3+
-- Modelos locales pesados — API-first en v0.1
+- Multiusuario / multiempresa (TEAM-01/02, modo equipo — vieja fase 10) — post-v1.0
+- Modelos locales pesados — API-first
 - Marketplace de agentes — futuro
 - Integraciones de domótica — futuro
+- ~~Interfaz móvil o por voz — v0.3+~~ **SUPERADO**: bridge móvil + voz shippearon en v0.1.0; APK es target de v1.0
 
 ## Context
 
@@ -105,4 +119,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-12 — Phase 2 (Gateway de Modelos) complete: ModelGateway.ask() único punto de egreso, minimizer fail-closed, cost gate pre-autorizado, traces.db*
+*Last updated: 2026-07-10 — Milestone v1.0 iniciado (producto final: APK + asistente diario); v0.1.0 taggeado; requirements re-auditados contra lo shippeado (fases 1-8 + PRs 07-14)*

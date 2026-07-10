@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: milestone
-status: executing
-last_updated: "2026-06-17T00:00:00.000Z"
-last_activity: 2026-06-17
+milestone: v1.0
+milestone_name: Producto final — app móvil + asistente diario
+status: planning
+last_updated: "2026-07-10T15:53:19.028Z"
+last_activity: 2026-07-10
 progress:
-  total_phases: 10
-  completed_phases: 7
-  total_plans: 41
-  completed_plans: 40
-  percent: 70
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Wyss — State
@@ -24,16 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 
 ## Current Position
 
-Phase: 08 (primer agente de dominio — finanzas) — COMPLETE (4/4 planes; checkpoint owner APROBADO 2026-06-17)
-Plan: 08-04 completo (3/3 tareas; checkpoint owner aprobado sobre evidencia determinística)
-Last completed: 08-04 (LedgerRetrieval adapter del puerto Retrieval sobre LedgerPort — hechos pre-agregados como Hits, hook scoped_retrieval_factory, cero código de agente D-73; agents.pellegrini config-only: advise/handle_task/propuesta_presupuesto/build_pellegrini/judge_advisory_quality; 2da muralla finance.record + 3 tareas D-87 E2E vía dispatcher+FakeOrchestrator auditadas + budget cutoff GREEN; gate 424 passed/6 skipped, mypy/ruff/lint-imports verde; ConfiguredAgent/AgentRegistry/cost.py/gateway.py/dispatcher.py INTACTOS) — 2026-06-17
-
-- **Phase:** 8 of 10 (Pellegrini — coach de finanzas + ledger, MVP vertical) — **COMPLETE**
-- **Status:** Fase 8 cerrada. Checkpoint owner APROBADO sobre evidencia determinística (`fin` en vivo: ingresos $300k / gastos $180k / superávit $120k correctos; agregación SQL por categoría exacta). AGENT-07 + AGENT-09 cumplidos.
-- **Deuda diferida (08-04):** calibración de **prosa advisory** (D3/D6) pendiente — el path daemon `ask`→Pellegrini NO está cableado (orquestador real `_DeterministicOrchestrator` fake; Hermes = plan 05-05 BLOCKED) y LiteLLM :4000 está DOWN + falta `config/.env`. `judge_advisory_quality` usa rúbrica determinística de respaldo, no LLM real. Calibrar cuando se levante LiteLLM (o Hermes) — un script throwaway que arme gateway real + llame `pellegrini.advise()` para las 3 D-87.
-- **Last activity:** 2026-06-17
-- **Blocker 05-05:** A2 FAIL (sin imagen Hermes publicada → clonar+`docker build`), A3 pendiente (key disabled_toolsets), A4 fix UFW. Detalle en `phases/05-orquestador-daemon/05-EMPIRICAL.md`.
-- **Next:** Fase 9 (multi-agente y rutinas) — varios agentes en simultáneo + scheduler con bandeja de aprobaciones. Empezar con `/gsd-discuss-phase 09` o `/gsd-mvp-phase 09`. (También pendiente: desbloquear Hermes 05-05 para cerrar el path conversacional real.)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-10 — Milestone v1.0 started
 
 ## Decisions Log
 
