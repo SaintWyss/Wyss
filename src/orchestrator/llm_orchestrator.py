@@ -16,11 +16,18 @@ from core.ports.gateway import ModelGatewayPort
 
 _ACTION_TYPES = (
     "file.read",
+    # lecturas PR-11: existían en el executor y la política pero faltaban acá,
+    # así que el LLM caía en shell.run (C) para un simple listado (A)
+    "file.list",
+    "file.stat",
     "file.write",
     "file.move",
     "file.delete",
     "shell.run",
     "git.run",
+    "git.status",
+    "git.log",
+    "git.diff",
     "knowledge.query",
     "finance.query",
     "finance.record",
@@ -105,7 +112,9 @@ def _draft_prompt(instruction: str, intent: IntentClassification) -> str:
         f"confidence={intent.confidence}, clarification_needed={intent.clarification_needed}.\n"
         "Taxonomía de action types con prefijo: "
         f"{action_types}. Un type desconocido clasifica C fail-closed en la política, "
-        "así que no inventes types.\n"
+        "así que no inventes types. Para leer/listar/inspeccionar usá los types "
+        "específicos (file.read/list/stat, git.status/log/diff), NUNCA shell.run: "
+        "el shell escala el riesgo sin necesidad.\n"
         "Rúbrica de estimated_risk (la política determinística puede SUBIR tu estimación, "
         "nunca bajarla — no sobreestimes):\n"
         "A = solo lectura/diagnóstico (read, list, stat, git status/log/diff).\n"
