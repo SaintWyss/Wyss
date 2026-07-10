@@ -121,6 +121,29 @@ Queda por verificar manualmente en un teléfono físico: render de la bottom-nav
 el gate CONFIRMAR táctil y el pairing tipeando la URL (el contrato HTTP ya está
 probado end-to-end).
 
+## Troubleshooting (del smoke físico 2026-07-09)
+
+**Síntoma: la UI carga en el teléfono pero "la API no funciona".** Diagnóstico en orden:
+
+1. **¿El daemon corre?** El bridge y el daemon son DOS procesos: `wyss start` +
+   `wyss web --lan --tls`. Sin daemon, la UI carga y `ask`/`confirm` devuelven
+   503 ("el daemon no está corriendo" — el strip superior lo dice).
+2. **Mirá el strip superior de la SPA:** ahora distingue `bridge: <motivo>` (rojo,
+   la API es inalcanzable y dice por qué: 403 origen, sesión vencida, red) de
+   "el daemon no está corriendo" (bridge OK, falta `wyss start`).
+3. **Mirá la terminal del server:** el middleware loguea cada rechazo con el
+   motivo real (`403 host no permitido: Host=...`, `403 origen no permitido:
+   Origin=... Sec-Fetch-Site=...`, `401 sin token válido`). Antes era mudo.
+4. **Probá `https://<ip>:<puerto>/api/status` directo en el browser del teléfono**
+   (con la sesión pareada): 200 con JSON = bridge sano, el problema es otro.
+5. **Origin `null`:** Chrome Android con el cert self-signed aceptado puede mandar
+   `Origin: null` en los POST same-origin. El bridge lo acepta SOLO cuando
+   `Sec-Fetch-Site: same-origin` lo respalda (header que el JS no puede forjar);
+   cross-site sigue en 403. Si tu browser no manda Sec-Fetch-* (muy viejo),
+   actualizalo o usá Chrome/Firefox.
+6. **Cookie:** si el server se reinició, el token cambió: volvé a abrir la URL
+   con token nueva (la SPA muestra "Sesión vencida").
+
 ## Limitaciones conocidas
 
 - Voz sobre `http://<ip>`: bloqueada por contexto inseguro. **Resuelto en PR-10**:

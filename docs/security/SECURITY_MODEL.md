@@ -121,6 +121,12 @@ Las lecturas son nivel A pero NO están fuera del perímetro:
 - **Bind opt-in:** sin `wyss web --lan`, nada escucha fuera de `127.0.0.1`.
 - **Host/Origin allowlist exacta:** con `--lan` solo se aceptan `127.0.0.1`, `localhost`
   y el IP LAN detectado; cualquier otro Host → 403 (anti DNS-rebinding).
+- **Origin `null` (browsers reales):** Chrome Android con cert self-signed aceptado
+  serializa `Origin: null` en POSTs same-origin. Se acepta SOLO con
+  `Sec-Fetch-Site: same-origin` (header prohibido, no forjeable por JS); un iframe
+  sandboxeado o un POST cross-site llegan con `cross-site`/`nested` → 403, y sin la
+  cookie SameSite=Strict → 401 antes. Un Origin explícito inválido manda siempre
+  (403 aunque Sec-Fetch mienta). Los rechazos del middleware quedan logueados.
 - **Auth:** token 32B urlsafe (`compare_digest`) → cookie HttpOnly SameSite=Strict;
   401 en TODO path sin auth. No hay envío de comandos sin autenticar.
 - **El bridge nunca decide riesgo:** solo reenvía al daemon, que re-evalúa.
