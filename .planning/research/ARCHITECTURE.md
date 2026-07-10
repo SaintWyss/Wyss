@@ -1,457 +1,359 @@
 # Architecture Research
 
-**Domain:** Multi-agent AI system, local-first, hexagonal (Ports & Adapters), Python 3.13+
-**Project:** Wyss
-**Researched:** 2026-06-10
-**Confidence:** HIGH (docs 07/08/09/10/11/14 + verified current Python ecosystem patterns)
+**Domain:** Integración de features nuevas (Scheduler, Notion adapter, Memory, Daily Assistant, Intake n8n, Capacitor APK) en un operador local hexagonal existente (Wyss v0.1.0)
+**Researched:** 2026-07-10
+**Confidence:** HIGH (basado en lectura directa del repo: `daemon.py`, `dispatcher.py`, `pending_store.py`, `ttl_reaper.py`, `core/policy/engine.py`, `core/ports/*`, `bootstrap/web.py`, `bootstrap/tls.py`, `agents/memory.py`, `docs/architecture/WYSS_TARGET_ARCHITECTURE.md`, `docs/security/SECURITY_MODEL.md`) + MEDIUM para las partes de Android WebView / Notion SDK (verificadas por WebSearch, no por código propio)
 
----
+## Principio rector
 
-## Component Map (what talks to what)
+Ninguna feature nueva introduce un segundo camino de ejecución. Las seis features se resuelven **sin tocar el molde**: todas caen en uno de dos patrones ya existentes en el repo —
 
-### Hexagonal mapping of the five Wyss blocks
+1. **Nueva Action type + adapter** (el patrón `file.*` / `shell.*` / `git.*`): Notion y Memory-write son esto.
+2. **Nuevo productor de Plan que entra por el mismo `dispatch()`** (el patrón que ya usa `daemon._ask`): Scheduler, Daily Assistant e Intake n8n son esto.
 
-The conceptual docs (07, 08) map cleanly onto hexagonal layers. The key reframing: **the "Núcleo" is not one layer — it splits into domain core + application services.**
+Capacitor no es una feature de backend: es un cliente más del bridge existente, igual que el browser del teléfono hoy.
 
-```
-┌──────────────────────────── DRIVING ADAPTERS ────────────────────────────┐
-│  CLI / chat (v0.1)   ·   RoutineScheduler (time-driven)   ·   future UI  │
-└──────────────────────────────────┬───────────────────────────────────────┘
-                                   ▼  (calls inbound ports)
-┌──────────────────────────── APPLICATION LAYER ───────────────────────────┐
-│  Orchestrator · IntentRouter · TaskPlanner · ConfirmationManager         │
-│  AgentRuntime · IngestionPipeline · RetrievalEngine · ModelRouter        │
-│  (use cases — orchestrate domain objects, depend ONLY on ports)          │
-└──────────────────────────────────┬───────────────────────────────────────┘
-                                   ▼  (uses)
-┌──────────────────────────────── DOMAIN CORE ─────────────────────────────┐
-│  Entities/VOs: Task, Plan, Action, PolicyDecision, Permission, Agent     │
-│               (definition), KnowledgeBase, RiskLevel, Intent, Report     │
-│  Pure logic:  CognitivePolicyEngine · PermissionManager (rules)          │
-│  Ports:       ALL Protocols/ABCs live here (wyss.core.ports)             │
-│  ZERO imports of anything outside stdlib                                 │
-└──────────────────────────────────┬───────────────────────────────────────┘
-                                   ▲  (implemented by — dependency points inward)
-┌──────────────────────────── DRIVEN ADAPTERS ─────────────────────────────┐
-│  Execution:   FileSystemAdapter · ShellAdapter · GitAdapter · ...        │
-│  Models:      AnthropicProvider · OpenAIProvider · LiteLLMProvider · ... │
-│  Knowledge:   SqliteFtsIndex · SqliteVecIndex/Chroma · PdfExtractor ...  │
-│  Persistence: SqliteTaskRepo · SqlitePermissionRepo · SqliteAuditSink    │
-│  Config:      TomlConfigStore                                            │
-└───────────────────────────────────────────────────────────────────────────┘
-```
+## Standard Architecture
 
-### Dependency rule table
-
-| Component | Layer | May import | Must NOT import |
-|---|---|---|---|
-| `core/domain` (entities, enums) | Domain | stdlib only | everything else |
-| `core/ports` (Protocols/ABCs) | Domain | `core/domain` | application, adapters |
-| `core/policy` (CognitivePolicyEngine) | Domain | `core/domain` | ports impls, IO |
-| `core/permissions` (rule logic) | Domain | `core/domain` | IO (repo via port) |
-| `orchestration/` (Orchestrator, IntentRouter, TaskPlanner, ConfirmationManager) | Application | `core/*` | adapters, `agents/` internals |
-| `agents/` (AgentBase, AgentRegistry, AgentRuntime) | Application | `core/*` | adapters directly (only via ToolPort) |
-| `knowledge/` (IngestionPipeline, ExtractorRegistry, RetrievalEngine) | Application | `core/*` | concrete index/extractor impls |
-| `gateway/` (ModelRouter, ContextMinimizer, CostTracker) | Application | `core/*` | concrete provider SDKs |
-| `adapters/` (everything concrete) | Infrastructure | `core/ports`, `core/domain`, 3rd-party SDKs | application layer |
-| `audit/` | Port in core + sinks in adapters | — | — |
-| `bootstrap/` (composition root) | Wiring | EVERYTHING | n/a — only place allowed to |
-
-### Communication edges (from doc 08, made hexagonal)
-
-- **CLI → Orchestrator** via inbound port `CommandHandler` (the only entry point; RoutineScheduler calls the same port — a routine is just a pre-recorded command).
-- **Orchestrator → IntentRouter → TaskPlanner → CognitivePolicyEngine → ConfirmationManager**: synchronous in-process calls within the application layer.
-- **Orchestrator → AgentRuntime**: the ONLY component that assigns work to agents. Agents never see each other (enforced structurally: `AgentBase` has no reference to `AgentRegistry`).
-- **AgentRuntime → RetrievalEngine** (knowledge), **→ ModelRouter** (AI), **→ ToolPort** (execution). These three ports are the agent's entire world.
-- **RetrievalEngine → PermissionManager**: permission filtering happens INSIDE retrieval, not in the agent (per class diagram in doc 11 — agents physically cannot query unauthorized KBs).
-- **ModelRouter → ContextMinimizer → ModelProviderPort**, with **CostTracker** observing every call.
-- **AuditPort**: injected into Orchestrator, AgentRuntime, ConfirmationManager, ModelRouter, ToolExecutor. Cross-cutting via injection, not via magic (see Patterns).
-
----
-
-## Data Flow (how information moves through the system)
-
-### Flow 1 — Command flow (the main loop, from doc 11 sequence diagram)
+### System Overview
 
 ```
-Owner text
-  → CLI adapter parses → Command (frozen dataclass)
-  → Orchestrator.handle(command)
-      → IntentRouter.classify(command) → Intent (query | task | admin | ambiguous)
-      → if query: RetrievalEngine.search(...) → answer, done
-      → if task:  select Agent by domain (AgentRegistry)
-                  AgentRuntime.plan(agent, task)
-                      agent queries RetrievalEngine (permission-filtered)
-                      agent calls ModelRouter (context-minimized) → Plan
-      → CognitivePolicyEngine.evaluate(plan) → PolicyDecision (A|B|C|D)
-          D → reject + audit + explain, STOP
-          B/C → ConfirmationManager.request(...) → owner confirms or cancels
-          A or confirmed → AgentRuntime.execute(agent, plan)
-              each Action → ToolPort.execute() → ToolResult + verification
-      → Orchestrator consolidates Report → AuditPort.log(full trace) → Owner
+┌──────────────────────────────────────────────────────────────────────────┐
+│  CLIENTES                                                                 │
+│  CLI Typer · Web PC (browser) · Web móvil (browser) · APK Capacitor      │
+│  (Capacitor = WebView navegando al MISMO origin del bridge, no un        │
+│   cliente API aparte)                                    n8n (Docker,    │
+│                                                            localhost)     │
+└───────────┬───────────────────────────────────────┬──────────────────────┘
+            │ HTTPS + cookie pairing                │ POST /api/intake
+            │ (owner)                               │ (bearer token propio,
+            ▼                                        │  jamás /api/confirm)
+┌──────────────────────────────────────────────────────────────────────────┐
+│  bootstrap/web.py (bridge FastAPI, composition root — NUNCA decide riesgo)│
+│  NUEVO: POST /api/intake  ·  GET /api/digest/today (lee audit)           │
+└───────────┬────────────────────────────────────────────────────────────┘
+            │ Unix socket JSON-RPC ("ask" / "confirm" / "status")
+            ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  orchestrator/daemon.py  (DaemonServer, asyncio.start_unix_server)       │
+│                                                                           │
+│  RunningDaemon (tasks vivas junto al server):                            │
+│    - reaper_task     = ttl_reaper(pending_store, audit)      [existe]   │
+│    - NUEVO scheduler_task = RoutineScheduler.run(...)                    │
+│                                                                           │
+│  _ask()/_confirm() [existentes]  ←──── NUEVO: RoutineScheduler arma un   │
+│         │                               Plan de rutina y llama el MISMO  │
+│         ▼                               dispatch(), nunca un path propio │
+│  LLMOrchestrator.draft_plan() → Plan                                     │
+│         ▼                                                                │
+│  CognitivePolicyEngine.evaluate(plan)   (core/policy — sin tocar)        │
+│    NUEVO: base_levels["notion.read"]=A, ["notion.write"]=C,              │
+│           ["memory.write"]=B, ["assistant.digest"]=A                    │
+│         ▼                                                                │
+│  dispatch() → PendingStore (B/C) | ejecuta directo (A)                  │
+└───────────┬────────────────────────────────────────────────────────────┘
+            │ PlanRunner.run(plan)  (Tool protocol, prefijo de action.type)
+            ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  execution/executor.py — despacha por prefijo:                          │
+│    "file"→FileSystemAdapter  "shell"→ShellAdapter  "git"→GitAdapter      │
+│    NUEVO "notion"→NotionTool (paquete notion/, nuevo)                    │
+│    NUEVO "memory"→MemoryTool (paquete memory/, nuevo)                    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  Capas nuevas, independientes entre sí (import-linter):
+  notion/  → NotionTool (Tool protocol) + cliente notion-client, solo importa core
+  memory/  → MemoryPort impl (SQLite hechos/preferencias) + MemoryTool, solo importa core
 ```
 
-Every state transition matches the task state machine in doc 11 §4 (`Recibida → Clasificada → Delegada → Planificada → Evaluada → ...`). **Model that state machine as a `TaskStatus` enum on the `Task` entity and make illegal transitions raise** — it is the backbone of auditability.
+### Component Responsibilities
 
-### Flow 2 — Ingestion flow (doc 14 §3, write path of knowledge)
+| Component | Responsibility | Nuevo/Modificado |
+|-----------|----------------|-------------------|
+| `orchestrator/scheduler.py` (nuevo) | `RoutineScheduler`: task asyncio en el loop del daemon; por cada rutina vencida construye un `Plan`, llama `engine.evaluate()` + `dispatch()` — **nunca ejecuta directo si sale B/C** | Nuevo, vive en `orchestrator/` (ya legítimo ahí) |
+| `notion/` (nuevo paquete top-level) | Adapter `NotionTool` (implementa `Tool`): `notion.read_page`, `notion.query_database`, `notion.write_page`, `notion.append_block`. Envuelve `notion-client` SDK | Nuevo, capa independiente (import-linter) |
+| `memory/` (nuevo paquete top-level) | `MemoryStore` (SQLite: hechos/preferencias con `key, value, category, source, updated_at`) + `MemoryTool` (`memory.write` como Action) + función pura `recall_for_prompt()` que devuelve texto ya envuelto como dato-no-instrucción | Nuevo, capa independiente |
+| `agents/memory.py` (`AgentMemory`) | Memoria **por-agente** (MEMORY.md), sigue existiendo sin cambios — es un dominio distinto (preferencias que un agente concreto aprendió sobre SU tarea, no el owner en general) | Sin cambios |
+| `orchestrator/daily_assistant.py` (nuevo, o función dentro de `scheduler.py`) | Rutina especial: lee (nivel A, directo) knowledge.query + ledger + memory.recall, arma un resumen (opcionalmente vía gateway/LLM como advisory), lo persiste como `AuditEventType.DIGEST_GENERATED` | Nuevo |
+| `bootstrap/web.py` | Bridge FastAPI. **NUEVO** `POST /api/intake` (auth por bearer token de servicio, no cookie), **NUEVO** `GET /api/digest/today` | Modificado (aditivo) |
+| `core/policy/engine.py` / config | `base_levels` para `notion.*`, `memory.write`, `assistant.digest`; posible regla deny nueva `notion-outside-workspace` | Modificado (aditivo, config + tabla, sin tocar el algoritmo) |
+| Capacitor APK (`android/`, nuevo) | WebView que navega al origin del bridge (mismo modelo que el browser del teléfono). Pantalla de pairing propia (`capacitor://` origin) con QR scanner | Nuevo proyecto, no toca Python |
 
-```
-Source registered (KB + path)
-  → Scanner: inventory files + metadata
-  → Diff: hash + mtime → only new/changed
-  → ExtractorRegistry.for_media_type(mt) → ExtractorPort.extract() → text
-  → ChunkerPort.chunk(text) → chunks with exact source refs
-  → SummarizerPort (cheap model via gateway) → per-file/chunk summary
-  → DOUBLE index:  FullTextIndexPort.upsert (FTS5)
-                   EmbeddingPort.embed → VectorIndexPort.upsert
-  → catalog into KnowledgeBase (IndexEntry rows)
-```
-
-Pure pipeline: each stage a port, data flows as immutable dataclasses (`SourceFile → ExtractedContent → list[Chunk] → list[IndexEntry]`). Never mutates source files (doc 14 rule).
-
-### Flow 3 — Retrieval flow (doc 14 §4, read path)
+## Recommended Project Structure
 
 ```
-Query (from owner or agent, carries subject identity)
-  → fan-out in parallel:  metadata filter | FTS5 match | vector similarity
-  → fusion + ranking (RRF — reciprocal rank fusion, standard for hybrid)
-  → PermissionManager.filter(subject, results)   ← security boundary
-  → Hits: exact location + excerpt + summary
+src/
+├── core/
+│   └── ports/
+│       ├── memory.py          # NUEVO: Protocol MemoryPort (recall/write_supervised)
+│       └── (execution.py, orchestrator.py sin cambios — Notion/Memory reusan Tool)
+├── notion/                    # NUEVO paquete top-level (independence contract)
+│   ├── __init__.py
+│   ├── client.py              # wrapper delgado sobre notion-client
+│   └── tool.py                # NotionTool(Tool): notion.read_page/write_page/query_database
+├── memory/                    # NUEVO paquete top-level (independence contract)
+│   ├── __init__.py
+│   ├── store.py                # MemoryStore: SQLite hechos/preferencias
+│   └── tool.py                 # MemoryTool(Tool): memory.write (Action, pasa por policy)
+├── orchestrator/
+│   ├── scheduler.py            # NUEVO: RoutineScheduler (APScheduler AsyncIOScheduler o loop propio)
+│   ├── daily_assistant.py      # NUEVO: compone digest desde knowledge+ledger+memory
+│   └── (daemon.py modificado: registra scheduler_task en RunningDaemon)
+├── execution/
+│   └── executor.py             # MODIFICADO: mapa de adapters += {"notion": NotionTool, "memory": MemoryTool}
+├── bootstrap/
+│   └── web.py                  # MODIFICADO: += POST /api/intake, GET /api/digest/today
+└── (agents/, knowledge/, gateway/, audit/, ledger/ sin cambios estructurales)
+
+android/                        # NUEVO — proyecto Capacitor
+├── app/src/main/.../PairingActivity.kt   # scanner QR + persistencia server URL
+├── app/src/main/.../CertPinningClient.kt # onReceivedSslError con fingerprint pinning
+└── app/src/main/res/xml/network_security_config.xml  # fallback: user CA (mkcert)
+web/
+└── src/pairing/                # NUEVO: pantalla mínima capacitor:// (solo se ve la 1ª vez)
 ```
 
-**Boundary decision:** permission filtering AFTER fusion but BEFORE results leave the RetrievalEngine. Better: pass `allowed_kbs` INTO the index queries (pre-filter) so unauthorized content never enters memory of the calling context. Do both: pre-filter by KB id at query time, post-check before returning.
+### Structure Rationale
 
-### Flow 4 — Model call flow (every external AI interaction)
+- **`notion/` y `memory/` como paquetes top-level nuevos, no submódulos de `execution/`:** cada uno trae su propia dependencia externa (`notion-client`, nada para memory) y su propio import-linter contract de independencia — igual que `gateway/providers/` está separado de `execution/`. Meterlos dentro de `execution/` mezclaría un adapter con dependencia de red (Notion) con adapters de disco/proceso local, que hoy están diseñados asumiendo I/O local (2ª muralla de paths, journal de filesystem). Separar deja claro que Notion NO pasa por `execution/journal.py` (su "undo" es el trash/archive nativo de Notion, no nuestro `UndoJournal`).
+- **`core/ports/memory.py` nuevo, no reusar `agents/memory.py`:** `AgentMemory` es memoria **por-agente** (ya resuelto, D-71, no tocar). La memoria del owner (nueva, MULTI-01/AGENT-04 no cubre esto) es transversal — la necesitan el Daily Assistant, el LLMOrchestrator y potencialmente cualquier agente. Es "una capa dueña" distinta: mezclarla con `AgentMemory` rompería esa regla del roadmap (`docs/architecture/WYSS_MASTER_ARCHITECTURE_AND_ROADMAP.md` §7: "cada dato tiene UNA capa dueña").
+- **`orchestrator/scheduler.py` dentro de `orchestrator/`, no un paquete nuevo:** ya importa legítimamente `core.policy`, `core.domain`, `PendingStore` — exactamente lo que necesita. Crear un paquete `scheduler/` aparte solo para respetar el import-linter sería ceremonia sin beneficio: el scheduler ES parte del orquestador (misma responsabilidad que `dispatcher.py`/`ttl_reaper.py`).
+- **`android/` fuera de `src/`:** proyecto Gradle/Kotlin independiente del árbol Python; Capacitor lo genera con `npx cap add android` a partir de `web/`.
 
-```
-ModelRequest (task_kind, sensitivity, agent_id, payload)
-  → ModelRouter: deterministic? → no model. cheap? strong? sensitive? → choose alias
-  → ContextMinimizer: strip secrets, trim to minimum, redact per sensitivity
-  → ModelProviderPort.complete(request)
-  → CostTracker.record(agent_id, tokens, cost) → budget check (can VETO before send)
-  → ModelResponse → audit
-```
+## Architectural Patterns
 
-CostTracker must check budget **before** the call (pre-authorization) and record after — otherwise budgets are advisory, not enforced.
+### Pattern (a): Scheduler como task asyncio del daemon, nunca loop propio separado
 
-### Flow 5 — Audit flow (transversal)
+**What:** `RoutineScheduler` se integra en `start_daemon()` exactamente como `ttl_reaper`: se crea con `asyncio.create_task(...)` dentro del MISMO event loop del `DaemonServer`, y su handle se guarda en `RunningDaemon` (nuevo campo `scheduler_task`) para poder cancelarlo en `aclose()`. **No** es un proceso separado, ni un segundo Unix socket, ni un `systemd timer` corriendo `wyss ask` por fuera del daemon — eso duplicaría el ciclo de vida y complicaría el apagado limpio.
 
-Every component receives `AuditPort` by constructor injection. Events are append-only `AuditEvent` dataclasses with `task_id` correlation. One write path (SQLite table + optional JSONL sink), never blocking the main flow (write-behind queue acceptable; loss-on-crash is not — fsync per event in v0.1, it's cheap at this scale).
+**When to use:** Cualquier trabajo periódico que necesite tocar `PendingStore`/`CognitivePolicyEngine` debe vivir DENTRO del proceso daemon, porque `PendingStore` es SQLite con `journal_mode=WAL` abierto por una sola conexión por proceso (ver `pending_store.py` — no está diseñado para multi-proceso concurrente sin coordinar).
 
----
+**Trade-offs:** Correr dentro del daemon significa que si el daemon está caído, las rutinas no disparan (aceptable: es exactamente la garantía que ya existe — "el owner debe arrancar `wyss start`" — no un motivo para bifurcar el modelo).
 
-## Python Patterns for Implementation (ABCs, Protocols, concrete examples)
-
-### Pattern 1 — Protocols for ports, ABCs for shared enforced behavior
-
-Current consensus (verified): **`typing.Protocol` for ports** (structural typing — adapters don't import core base classes, perfect for plugins), **ABC where you need shared implementation + behavior that subclasses must not skip** (template method). Wyss needs both:
+**Implementación recomendada — motor de scheduling:**
+`docs/architecture/WYSS_TARGET_ARCHITECTURE.md` §5 dice "APScheduler ya en stack", pero **no está en `pyproject.toml`** (verificado — no aparece en `[project].dependencies`). Es una promesa de doc no cumplida, agregarla es parte de este build. Usar `APScheduler>=3.11` con `AsyncIOScheduler`: corre jobs en el MISMO event loop (no crea threads propios), soporta `CronTrigger`/`IntervalTrigger` (necesario para "Daily Assistant a las 8am" sin reinventar parsing de cron), y es lo bastante aburrido (maduro desde 2011, API estable) para no violar el principio "aburrido a propósito" del roadmap. Alternativa más minimalista (loop propio estilo `ttl_reaper`, comparando `datetime.now()` contra `next_run_at` en una tabla `routines`) es válida si se prefiere cero dependencias nuevas — pero pierde soporte de cron-expressions y hay que escribirlo a mano.
 
 ```python
-# core/ports/knowledge.py — Protocol: pure contract, no inheritance needed
-from typing import Protocol
-from wyss.core.domain import Chunk, ExtractedContent, SourceFile
-
-class Extractor(Protocol):
-    """Port: turns a source file into text. New file type = new class."""
-    @property
-    def media_types(self) -> frozenset[str]: ...
-    def extract(self, source: SourceFile) -> ExtractedContent: ...
+# orchestrator/scheduler.py (esqueleto)
+async def scheduler_task(
+    routines: RoutineStore,
+    *,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    audit: AuditPort,
+    plan_builder: Callable[[Routine], Plan],  # arma el Plan desde la config de la rutina
+    interval_s: float = 30.0,
+) -> None:
+    while True:
+        for routine in routines.due_now():
+            plan = plan_builder(routine)
+            decision = engine.evaluate(plan)          # MISMO engine, sin excepciones
+            await dispatch(plan, decision, pending_store=pending_store, audit=audit)
+            routines.mark_fired(routine.id)            # idempotencia por ventana (ya escrito en target arch §5)
+        await asyncio.sleep(interval_s)
 ```
 
-```python
-# core/agents/base.py — ABC with template method: policy/audit CANNOT be skipped
-from abc import ABC, abstractmethod
+**Invariante no negociable:** una rutina que resuelve B/C **quedan en `PendingStore` exactamente igual que un `ask()` del owner** — el scheduler jamás llama `_execute_plan` directo salvo que `dispatch()` ya haya decidido "queued" (nivel A). Esto satisface literalmente MULTI-02 y la regla ya escrita en el target architecture: "acciones B/C de rutinas jamás auto-ejecutadas".
 
-class AgentBase(ABC):
-    """Doc 10 §2: 'ningún agente la puede saltear' — enforced structurally."""
-    def __init__(self, definition: AgentDefinition, retrieval: Retrieval,
-                 gateway: ModelGateway, tools: ToolBelt, audit: AuditPort):
-        self._def = definition
-        self._retrieval = retrieval   # already permission-scoped to this agent
-        self._gateway = gateway       # already budget-scoped to this agent
-        self._tools = tools           # only the adapters this agent is allowed
-        self._audit = audit
+### Pattern (b): Notion como Action type + Tool adapter, gateado por policy igual que file/shell/git
 
-    def execute(self, plan: Plan) -> Report:        # NOT overridable in spirit
-        if plan.risk_level is RiskLevel.D:
-            raise PolicyViolation(plan)              # belt-and-suspenders
-        self._audit.log(AuditEvent.plan_started(self._def.id, plan))
-        try:
-            report = self._run(plan)                 # subclass hook
-        except Exception as exc:
-            self._audit.log(AuditEvent.plan_failed(self._def.id, plan, exc))
-            raise
-        self._audit.log(AuditEvent.plan_completed(self._def.id, report))
-        return report
+**What:** Nuevos `action.type`: `notion.read_page`, `notion.query_database`, `notion.write_page`, `notion.append_block`. `NotionTool` implementa el `Tool` protocol de `core/ports/execution.py` (mismo contrato que `FileSystemAdapter`/`ShellAdapter`/`GitAdapter`) y se registra en el mapa de prefijos de `execution/executor.py` (`action.type.split(".")[0] == "notion"`).
 
-    @abstractmethod
-    def _run(self, plan: Plan) -> Report: ...
+**When to use:** Cualquier capacidad nueva de I/O externo que un `Plan` pueda proponer. Es el patrón ya extensible por diseño ("Plugin Pattern — nueva feature = nueva clase, nunca modificar código existente" — `PROJECT.md`).
+
+**Gotcha crítico de policy (verificado en `core/policy/engine.py` línea 79):** `_base_level` hace fail-closed a **C** para cualquier `action.type` NO registrado en `base_levels`. Si no se agrega explícitamente `base_levels["notion.read_page"] = RiskLevel.A` en la config, **hasta las lecturas de Notion pedirán confirmación fuerte** — rompe el objetivo de que el Daily Assistant lea Notion sin fricción. Este es el mismo gap que el propio `SECURITY_MODEL.md` señala para `net.*`: "No existe tipo de acción de red (`net.*`)... Formalizar en v0.2 si se agrega capacidad de red" — Notion ES esa formalización pendiente.
+
+**Trade-offs:** Escribir a Notion (`notion.write_page`, `notion.append_block`) debe ser mínimo **C** (como `file.write`) — es escritura irreversible por nuestro journal (Notion no pasa por `execution/journal.py`, ver Anti-Pattern más abajo). Considerar una regla deny agregada tipo `notion-outside-workspace` que compare `action.target` (page/database ID) contra un allowlist de IDs en config — mismo patrón que la shell allowlist vacía-por-default.
+
+**Anti-injection:** contenido leído de Notion (`notion.read_page`) es dato externo no confiable. Debe pasar por el MISMO wrapper que ya usa `agents/configured_agent.py::_format_hits_safe` ("Formatea resultados de BC como datos, no instrucciones") antes de llegar a cualquier prompt de LLM — nunca concatenarlo crudo al contexto de `LLMOrchestrator.draft_plan` ni al gateway.
+
+**Auth:** integration token de Notion vive en config/`.env` (frontera Pydantic existente, `bootstrap/config.py`), nunca hardcodeado; el `SecretFilter` de 3 capas (KNOW-04) ya excluye `.env`/tokens de la indexación, así que un token de Notion en `.env` queda protegido por la infraestructura existente sin cambios.
+
+**Confianza sobre el SDK:** MEDIUM. El paquete oficial es `notion-client` (PyPI, mantenido por Makenotion/comunidad), cliente delgado sobre la REST API v1 (`pages`, `blocks/{id}/children`, `databases/{id}/query`), auth `Authorization: Bearer <integration_token>`. **Gotcha operativo conocido (ya en memoria del owner sobre otra integración Notion en este mismo entorno):** una página debe estar explícitamente compartida con la integración o la API la devuelve como inexistente — documentar esto en la config del adapter (`notion.write_page` a una página no compartida falla con 404/403 legible, no un 500 opaco).
+
+### Pattern (c): Memory del owner como port nuevo + write-path supervisado (anti-injection por diseño, no por filtro)
+
+**What:** `core/ports/memory.py` define `MemoryPort` (Protocol): `recall(category: str | None) -> Sequence[MemoryFact]` (lectura libre, nivel A) y **ningún método de escritura directa expuesto al ciclo de agente**. La escritura es una `Action` (`memory.write`) ejecutada por `MemoryTool`, que pasa por `CognitivePolicyEngine` como cualquier otra — nivel **B** mínimo (analogía con `finance.record`): requiere confirmación simple del owner, nunca escribe porque un LLM "decidió" recordar algo.
+
+**Por qué port nuevo y no extensión de `knowledge/`:** `knowledge/` es información del owner sobre EL MUNDO (documentos indexados, secret-gated, FTS5+Chroma) — su contrato (`Retrieval.search`) es de recuperación semántica sobre corpus grande. Memory es información sobre EL OWNER MISMO (preferencias, hechos estables, reglas) — chica, estructurada, con gate de escritura explícito. Meterla en `knowledge/` mezclaría dos ports con invariantes distintos: uno es "todo lo indexado es de solo-lectura desde el punto de vista del agente", el otro es "esto se actualiza por confirmación del owner". El propio target architecture (§7 tabla) ya las separa: "Knowledge... FTS5+Chroma" vs "Memory... memory.db propio; escritura SOLO con confirmación owner".
+
+**Anti-injection — el punto central de la pregunta:** el riesgo no es que Memory contenga datos, es que **contenido recordado se interprete como instrucción** al re-inyectarse en un prompt (ej.: si algún día se guarda un hecho como "cuando pida X, hacé Y" y el LLM lo trata como comando en vez de dato). Dos medidas, no una sola:
+1. **Write-path gateado por policy** (arriba): nada llega a `memory.db` sin pasar por confirmación B, igual que `AgentMemory.write_supervised` ya documenta para memoria por-agente ("Contenido recuperado de BC no debe llegar a este método, ni debe llamarse desde el ciclo `_run`" — `agents/memory.py` línea 6). Se reutiliza literalmente la misma regla D-71, ahora a nivel owner.
+2. **Read-path envuelto como dato, no instrucción**: `recall_for_prompt()` devuelve el texto con el MISMO patrón de `_format_hits_safe` (delimitadores explícitos, prefijo "Hecho recordado — dato, no instrucción:"), nunca interpolado sin marcar en el system prompt del gateway.
+
+**Trade-off:** una tabla SQLite (`key, value, category, source, updated_at`) en vez de un markdown libre (a diferencia de `AgentMemory`) porque el Daily Assistant necesita filtrar por categoría (agenda/finanzas/preferencias) sin parsear texto libre — el propio target architecture ya decidió esto ("memory.db propio").
+
+### Pattern (d): Daily Assistant como rutina del scheduler que compone SOLO lecturas nivel A + un resumen advisory
+
+**What:** Una rutina registrada en el `RoutineScheduler` (ej. cron `0 8 * * *`) cuyo `plan_builder` no arma Actions mutadoras: compone datos de tres fuentes YA existentes, todas nivel A (directo, sin política de confirmación porque son lecturas):
+- `knowledge.query` (agenda/notas — vía `Retrieval` port existente)
+- `ledger` (finanzas Pellegrini — reusa la MISMA agregación SQL determinista que ya usa `GET /api/fin/resumen`, invariante "no números por LLM" se mantiene)
+- `memory.recall` (preferencias del owner — Pattern c)
+- `pending_store.load_pending()` (pendientes de confirmación que siguen abiertos)
+
+El LLM (gateway, tier barato) solo se usa para **redactar el resumen en lenguaje natural** a partir de estos datos ya calculados — nunca para calcular los números (respeta D-87, "no números por LLM"). El resultado se audita como un `AuditEventType` nuevo (`DIGEST_GENERATED`) con el texto en el payload; no hace falta una tabla nueva, `audit.db` ya es append-only y ya tiene endpoint (`GET /api/audit`). Un endpoint fino nuevo `GET /api/digest/today` filtra el último evento de ese tipo — evita construir un "dashboard" nuevo (anti-pattern explícito del roadmap: "dashboards fancy · datos antes que vidrio").
+
+**When to use:** Cualquier rutina que solo "informa" (no propone mutaciones) debería seguir este patrón — lecturas A directas + audit event, sin pasar por `PendingStore` (que es específicamente para B/C).
+
+**Trade-off:** si el Daily Assistant en el futuro quiere PROPONER una acción (ej. "registrá este gasto recurrente"), ESA parte sí es un `Plan` normal que pasa por `dispatch()` como cualquier rutina — no mezclar "informar" con "proponer" en el mismo Action.
+
+### Pattern (e): Intake n8n como endpoint nuevo en el bridge, con auth de servicio separada de la del owner
+
+**What:** `POST /api/intake` en `bootstrap/web.py`, autenticado con un bearer token de servicio DISTINTO del token de pairing del owner (`_TOKEN_COOKIE`) — nunca el mismo secreto. Internamente reusa el MISMO camino que `_ask` del daemon (RPC `ask` vía `_json_rpc_call`, el helper que `web.py` ya usa para `/api/ask`): clasifica intención → `draft_plan` → `CognitivePolicyEngine.evaluate` → `dispatch`. Si sale B/C, cae en `PendingStore` exactamente igual que un `ask()` humano.
+
+**Por qué "n8n nunca confirma" se resuelve por AUSENCIA de ruta, no por permisos:** el token de servicio de n8n simplemente no tiene acceso a `POST /api/confirm/{pending_id}` — no existe un rol/scope framework, es más simple: esa ruta solo acepta la cookie de pairing del owner (`_authenticate_request` ya usa un token distinto). Dado el threat model single-owner-LAN existente, esto es proporcional; documentarlo explícitamente como decisión (no como omisión) porque si algún día se comparte el token de n8n con más de un flujo, hay que revisar esto.
+
+**Auth — recomendación concreta:** dado que n8n corre en Docker en el MISMO host (`localhost:5678`, confirmado por contexto del owner), `/api/intake` puede seguir bindeado a `127.0.0.1` (sin necesitar `--lan`), con su propio bearer token via `Authorization: Bearer <token>` + `compare_digest` (mismo patrón anti-timing-attack que ya usa `_authenticate_request`). Esto evita exponer el intake a la LAN — reduce superficie vs. reusar el puerto `--lan`.
+
+**Auditoría:** cada intake debe auditar `actor_type=SYSTEM, actor_id="n8n"` (no `"owner"`) para que la traza distinga claramente "esto lo disparó una automatización" de "esto lo pidió el owner" — importante para el Riesgo ya documentado en el roadmap ("Sobre-automatización (n8n confirmando)").
+
+### Pattern (f): Capacitor como WebView que navega al bridge existente, no un cliente API separado
+
+**What:** El APK NO reimplementa el consumo de `/api/*` en Kotlin/Java ni hace fetch cross-origin desde un bundle local — **navega el WebView al origin real del bridge** (`https://<ip-lan>:<port>/?token=...`), exactamente como el browser del teléfono hoy. Esto es la única opción consistente con el modelo de seguridad existente: `bootstrap/web.py` valida `Origin`/`Sec-Fetch-Site`/`Host` asumiendo que el cliente ES el mismo origin servido (`docs/mobile/WYSS_MOBILE_BRIDGE_MVP.md` — el caso ya documentado de `Origin: null` + `Sec-Fetch-Site: same-origin` en Chrome Android). Si el bundle de Capacitor sirviera el HTML desde `capacitor://localhost` y llamara a la API en otro origin, HABRÍA que abrir CORS cross-origin en el bridge — exactamente lo que el modelo actual evita a propósito.
+
+**Flujo runtime:**
+1. Primer arranque: el WebView carga un mini-bundle propio (`capacitor://localhost/pairing.html`, dentro de `web/src/pairing/`) con un scanner QR (`@capacitor/camera` + una lib de decode, o el plugin comunitario `capacitor-mlkit/barcode-scanning`).
+2. El QR, generado en el PC (ver abajo), decodifica a la MISMA URL de pairing que hoy se imprime en la CLI (`https://<ip-lan>:<port>/?token=<token>`) — nada nuevo que inventar en el payload.
+3. La app guarda esa URL con `@capacitor/preferences` y hace `window.location.replace(url)` — el WebView pasa a vivir en el origin del bridge, cookie HttpOnly se setea igual que en browser.
+4. Reinicios posteriores: si hay URL guardada, se navega directo ahí (mismo trade-off que el browser: si el server reinició o cambió de IP, falla y hay que re-escanear).
+
+**Quién genera el QR — recomendación:** en el PC, NO agregar un endpoint HTTP para servir el QR (aumentaría superficie de red por una conveniencia). Generarlo en la CLI (`wyss web --lan --tls` ya imprime la URL — agregar el QR como ASCII art en la misma terminal, con una lib pura-Python tipo `qrcode`) o, si se quiere algo visual, abrirlo como imagen local (`xdg-open` a un PNG temporal, mismo patrón que ya usa `borjes-toggle` para lanzar apps de escritorio con rutas fijas). El contenido del QR es el secreto (la URL con token) — tratar su generación con la misma disciplina que loggear el token: nunca en logs, nunca en un endpoint no autenticado.
+
+**Cert self-signed en Android WebView — el gotcha real (MEDIUM confidence, verificado por WebSearch):** a diferencia de Chrome-navegador (que hoy muestra "Avanzado > Continuar" y el owner ya lo acepta una vez), **el WebView de Android NO tiene ese diálogo interactivo** — falla el load con `net::ERR_CERT_AUTHORITY_INVALID` sin opción de bypass del usuario. Dos caminos, en orden de robustez:
+1. **Recomendado — pinning por fingerprint (TOFU real, no bypass ciego):** un plugin Capacitor nativo pequeño (Kotlin) que overridea `WebViewClient.onReceivedSslError` y llama `handler.proceed()` SOLO si el SHA-256 del cert presentado coincide con el fingerprint capturado durante el pairing (el mismo que ya imprime `bootstrap/tls.py::fingerprint_sha256` — se puede transportar en el QR junto a la URL, o pedirlo la primera vez). Esto es más seguro que un `proceed()` incondicional (que sería un agujero MITM real, no aceptable dado que el propio `SECURITY_MODEL.md` ya trata el cert self-signed como TOFU con verificación de huella).
+2. **Alternativa más simple pero menos confiable — `network_security_config.xml` con `<certificates src="user"/>`:** confía en CAs instaladas por el usuario (ej. la CA raíz de `mkcert` instalada manualmente en el teléfono). Riesgo documentado (WebSearch, MEDIUM confidence): hay reportes de que WebView NO siempre honra una user CA de la misma forma que Chrome-app, incluso con esta config — recomendar esto como fallback/documentación para quien instale `mkcert`, no como el mecanismo principal.
+
+**Server URL runtime config:** nunca hardcodear la IP LAN en `capacitor.config.ts` (`server.url` estático) — se rompe con cada cambio de DHCP y obliga a recompilar el APK. La URL vive en `@capacitor/preferences`, re-pareable por QR sin rebuild.
+
+## Data Flow
+
+### Scheduler → PendingStore (rutina genérica)
+
+```
+RoutineScheduler.tick() [cada N s, dentro del loop del daemon]
+    ↓ (rutina vencida)
+plan_builder(routine) → Plan (task_id="routine-<id>-<ts>", steps=(...))
+    ↓
+CognitivePolicyEngine.evaluate(plan) → PolicyDecision
+    ↓
+dispatch(plan, decision, pending_store, audit)
+    ├─ A → ejecuta directo (PlanRunner.run) → audit
+    └─ B/C → PendingStore.save() → aparece en Bandeja (SPA/APK) → owner confirma
+             → daemon._confirm() [YA EXISTENTE, re-evalúa antes de ejecutar]
 ```
 
-**Critical nuance from doc 10:** "Crear un agente nuevo = modelo base + configuración. Cero código nuevo." That means in v0.1 there is likely only ONE concrete agent class — `ConfiguredAgent(AgentBase)` — whose behavior comes entirely from `AgentDefinition` (domain, tools, model alias, system prompt). The ABC subclass-hook exists for FUTURE specialized agents, not for v0.1. Don't create `BelgranoAgent` classes; create agent TOML/YAML configs.
+### Daily Assistant (solo lecturas + advisory)
 
-### Pattern 2 — Frozen dataclasses in the domain, Pydantic only at the boundary
-
-```python
-# core/domain/plan.py — stdlib only, immutable, hashable
-from dataclasses import dataclass, field
-from enum import Enum
-
-class RiskLevel(Enum):
-    A = "a"   # auto-execute
-    B = "b"   # simple confirmation
-    C = "c"   # strong confirmation
-    D = "d"   # absolute rejection
-
-@dataclass(frozen=True, slots=True)
-class Action:
-    type: str
-    target: str
-    parameters: dict[str, object] = field(default_factory=dict)
-
-@dataclass(frozen=True, slots=True)
-class Plan:
-    task_id: str
-    summary: str
-    steps: tuple[Action, ...]
-    risk_level: RiskLevel
-    rationale: str
+```
+scheduler dispara "daily_assistant" (cron 08:00)
+    ↓ (plan_builder especial: no arma Actions mutadoras)
+knowledge.query(...) + ledger.balance(...) + memory.recall(...) + pending_store.load_pending()
+    ↓ (todo nivel A, SQL determinista para números)
+gateway.ask(AgentModelRequest)  — SOLO para redactar texto, jamás calcular
+    ↓
+audit.log(AuditEventType.DIGEST_GENERATED, payload={"text": ..., "sources": [...]})
+    ↓
+GET /api/digest/today (bridge) → SPA/APK renderiza el último digest
 ```
 
-- Domain: `@dataclass(frozen=True, slots=True)` — zero dependencies, immutability prevents agents mutating plans after policy evaluation (a real attack surface here).
-- Boundaries (config files, model API payloads, persistence rows): **Pydantic v2** models in `adapters/`, converted to/from domain dataclasses at the adapter edge. Never let Pydantic models leak into `core/`.
+### Intake n8n → misma bandeja que el owner
 
-### Pattern 3 — Generic decorator registry + entry points for plugins
-
-```python
-# core/registry.py — one generic registry, reused everywhere (PEP 695, Py 3.12+)
-class Registry[T]:
-    def __init__(self, kind: str) -> None:
-        self._kind = kind
-        self._items: dict[str, type[T]] = {}
-
-    def register(self, name: str):
-        def deco(cls: type[T]) -> type[T]:
-            if name in self._items:
-                raise DuplicateRegistration(self._kind, name)
-            self._items[name] = cls
-            return cls
-        return deco
-
-    def create(self, name: str, **kwargs) -> T:
-        try:
-            return self._items[name](**kwargs)
-        except KeyError:
-            raise UnknownPlugin(self._kind, name, available=list(self._items))
-
-# adapters/extractors/pdf.py — plugging in = existing, never editing core
-@extractors.register("pdf")
-class PdfExtractor:
-    media_types = frozenset({"application/pdf"})
-    def extract(self, source: SourceFile) -> ExtractedContent: ...
+```
+n8n workflow (webhook externo) → POST /api/intake  {"instruction": "..."}
+    Authorization: Bearer <n8n_service_token>   (≠ cookie del owner)
+    ↓
+bootstrap/web.py valida bearer token (compare_digest) — actor_type=SYSTEM, actor_id="n8n"
+    ↓ (mismo RPC "ask" del daemon)
+classify_intent → draft_plan → policy.evaluate → dispatch
+    ├─ A → ejecuta (poco frecuente para intake automático — revisar qué action types se permiten desde n8n)
+    └─ B/C → PendingStore — el owner confirma desde CUALQUIER cliente (web/APK), n8n nunca ve /api/confirm
 ```
 
-Registration triggers on import — the composition root imports `wyss.adapters.extractors` (a package whose `__init__` imports all modules). For **third-party** plugins later, discover via `importlib.metadata.entry_points(group="wyss.extractors")` — same registry, second discovery source. This is the standard 2025 pattern (used by pytest/pluggy, AiiDA, etc.). Don't adopt `pluggy` itself in v0.1 — its hook model (many subscribers per hook) doesn't match Wyss's model (one selected implementation per request); the registry above is enough.
+### Capacitor pairing
 
-Registries needed: `extractors`, `tools` (execution adapters), `model_providers`, `chunkers`, `interfaces` (CLI/chat), `audit_sinks`. Agents are NOT a class registry — they are a **data** registry (rows/configs), per doc 10.
-
-### Pattern 4 — Manual composition root, no DI framework
-
-Verified recommendation: at this scale, a hand-written composition root beats `dependency-injector`/`dishka` (frameworks earn their keep with request-scoped lifetimes in web apps; Wyss is a long-lived daemon with one object graph).
-
-```python
-# bootstrap/wiring.py — the ONLY module that imports adapters AND application
-def build_wyss(config: WyssConfig) -> Orchestrator:
-    audit = SqliteAuditSink(config.db_path)
-    fts = SqliteFtsIndex(config.db_path)
-    vectors = SqliteVecIndex(config.db_path)          # or Chroma embedded
-    permissions = PermissionManager(SqlitePermissionRepo(config.db_path), audit)
-    retrieval = RetrievalEngine(fts, vectors, MetadataIndex(...), permissions)
-    cost = CostTracker(SqliteCostRepo(config.db_path), config.budgets)
-    gateway = ModelGateway(
-        router=ModelRouter(config.model_aliases),
-        minimizer=ContextMinimizer(config.redaction_rules),
-        providers={"anthropic": AnthropicProvider(...), "litellm": LiteLLMProvider(...)},
-        cost=cost, audit=audit,
-    )
-    runtime = AgentRuntime(AgentRegistry(SqliteAgentRepo(...)),
-                           retrieval, gateway, build_toolbelt(config), audit)
-    return Orchestrator(
-        intent=IntentRouter(gateway),
-        planner=TaskPlanner(gateway),
-        policy=CognitivePolicyEngine(config.policy_rules),
-        confirm=ConfirmationManager(audit),
-        runtime=runtime, audit=audit,
-    )
+```
+PC: wyss web --lan --tls  → imprime URL + fingerprint + QR (ASCII o PNG local)
+    ↓
+APK (1ª vez): pairing.html (capacitor://) → scan QR → decodifica URL(+fingerprint)
+    ↓
+Preferences.set("bridge_url", url) + Preferences.set("cert_fingerprint", fp)
+    ↓
+window.location.replace(url)  → WebView navega al origin real del bridge
+    ↓ (TLS handshake)
+onReceivedSslError → compara fingerprint presentado vs guardado → proceed() solo si matchea
+    ↓
+GET /?token=... → 302 + cookie HttpOnly (MISMO flujo que browser) → SPA normal
 ```
 
-Everything is **constructor injection**, all dependencies typed as ports. Tests inject fakes; no monkeypatching needed.
+## Anti-Patterns
 
-### Pattern 5 — Scoped facades enforce restrictions structurally
+### Anti-Pattern 1: Meter el scheduler en un proceso/systemd-timer separado que llama `wyss ask` por CLI
 
-Doc 10 §7 lists what an agent "nunca puede hacer". Don't enforce these with runtime checks scattered around — enforce by **construction**: when AgentRuntime instantiates an agent, it hands it pre-scoped capability objects:
+**What people do:** correr `systemd --user timer` que dispara `wyss ask "rutina X"` como subproceso periódico, evitando tocar el daemon.
+**Why it's wrong:** duplica el ciclo de vida (dos procesos que pueden desincronizarse), y sobre todo **cada invocación de `wyss ask` abriría su PROPIA conexión a `pending_store.db`** — WAL soporta múltiples lectores pero la app está diseñada asumiendo un único proceso dueño del daemon (ver comentario `busy_timeout=5000` en `pending_store.py`: pensado para contención dentro del MISMO proceso, no como estrategia de multi-proceso). Además reintroduce el riesgo de auto-ejecución si alguien arma el timer con `--yes`/flags de bypass.
+**Do this instead:** `scheduler_task` dentro del daemon, mismo loop asyncio, mismas instancias de `PendingStore`/`CognitivePolicyEngine` inyectadas.
 
-- `ScopedRetrieval(retrieval, subject=agent_id)` — bakes the agent identity into every query; the agent cannot ask as someone else.
-- `ScopedGateway(gateway, agent_id, budget)` — every model call pre-tagged and budget-checked.
-- `ToolBelt(allowed: dict[str, Tool])` — agent only ever receives the adapters in its definition; the others don't exist from its perspective.
+### Anti-Pattern 2: Reusar `execution/journal.py` (UndoJournal) para Notion o Memory
 
-This is the capability-security pattern and it's the single most important structural decision in this system: an agent without a reference cannot misuse it.
+**What people do:** por consistencia, intentar que `NotionTool`/`MemoryTool` registren entradas en el mismo `undo_entries` que usa `file.*`.
+**Why it's wrong:** `execution/` es una capa independiente por import-linter — `notion/`/`memory/` NO pueden importarla sin violar el contrato de independencia. Además Notion y Memory no comparten el modelo de "inversa" de filesystem (backup de bytes, trash de OS): Notion tiene su propio archive/trash nativo vía API, Memory es una fila SQLite trivialmente re-escribible.
+**Do this instead:** cada paquete nuevo maneja su propia reversibilidad con sus propias primitivas (Notion: usar el endpoint de archive de la API en vez de delete; Memory: un `memory.write` que sobreescribe es su propia "inversa" auditada). Si se necesita un contrato compartido de "undo", promoverlo a `core/ports/` como una nueva interfaz — pero NO está justificado para este milestone.
 
-### Pattern 6 — Audit as injected port + context manager, not AOP
+### Anti-Pattern 3: `network_security_config` con confianza ciega (`<certificates src="user"/>` sin más) como ÚNICA defensa
 
-Avoid decorators-with-globals or aspect libraries. Two explicit mechanisms:
+**What people do:** confiar en que instalar la CA de mkcert en el teléfono alcanza, sin pinning de fingerprint.
+**Why it's wrong:** un usuario que instala una CA de terceros para hacer funcionar OTRA app queda con esa CA confiada globalmente por el WebView también — es una superficie de confianza más ancha que la que hoy tiene el modelo (fingerprint TOFU explícito, verificado a mano una vez).
+**Do this instead:** pinning explícito por fingerprint (Pattern f) como mecanismo primario; `network_security_config` documentado como opción para quien prefiera cero-warnings a costa de una CA de terceros instalada, no como default.
 
-```python
-class AuditPort(Protocol):
-    def log(self, event: AuditEvent) -> None: ...
+### Anti-Pattern 4: Un endpoint HTTP para servir el QR/URL de pairing
 
-# convenience for spans:
-with audit.span(task_id, actor="agent:belgrano", event="execute_plan") as span:
-    ...   # span logs start, end/duration, and exception automatically
-```
+**What people do:** exponer `GET /api/pairing/qr.png` para que "cualquier dispositivo en la LAN lo escanee cómodo".
+**Why it's wrong:** el contenido del QR ES el secreto de pairing (la URL con token). Servirlo por HTTP —aunque sea detrás de auth— agrega una ruta más a auditar y un vector nuevo (¿y si ese endpoint queda sin auth por error?) para un problema que ya se resuelve mostrando el QR en la terminal/CLI del propio PC del owner.
+**Do this instead:** generar el QR localmente en el proceso de la CLI (misma superficie de confianza que imprimir la URL hoy), nunca por red.
 
-`AuditEvent` is a frozen dataclass mirroring the `AuditLog` entity of doc 09 (actor_type, actor_id, event_type, task_id, metadata). Correlation by `task_id` reconstructs the full trace of any task.
+## Integration Points
 
-### Pattern 7 — Enums + exhaustive matching for the policy engine
+### External Services
 
-```python
-def next_step(decision: PolicyDecision) -> Step:
-    match decision.outcome:
-        case Outcome.ALLOW:            return Step.EXECUTE
-        case Outcome.CONFIRM_SIMPLE | Outcome.CONFIRM_STRONG:
-            return Step.AWAIT_CONFIRMATION
-        case Outcome.REJECT:           return Step.REJECT
-    assert_never(decision.outcome)   # typing.assert_never → mypy catches new variants
-```
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| Notion API | `NotionTool` (Tool protocol) en paquete `notion/` nuevo, vía SDK `notion-client` (PyPI, MEDIUM confidence) | Integration token en `.env` (protegido por SecretFilter existente); páginas deben compartirse explícitamente con la integración o la API responde como inexistente |
+| n8n (Docker local, `localhost:5678`) | `POST /api/intake` nuevo en `bootstrap/web.py`, bearer token de servicio propio | n8n produce, nunca confirma — sin ruta a `/api/confirm` para ese token |
+| APScheduler (nueva dependencia) | `AsyncIOScheduler` integrado al event loop del daemon vía `orchestrator/scheduler.py` | Agregar a `pyproject.toml` — el doc de target architecture asume que ya está pero no lo está |
+| Capacitor / Android WebView | WebView navega al origin real del bridge (no cliente API separado) | Requiere plugin nativo pequeño para pinning de fingerprint (self-signed cert) |
 
-`CognitivePolicyEngine` should be a **pure function over Plan → PolicyDecision** (rules from config + hard-coded invariants like "delete without backup = D"). Pure = trivially testable = the most-tested module in the system.
+### Internal Boundaries
 
-### Pattern 8 — Async where IO fans out, sync core
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| `orchestrator/scheduler.py` ↔ `orchestrator/pending_store.py` + `core/policy` | Llamada directa (mismo proceso, mismo import ya permitido) | Reusa `dispatch()` tal cual, cero API nueva |
+| `execution/executor.py` ↔ `notion/`, `memory/` | Duck-typed vía `Tool` protocol (mismo mecanismo que file/shell/git) | El executor NO importa `notion`/`memory` directamente en su lógica de negocio — recibe instancias ya construidas por `bootstrap` (composition root) igual que hoy con `FileSystemAdapter` |
+| `bootstrap/web.py` ↔ `orchestrator/daemon.py` | JSON-RPC sobre Unix socket, MISMO método "ask" reusado para `/api/intake` | El bridge no gana un segundo protocolo, solo una ruta HTTP más con auth distinta |
+| APK (`android/`) ↔ bridge | HTTPS directo al mismo origin que el browser del teléfono | Cero cambios de backend; el "contrato nuevo" es 100% del lado cliente (pairing, pinning) |
 
-Model calls, hybrid retrieval fan-out (3 parallel queries), and ingestion batches benefit from `asyncio`. The domain core stays sync (pure functions). Practical split: define ports as `async def` for anything that crosses a network or disk boundary (`ModelProviderPort`, index ports, tool ports); keep `CognitivePolicyEngine`, `PermissionManager` rule-checks, and entity logic synchronous. Don't dual-maintain sync+async versions.
+## Build Order Sugerido
 
----
+1. **Scheduler** (`orchestrator/scheduler.py` + `AsyncIOScheduler` + campo `scheduler_task` en `RunningDaemon`) — usando SOLO action types existentes (ej. una rutina de recordatorio con `file.read`) para validar el patrón daemon-task + `dispatch()` sin todavía necesitar Notion/Memory. Es la pieza fundacional: todo lo demás que "corre solo" depende de esto.
+2. **Notion adapter** — nuevo `action.type` + `Tool`, capa independiente nueva. Se valida en aislamiento (CLI/ask manual) antes de que el scheduler o el Daily Assistant lo consuman.
+3. **Memory (owner)** — port + store + `memory.write` gateado. También se valida en aislamiento.
+4. **Daily Assistant** — primera rutina REAL del scheduler, compone knowledge+ledger+memory(+notion si aplica). Depende de 1-3 ya construidos; es el punto de integración que las ejercita juntas.
+5. **Intake n8n** — endpoint nuevo en el bridge; no depende de 1-4, pero conviene hacerlo después de validar que el patrón "productor externo de Plan → dispatch()" funciona con el scheduler (mismo camino, distinto disparador) — reduce el riesgo de descubrir un problema de concurrencia/auth en dos lugares a la vez.
+6. **Web PC pulida** — el glow-up de la SPA debe cubrir TODAS las superficies nuevas (digest, estado de Notion, bandeja con rutinas) — hacerlo antes dejaría fuera lo que se construye en 1-5.
+7. **APK Capacitor** — último, porque envuelve la SPA ya estable y no debería haber más cambios de auth/rutas después de este punto (pairing + pinning se construyen contra un contrato de bridge que ya no se mueve).
 
-## Build Order (dependencies between components — what must be built first)
-
-Dependency-driven order, each step testable in isolation, with vertical-slice milestones:
-
-| # | Build | Depends on | Why this position |
-|---|---|---|---|
-| 0 | `core/domain` — entities, enums (`Task`, `Plan`, `Action`, `RiskLevel`, `TaskStatus` state machine, `AgentDefinition`, `Permission`, `AuditEvent`) | nothing | Everything imports these. Pure stdlib, fully unit-tested first. |
-| 1 | `core/ports` — ALL Protocols (see Interface Contracts) | 0 | Interfaces-first mandate. Cheap to write, forces design decisions early. |
-| 2 | `audit/` — AuditPort + SQLite/JSONL sink | 0,1 | Transversal: every later component takes it in its constructor. Building it late means retrofitting every signature. |
-| 3 | `core/policy` — CognitivePolicyEngine (pure) + `core/permissions` rule logic | 0 | Zero IO, highest-value tests, defines the A–D semantics everything else honors. |
-| 4 | Config: `WyssConfig` (Pydantic at boundary) + `bootstrap/` skeleton | 0–3 | Composition root grows with the system; start it now. |
-| 5 | `gateway/` — ModelRouter, ContextMinimizer, CostTracker + ONE provider adapter (LiteLLM gives many models for one adapter) | 1,2,4 | Needed by planner, summarizer, agents. Testable with a `FakeProvider`. |
-| 6 | `knowledge/` — ExtractorRegistry + 2–3 extractors (txt/md, pdf), Chunker, FTS5 index, vector index, IngestionPipeline, RetrievalEngine (hybrid fusion + permission filter) | 1,2,3,5(summaries) | **Milestone A: instant search over the owner's files — standalone value before any agent exists.** This de-risks the hardest subsystem early. |
-| 7 | `orchestration/` — IntentRouter, TaskPlanner, ConfirmationManager, Orchestrator | 3,5,6 | The conductor. With knowledge done, "query" intent works end-to-end. |
-| 8 | `agents/` — AgentBase, ConfiguredAgent, AgentRegistry, AgentRuntime, scoped facades | 3,5,6,7 | Needs everything an agent touches to already exist. |
-| 9 | Execution adapters — FileSystemAdapter first (with dry-run + verify), then ShellAdapter, GitAdapter | 1,2 (buildable earlier; integrate here) | **Milestone B: one agent executes a real plan with confirmation flow.** FileSystem first: most useful, easiest to verify/rollback. |
-| 10 | CLI interface loop (full REPL with confirmations) | 7 | Thin; a basic version should exist from step 7 for dogfooding. |
-| 11 | RoutineScheduler | 7 | Trivial once Orchestrator exists (it just submits commands on a cron). |
-| 12 | Workers, MessagingAdapter, CalendarAdapter, multi-context replication | all | Explicitly post-v0.1 per docs. |
-
-**Anti-pattern to avoid in ordering:** building the agent layer before knowledge + gateway. Agents are thin coordinators; their value is entirely in what they can reach. Build the reachable things first.
-
----
-
-## Interface Contracts (key ABCs/Protocols to define first)
-
-All in `wyss/core/ports/`, all consuming/returning domain dataclasses only. The 14 that matter, in definition order:
-
-```python
-# --- transversal -----------------------------------------------------------
-class AuditPort(Protocol):
-    def log(self, event: AuditEvent) -> None: ...
-    def span(self, task_id: str, actor: str, event: str) -> ContextManager[Span]: ...
-
-class ConfigStore(Protocol):
-    def load(self) -> WyssConfig: ...
-
-# --- knowledge -------------------------------------------------------------
-class Extractor(Protocol):
-    media_types: frozenset[str]
-    def extract(self, source: SourceFile) -> ExtractedContent: ...
-
-class Chunker(Protocol):
-    def chunk(self, content: ExtractedContent) -> Sequence[Chunk]: ...
-
-class EmbeddingProvider(Protocol):
-    async def embed(self, texts: Sequence[str]) -> Sequence[Vector]: ...
-
-class FullTextIndex(Protocol):
-    def upsert(self, entries: Sequence[IndexEntry]) -> None: ...
-    def search(self, query: str, kb_ids: frozenset[str], limit: int) -> Sequence[Hit]: ...
-
-class VectorIndex(Protocol):
-    def upsert(self, entries: Sequence[tuple[IndexEntry, Vector]]) -> None: ...
-    def search(self, vector: Vector, kb_ids: frozenset[str], limit: int) -> Sequence[Hit]: ...
-
-class Retrieval(Protocol):          # what agents/orchestrator see (already fused+filtered)
-    async def search(self, query: Query, subject: Subject) -> Sequence[Hit]: ...
-
-# --- security --------------------------------------------------------------
-class PermissionStore(Protocol):    # persistence port; rule logic lives in core
-    def grants_for(self, subject: Subject) -> Sequence[Permission]: ...
-    def save(self, permission: Permission) -> None: ...
-    def revoke(self, permission_id: str) -> None: ...
-
-# --- gateway ---------------------------------------------------------------
-class ModelProvider(Protocol):
-    name: str
-    async def complete(self, request: ModelRequest) -> ModelResponse: ...
-
-class ModelGatewayPort(Protocol):   # what agents see (routing+minimizing+cost inside)
-    async def ask(self, request: AgentModelRequest) -> ModelResponse: ...
-
-# --- execution -------------------------------------------------------------
-class Tool(Protocol):
-    name: str
-    max_risk: RiskLevel                       # adapter declares its ceiling
-    def describe(self, action: Action) -> str            # for confirmation prompts
-    async def execute(self, action: Action) -> ToolResult: ...
-    async def verify(self, action: Action, result: ToolResult) -> Verification: ...
-
-# --- persistence -----------------------------------------------------------
-class TaskRepository(Protocol):
-    def save(self, task: Task) -> None: ...
-    def get(self, task_id: str) -> Task: ...
-```
-
-Plus the **one ABC**: `AgentBase` (template method shown above — ABC, not Protocol, precisely because audit/policy hooks must be inherited, not merely conformed to).
-
-Contract rules:
-1. Ports accept/return only `core/domain` types — never SDK types, never Pydantic, never ORM rows.
-2. Every `Tool.execute` is paired with `verify` (doc 11: "resultado + verificación") — verification is part of the contract, not an afterthought.
-3. `kb_ids` permission scoping is a parameter of the index ports themselves — adapters cannot "forget" to filter.
-
----
-
-## Extensibility Points (where the plugin pattern applies)
-
-| Extension point | Mechanism | Adding one means | Open/Closed status |
-|---|---|---|---|
-| **File-type extractor** | `Extractor` Protocol + `extractors` registry (`@extractors.register("epub")`) | New class in `adapters/extractors/`, zero edits elsewhere | Fully closed to modification |
-| **Model provider** | `ModelProvider` Protocol + registry; selected by alias in config | New class + config alias entry | Closed; ModelRouter logic untouched |
-| **Execution tool/adapter** | `Tool` Protocol + `tools` registry; agent definitions reference tool names | New class + grant in agent config | Closed; PermissionManager untouched |
-| **Agent** | **Configuration, not code** (doc 10): TOML/YAML → `AgentDefinition` row → `ConfiguredAgent` instance | New config file. Zero code | The product's core promise |
-| **Specialized agent behavior** (future) | Subclass `AgentBase`, override `_run` | New class; policy/audit inherited, unskippable | Closed via template method |
-| **Audit sink** | `AuditPort` impl + fan-out `CompositeAuditSink` | New sink class (e.g., remote SIEM later) | Closed |
-| **Interface** (CLI → chat → voice → mobile) | Driving adapters all call the same `Orchestrator.handle(Command)` inbound port | New adapter package | Closed; core never knows the UI |
-| **Vector/FTS backend** | `VectorIndex`/`FullTextIndex` Protocols (sqlite-vec → Chroma → Qdrant server) | Swap in bootstrap; doc 14 §7 "la arquitectura no cambia, solo el despliegue" holds automatically | Closed |
-| **Embedding source** | `EmbeddingProvider` Protocol (API now, local CPU model later per doc 14 §7) | New adapter | Closed |
-| **Policy rules** | Data-driven rules (config) evaluated by the engine; hard invariants (level-D list) stay in code | Edit config for tunables; code change ONLY for new invariant categories | Partially open by design — safety invariants SHOULD require code review |
-| **Intent classification** | `IntentClassifier` Protocol (regex/heuristic v0.1 → cheap model later) | Swap adapter | Closed |
-| **Third-party plugins** (post-v0.1) | `importlib.metadata.entry_points(group="wyss.*")` feeding the same registries | `pip install wyss-extractor-foo` | Closed; discovery is additive |
-
-**Where NOT to make it pluggable:** Orchestrator, CognitivePolicyEngine invariants, PermissionManager, AgentBase template method, ContextMinimizer. These are the security/governance spine — making them swappable would let a plugin bypass the rules the whole design exists to enforce. Hard-code the spine; plug in the limbs.
-
----
+**Nota:** el roadmap existente (`WYSS_MASTER_ARCHITECTURE_AND_ROADMAP.md` §11) lista PR-15 Scheduler · PR-16 Notion · PR-17 Daily Assistant · PR-12 Memory · PR-13 Intake sin orden estricto declarado (misma fila de tabla). El orden acá propuesto (Scheduler → Notion → Memory → Daily Assistant → Intake → Web → APK) es una recomendación de dependencias reales, no una contradicción del roadmap.
 
 ## Sources
 
-- Wyss design docs (authoritative for requirements): `docs/07-arquitectura-conceptual.md`, `08-diagrama-componentes.md`, `09-modelo-de-datos.md`, `10-arquitectura-de-agentes.md`, `11-diagramas-uml.md`, `14-estrategia-conocimiento-indexacion.md` — HIGH
-- Protocol vs ABC for hexagonal ports: [Modern Python Interfaces: ABC, Protocol, or Both?](https://tconsta.medium.com/python-interfaces-abc-protocol-or-both-3c5871ea6642), [Hexagonal Architecture in Python (van der Meij)](https://douwevandermeij.medium.com/hexagonal-architecture-in-python-7468c2606b63), [Hexagonal architecture in Python (Miks)](https://blog.szymonmiks.pl/p/hexagonal-architecture-in-python/) — MEDIUM (multiple credible sources agree; matches PEP 544 official semantics)
-- Plugin/registry/entry-points patterns: [Dependency Inversion and Entry Points](https://johndanielraines.medium.com/level-up-in-python-with-dependency-inversion-and-entry-points-c648a1b087ee), [How to Build Plugin Systems in Python](https://oneuptime.com/blog/post/2026-01-30-python-plugin-systems/view), [Registry Pattern with Decorators](https://medium.com/@tihomir.manushev/implementing-the-registry-pattern-with-decorators-in-python-de8daf4a452a), [class-registry (entry-points integration)](https://github.com/todofixthis/class-registry) — MEDIUM
-- `dataclasses(frozen=True, slots=True)`, `typing.Protocol`, `match`/`assert_never`, PEP 695 generics, `importlib.metadata.entry_points`: Python stdlib (3.12+; local env is 3.14.5) — HIGH
+- Lectura directa del repo (HIGH): `src/orchestrator/daemon.py`, `dispatcher.py`, `pending_store.py`, `ttl_reaper.py`; `src/core/policy/engine.py`, `builtin_deny.py`; `src/core/ports/execution.py`, `agent.py`, `orchestrator.py`, `knowledge.py`, `gateway.py`; `src/agents/memory.py`, `registry.py`, `configured_agent.py`; `src/bootstrap/web.py`, `tls.py`; `src/execution/executor.py`, `filesystem.py`; `pyproject.toml`; `web/package.json`, `web/vite.config.ts`
+- `docs/architecture/WYSS_MASTER_ARCHITECTURE_AND_ROADMAP.md` (HIGH — doc de arquitectura shippeada del propio repo)
+- `docs/architecture/WYSS_TARGET_ARCHITECTURE.md` (HIGH — decisiones ya tomadas por el owner sobre memoria/scheduler)
+- `docs/security/SECURITY_MODEL.md` (HIGH — modelo de niveles, denylist, huecos conocidos incluyendo `net.*`)
+- `docs/mobile/WYSS_MOBILE_BRIDGE_MVP.md` (HIGH — modelo de pairing/TLS ya implementado y smoke-testeado)
+- WebSearch: APScheduler `AsyncIOScheduler` (MEDIUM — confirma que 3.11.x es estable y corre en el mismo loop, sin fecha 2026 específica) — https://apscheduler.readthedocs.io/en/3.x/modules/schedulers/asyncio.html
+- WebSearch: Android WebView self-signed cert / `onReceivedSslError` / `network_security_config` (MEDIUM — confirma que WebView no tiene el diálogo interactivo de Chrome y que la user-CA config tiene inconsistencias reportadas) — https://sslinsights.com/how-to-handle-self-signed-certificates-in-android-webview/, https://github.com/react-native-webview/react-native-webview/issues/2147
+- Context7 `notion-client`/SDKs oficiales: no se encontró un match exacto del paquete Python `notion-client` en el índice consultado — la referencia al SDK oficial y su modelo de auth/compartir-página queda en MEDIUM confidence (conocimiento de entrenamiento + consistente con nota operativa propia del owner sobre otra integración Notion en este mismo entorno)
+
+---
+*Architecture research for: integración de features v1.0 en Wyss (arquitectura hexagonal existente)*
+*Researched: 2026-07-10*

@@ -1,170 +1,161 @@
-# Features Research
+# Feature Research
 
-**Proyecto:** Wyss — asistente operativo personal multi-agente
-**Dimensión:** Features (comparativa contra el ecosistema 2025-2026)
-**Investigado:** 2026-06-10
-**Sistemas analizados:** LangGraph, CrewAI, AutoGen (en mantenimiento → Microsoft Agent Framework), AutoGPT (legado), Khoj, OpenClaw/Clawdbot, mem0, Google ADK
-**Confianza general:** MEDIUM-HIGH (verificado contra docs oficiales y múltiples fuentes; marcas LOW donde aplica)
+**Domain:** Personal operational AI agent — local-first assistant with human-gated execution (routine scheduling, proactive briefing, persistent memory, Notion adapter, mobile companion app)
+**Researched:** 2026-07-10
+**Confidence:** MEDIUM (patterns cross-verified across multiple 2025-2026 products; no single source is Wyss-specific since local-first + human-gate combo is uncommon in mainstream products)
 
----
+## Scope Note
 
-## Table Stakes (must have or the system is broken)
+This research covers only the **five NEW feature areas** of the v1.0 milestone: Routine Scheduler, Notion adapter, Daily Assistant, Memory, and the Android companion app (pairing/reconnection/notifications). Existing infrastructure (bandeja B/C, CONFIRMAR gate, política A-D, daemon Unix socket + JSON-RPC, ledger Pellegrini, búsqueda híbrida) is treated as a given foundation these features build on — not re-researched. Web desktop polish is UI work, not covered here (belongs in a design pass, not ecosystem research).
 
-Features que todo sistema comparable tiene y cuya ausencia hace que el sistema se sienta roto. Contrastadas contra los RF actuales (docs/04).
+**Inviolable product rule carried into every section below:** nothing classified B/C auto-executes. The scheduler, Notion adapter, Daily Assistant, and n8n intake channel all *propose* — the owner's bandeja + CONFIRMAR gate is the only path to execution. This is not a feature to build; it's a constraint every new feature must respect by construction (route everything B/C through the existing `CognitivePolicyEngine` + confirmation queue, never a parallel approval path).
 
-| Feature | Estado en Wyss | Complejidad | Evidencia / Notas |
-|---------|---------------|-------------|-------------------|
-| Búsqueda híbrida sobre archivos propios | ✅ RF-012/013/014 | Alta | Khoj lo valida como producto entero (34k stars). Wyss ya lo tiene como núcleo. |
-| Ingesta incremental (nunca re-procesar todo) | ✅ Flujo 4 | Media | Crítico a escala TB. Ya es regla de diseño. |
-| Human-in-the-loop con niveles | ✅ RF-018/019/020 | Media | LangGraph lo trae como primitiva (`interrupt`). Wyss lo supera con 4 niveles. |
-| Audit trail | ✅ RF-022/023 | Media | Estándar en todo framework serio. |
-| Scheduler de rutinas | ✅ RF-006 | Media | OpenClaw "proactive automation"; estándar. |
-| Routing de modelos por costo/riesgo | ✅ RF-007 | Media | Diferenciador parcial: pocos lo hacen con gate de presupuesto. |
-| **Memoria conversacional persistente (episódica + semántica de preferencias)** | ❌ **AUSENTE en RF** | Media | El gap más grande. Khoj, OpenClaw, mem0: todos lo tienen. Sin esto el owner repite contexto en cada sesión ("ya te dije que los informes van en X carpeta"). El índice de conocimiento NO es memoria del agente: indexa archivos, no interacciones ni preferencias. CoALA distingue working / episódica / semántica / procedural — Wyss solo cubre semántica-de-archivos. Confianza: HIGH. |
-| **Estado durable de tareas + resume** | ❌ AUSENTE | Media-Alta | LangGraph: checkpointing es SU feature insignia de producción; Google ADK lo promociona como "pause, resume, never lose context". Si una tarea de 20 pasos muere en el paso 14 (crash, corte, rate limit), debe retomar desde 14, no desde 0. Hoy Wyss solo persiste "propuestas pendientes" de rutinas. Confianza: HIGH. |
-| **Manejo de errores con política (retry / escalar / abortar)** | ❌ AUSENTE | Media | RF-010 dice "reportar errores" pero no qué hacer con ellos. Todo framework maduro define: reintento con backoff, escalado a humano, branch de error. Sin esto, las rutinas desatendidas (Flujo 3) fallan en silencio. Confianza: HIGH. |
-| **Bandeja de aprobaciones asíncronas + notificación** | ❌ AUSENTE | Media | Consecuencia directa de B/C + rutinas: si el lunes 8:00 una rutina genera 3 propuestas nivel B, ¿dónde viven? ¿cómo se entera el owner? Se necesita una cola de pendientes con canal de notificación. Sin esto, el flujo 3 está incompleto. Confianza: HIGH (se deriva de los propios flujos). |
-| **Feedback de progreso en tareas largas** | ❌ AUSENTE | Baja-Media | Streaming/progress es primitiva en LangGraph y expectativa de UX universal. Indexar 2TB sin barra de progreso = parece colgado. Confianza: MEDIUM. |
-| **Frescura del índice (watcher / detección de stale)** | ⚠️ Parcial | Media | La ingesta es incremental pero disparada por el owner (UC-008). Falta: watcher de filesystem o re-scan programado + indicador "índice actualizado al [fecha]". Una respuesta basada en índice viejo es peor que no responder. Confianza: MEDIUM. |
-| Sandboxing real de ejecución | ⚠️ Parcial | Alta | RF-016 dice "comandos permitidos" (allowlist) pero no aísla. Mínimo viable: allowlist + paths restringidos por agente; ideal: contenedor. El caso OpenClaw demuestra el blast radius de no hacerlo. Confianza: HIGH. |
+## Feature Landscape
 
----
+### Table Stakes (Users Expect These)
 
-## Differentiators (ventajas específicas de Wyss a proteger)
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Scheduler shows next-run time and last-run result per routine | Users of any scheduler (cron UIs, Home Assistant automations, Claude Code scheduled tasks) expect visibility into "when does this fire next" and "did it work last time" | LOW | Store `next_run`, `last_run_at`, `last_run_status` per routine row; surface in bandeja/routine list UI |
+| Natural-language routine creation ("todos los lunes a las 9am revisá X") converted to explicit, inspectable schedule | 2026 baseline set by Claude Cowork, Hermes Agent, ChatGPT scheduled tasks — all convert NL to cron/RRule and show the owner the resolved schedule before saving, never silently | MEDIUM | LLM parses NL → cron/RRule; **must show resolved expression + human-readable preview for owner confirmation before the routine is saved**, not just before each run |
+| Routine run produces a bandeja item for any B/C step, exactly like a manual request | Owner already trusts the bandeja for ad-hoc actions; a scheduler that bypasses it would be inconsistent and is explicitly disallowed by MULTI-02 | LOW (if bandeja abstraction is already generic) | Scheduler is just another *caller* of the same `OrchestratorPort` — reuse plan generation + policy gate, don't build a second one |
+| Daily briefing arrives at a predictable time with a fixed, scannable structure (not free-form prose) | ChatGPT Pulse, Gemini Daily Brief, and Claude Cowork's morning briefing all use structured cards/sections (agenda, money, pending items) rather than a wall of text — users scan, they don't read | MEDIUM | Fixed sections: agenda del día, snapshot financiero (Pellegrini), bandeja pendiente, alertas de rutinas fallidas |
+| Memory the owner can see and edit in plain text, not a black box | Anthropic's 2026 Claude Memory (human-readable markdown, click-to-edit/delete) is now the credibility bar; OpenAI/Google's opaque vector memory draws consistent criticism for being unauditable | MEDIUM | Reuse the existing per-agent `MEMORY.md` pattern (AGENT-04) — already textual, already versionable in git, already fits Wyss's audit-everything philosophy |
+| Deleting a memory item actually removes its influence, not just hides it from the UI | Claude's "delete conversation removes derived memory points" set the expectation that edit/delete is real, not cosmetic | LOW-MEDIUM | Since memory = flat file read into context, deletion is trivially real — advantage over vector-store competitors, worth calling out as a Wyss strength |
+| Mobile app auto-discovers the LAN server on the same network without manual IP entry | Home Assistant Companion's "search for servers on this network, auto-offer to connect" is the 2025-2026 baseline; manual IP-only pairing feels dated | MEDIUM | On first launch, attempt local discovery (mDNS/broadcast or QR-provided endpoint) before falling back to manual entry |
+| Push/local notification when something lands in the bandeja | A companion app that requires opening it to discover pending confirmations defeats the purpose of "mobile companion" | MEDIUM-HIGH | LAN-only server (no cloud push relay by default) means true push (FCM) needs either a cloud relay or reliance on local notification when app is foregrounded/polling — flag as an open design question, see Pitfalls research |
+| Reconnection after Wi-Fi drop / app backgrounding is automatic, not a manual "reconnect" button | Any LAN client users compare this to (Home Assistant, Jellyfin, Plex, Sonos apps) auto-retries on network change; manual reconnect is a known complaint pattern for weaker apps | MEDIUM | WebView/Capacitor bridge needs connection-state detection + auto-retry with backoff against the daemon's Unix-socket-backed HTTP/WS bridge |
+| Notion write actions show a diff/preview before writing (what block/page will change) | Every mature Notion integration (n8n Notion nodes, Truto-style sync engines) treats Notion writes as risky because Notion has no native undo API — the *product* must build the preview, since Notion itself won't | MEDIUM | This maps directly onto Wyss's plan-then-confirm flow already required for B/C actions — Notion write = classify B/C, generate plan (page/property diff), require CONFIRMAR |
 
-Features que el ecosistema NO tiene bien resueltas y que constituyen la identidad del producto. **No diluir ni recortar en MVP.**
+### Differentiators (Competitive Advantage)
 
-| Diferenciador | Por qué es raro en el ecosistema | Riesgo si se diluye |
-|---------------|----------------------------------|---------------------|
-| **Política cognitiva graduada A/B/C/D con rechazo absoluto (D)** | LangGraph/CrewAI tienen HITL binario (interrumpir o no). Nadie tiene un nivel D que rechaza *aunque el owner insista*, con explicación y alternativa. Es la respuesta directa al desastre de seguridad de OpenClaw. | Si D se vuelve "configurable off", se pierde la garantía. Mantener D inviolable. |
-| **Permission Manager agente↔BC con alcance y vigencia** | Los frameworks dan a los agentes acceso global a tools/datos. Permisos con expiración y revocación de efecto inmediato en retrieval no existe en ninguno de los comparados. Es lo que habilita team mode y replicación para clientes. | Es el feature que convierte a Wyss de "asistente personal" en "producto vendible". |
-| **Context Minimizer + redacción de secretos antes de toda IA externa** | OpenClaw filtró API keys en texto plano; ningún framework intercepta y minimiza contexto saliente por defecto. Cadena obligatoria del Flujo 7 = privacy-first real. | Cualquier bypass "por performance" rompe la promesa central. |
-| **Cost Tracker con gate de presupuesto (no solo tracking)** | LangSmith/observabilidad *miden* costo; casi nadie *bloquea* por presupuesto por agente. AutoGPT murió en parte por loops que quemaban dinero. | Mantenerlo como gate previo a la llamada, no como reporte posterior. |
-| **Prohibición de dirección horizontal (hub-and-spoke estricto)** | La tendencia 2025-2026 es lo contrario (A2A, swarms). La evidencia de producción favorece a Wyss: las conversaciones multi-agente libres son la principal fuente de comportamiento emergente no auditable. | No ceder a la moda A2A. El orquestador como único punto de delegación es lo que hace el audit trail completo. |
-| **Verificación posterior de toda acción modificadora (RF-017)** | Conteos/hashes/estados post-ejecución prácticamente no existe en frameworks generales ("harness failures": el agente cree que hizo algo que no hizo). | Es lo que separa "parece que funcionó" de "funcionó". |
-| **Agentes config-driven sin código nuevo (RF-008/024)** | CrewAI se acerca (roles en YAML) pero sin permisos ni política integrados. Config + permisos + presupuesto por agente = replicación de instancia trivial (UC-010). | — |
-| **Local-first sobre 2TB con FTS5 + semántica** | Khoj es lo más cercano pero sin capa agentic/operativa encima. La combinación búsqueda-personal-masiva + agentes-con-permisos no existe como producto integrado. | — |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Scheduler proposals carry full plan + audit trail identical to manual actions | Nobody in the human-in-the-loop scheduler space (n8n HITL, gotoHuman, Claude Cowork) unifies scheduled and manual approval into the *same* audited pipeline — most bolt approval on as a separate "wait for webhook" node with its own state | MEDIUM | Reuses ORCH-02 (explicit plan) + AUDIT-01 (total audit) for free if scheduler is built as an `OrchestratorPort` caller, not a parallel system — this is Wyss's structural advantage from the hexagonal architecture |
+| Daily Assistant references the owner's own indexed knowledge base and finance ledger, not external news/calendar APIs | Pulse/Gemini Daily Brief personalize with Gmail/Calendar; Wyss's differentiator is the 2TB personal knowledge base + Pellegrini ledger already indexed — briefing quality tied to something competitors don't have (a fully local, already-searched personal corpus) | MEDIUM | Briefing composer queries hybrid search + Pellegrini agent, not a new data source — mostly orchestration, not new indexing |
+| Memory is per-agent-scoped (Belgrano ≠ Pellegrini ≠ Personal), not one global blob | ChatGPT/Claude/Gemini memory is one global profile per user; Wyss's multi-agent architecture (AGENT-02 scoped facades) naturally supports separating "what Belgrano knows about my study habits" from "what Pellegrini knows about my spending" — reduces context pollution and respects the existing permission boundaries | MEDIUM-HIGH | Requires the orchestrator to route only the relevant agent's MEMORY.md into that agent's context, never all of them — this is an architecture decision, not just a feature |
+| Notion adapter enforces the same A-D policy as file/shell actions (reads = A, page edits = B/C by content sensitivity, deletes = D-adjacent) | Most Notion integrations (n8n, Zapier, native API) have no concept of graduated risk — a page edit and a page delete are equally "just an API call." Wyss's cognitive policy applied to Notion is a genuine differentiator matching the project's "humano primero" philosophy | MEDIUM | Classify Notion actions through existing `CognitivePolicyEngine`; likely need new deny-rules for irreversible Notion ops (page deletion, workspace-level changes) |
+| QR pairing that also transfers the daemon's self-signed cert fingerprint (not just IP:port) | Most self-hosted LAN apps (Jellyfin, Home Assistant) solve HTTPS-on-LAN with "just accept the warning" or full CA setup; encoding a cert pin in the QR payload lets the WebView auto-trust *only* that specific server without weakening security globally | MEDIUM-HIGH | Genuine UX+security differentiator versus "tap through the scary SSL warning" pattern most local-first apps still ship with in 2026 |
 
----
+### Anti-Features (Commonly Requested, Often Problematic)
 
-## Common Omissions (lo que los builders de sistemas similares lamentan no haber construido temprano)
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|------------------|-------------|
+| Auto-approve scheduler routines below a $ threshold or after N successful runs ("it's proven itself, stop asking") | Feels like natural evolution of trust, seen in some AI agent scheduler blogs recommending "approval checkpoints only above a threshold" | Directly violates MULTI-02 and the project's core "humano primero" rule — a habituated owner clicking CONFIRMAR without reading is a known failure mode of approval fatigue, but the fix is better UI/batching, not silent auto-execution | Batch same-routine repeated proposals into one bandeja card with clear diff-from-last-time, not auto-execution |
+| Remote (outside-LAN) access to the mobile companion via port-forward or embedded VPN | Users of Jellyfin/Home Assistant expect "access my server from anywhere" as standard; feels like an obvious next step for the APK | v1.0 scope is explicitly LAN pairing with a self-signed cert managed by the app itself; remote access reintroduces the exact attack surface (exposed daemon, cert trust across networks) the project's security model isn't designed for yet, and Tailscale/VPN integration is a scoped-out future item, not v1.0 | Ship LAN-only in v1.0; document Tailscale/WireGuard as a manual, owner-configured escape hatch outside the app, not a built-in feature |
+| Fully autonomous nightly research/web-browsing for the Daily Assistant (ChatGPT Pulse style "does research across the internet overnight") | Pulse's headline feature is proactive internet research; tempting to copy directly | Wyss's context-minimization principle (ORCH-07) and API-first/no-heavy-local-model constraint make unbounded autonomous web research expensive, hard to audit, and off-brand for a project whose value prop is *your own data*, not internet aggregation | Daily Assistant summarizes what's already inside Wyss's boundary (agenda, ledger, bandeja, indexed KB) — if external content is wanted later, it's a scoped, policy-gated fetch (A-level read), never open-ended autonomous browsing |
+| One global memory blob shared across all agents, "so nothing is ever missed" | Simpler to implement than per-agent scoping; matches how ChatGPT/Claude structure memory today (single profile) | Breaks AGENT-02's scoped-facade guarantee — an agent without permission on a BC could still "know" things about it via shared memory, defeating the permission model | Per-agent MEMORY.md, explicitly routed by the orchestrator only to agents with legitimate access to that context |
+| Two-way real-time Notion sync (edit in Notion, instantly reflected in Wyss, and vice versa) | "Bidirectional sync" sounds like the obvious end state and is often the first ask for any Notion integration | As of 2026, even mature Notion sync tooling (n8n, Truto-style connectors) still implements this as two separate one-directional flows with reconciliation, not true real-time bidirectional sync — Notion's API has no native "writeback" primitive and rate limits (3 req/s per integration) make aggressive polling for live sync expensive and brittle | Wyss reads Notion (with caching + periodic reconciliation) and writes Notion only via explicit, owner-confirmed actions (a proposal in the bandeja) — no live two-way loop, no polling-driven auto-writes |
+| Push notifications delivered via a third-party cloud relay (Firebase Cloud Messaging) by default | It's the only well-documented Capacitor push path (Push Notifications plugin is FCM-based) and the "complete" tutorials all assume it | Routing bandeja notifications through Google's FCM means owner data (that something needs confirmation, potentially with a preview) transits a third party — inconsistent with local-first / owner-controlled philosophy | Default to local notifications while app is foregrounded/backgrounded-but-alive + WebSocket/long-poll to the daemon over LAN; treat FCM as an optional, explicitly opted-in future path for true background push when off-LAN (flagged as open question, not v1.0 default) |
 
-Ordenadas por frecuencia/severidad en post-mortems y guías de ingeniería. Cada una con su implicancia para Wyss.
+## Feature Dependencies
 
-### 1. Evals desde el día 1 (el arrepentimiento #1)
-**Quién lo dice:** PostHog ("what we wish we knew"), Anthropic ("Demystifying evals for AI agents"). Confianza: HIGH.
-**El error:** construir el agente, lanzarlo, y recién ahí descubrir que no hay forma de saber si un cambio de prompt/modelo mejoró o empeoró el sistema. En agentes los errores se propagan y componen entre turnos.
-**Para Wyss:** crear desde la fase 1 un set de casos dorados: N consultas de conocimiento con respuesta esperada (¿encontró el archivo correcto?), M planes con nivel de política esperado (¿clasificó B como B y D como D?). El clasificador de política cognitiva ES el componente de seguridad: un falso-A (ejecutar lo que debía confirmar) es el peor bug posible y solo un eval lo detecta antes que el owner.
+```
+Routine Scheduler
+    └──requires──> Existing bandeja/CONFIRMAR gate + CognitivePolicyEngine (already built)
+    └──requires──> Persistent job store (next_run/last_run) — new, small addition to daemon
 
-### 2. Observabilidad/tracing ≠ auditoría
-**Quién lo dice:** PostHog, survey AgentOps (arXiv), AgentSight. Confianza: HIGH.
-**El error:** confundir el log de auditoría (para rendir cuentas: qué se hizo) con tracing (para debuggear: por qué el agente decidió eso — prompt exacto, contexto recuperado, output crudo, latencia, tokens). Cuando el agente hace algo raro, el audit trail dice "agente X ejecutó Y" pero no permite reconstruir la decisión.
-**Para Wyss:** el RF-022 cubre auditoría; falta el trace por llamada LLM (input/output/latencia/costo) consultable. Barato de agregar al principio, carísimo de retrofittear.
+Notion Adapter
+    └──requires──> CognitivePolicyEngine classification rules extended for Notion actions (new deny-rules for destructive ops)
+    └──requires──> Read path (Notion → cache) built before write path (cache → confirmed write)
 
-### 3. Memoria del agente agregada tarde
-**Quién lo dice:** ecosistema mem0/Redis/CoALA; todos los asistentes personales convergieron en esto. Confianza: HIGH.
-**El error:** tratar la memoria como "nice to have" y descubrir que sin ella el asistente personal no se siente personal. Después hay que migrar conversaciones históricas que nunca se guardaron estructuradamente.
-**Para Wyss:** definir el esquema de memoria (preferencias del owner, decisiones pasadas, resultados de tareas) aunque la extracción automática llegue después. Mínimo: guardar todo desde el día 1 en formato recuperable.
+Daily Assistant
+    └──requires──> Routine Scheduler (it IS a scheduled routine — daily trigger)
+    └──requires──> Hybrid search (existing) + Pellegrini ledger (existing) as data sources
+    └──enhances──> Memory (uses memory to personalize what's surfaced)
 
-### 4. Context engineering / context rot en tareas largas
-**Quién lo dice:** Towards Data Science, paper de coding agents (arXiv 2603.05344): "lo que parecen fallas del modelo son fallas del harness — el agente olvidó porque nada persistió el estado correcto". Confianza: HIGH.
-**El error:** dejar que el contexto crezca sin control en tareas multi-paso → degradación de calidad + explosión de costo.
-**Para Wyss:** el Context Minimizer ya existe para privacidad; extenderlo a gestión de contexto por longitud (compactación, artefactos durables entre pasos del plan en vez de re-inyectar historia completa).
+Memory
+    └──requires──> Per-agent scoping already present in architecture (AGENT-02 facades) — reuse, don't rebuild
+    └──enhances──> Daily Assistant, Notion Adapter, Scheduler (all read memory for personalization/context)
 
-### 5. Prompt injection vía contenido indexado (el punto ciego de la política cognitiva)
-**Quién lo dice:** caso OpenClaw (Cisco, CrowdStrike, HiddenLayer, The Hacker News): inyección indirecta → RCE silencioso, exfiltración, persistencia. Confianza: HIGH.
-**El error específico que amenaza a Wyss:** la política A/B/C/D evalúa *planes*, pero el contenido recuperado de las BC entra al contexto del agente *antes* de planificar. Un documento malicioso entre los 2TB (un PDF bajado, un mail archivado, un repo clonado) puede contener instrucciones que el agente interprete. Con team mode, terceros escriben mensajes que un agente procesa: superficie de ataque directa.
-**Para Wyss:** (a) separar instrucciones de datos — el contenido recuperado se marca como dato no-confiable, nunca como instrucción; (b) niveles de confianza por BC (mis notas ≠ descargas de internet ≠ mensajes de trabajadores); (c) regla: contenido recuperado jamás puede elevar el nivel de acción de un plan ya aprobado.
+Intake n8n (webhooks → bandeja)
+    └──requires──> Bandeja abstraction accepts external-origin proposals, not just LLM-planner-origin ones
+    └──conflicts (partially)──> naive auto-execution assumptions common in n8n HITL tutorials (must be re-gated through Wyss's own policy engine, not n8n's approval nodes)
 
-### 6. Undo / rollback de acciones sobre archivos
-**El error:** RF-017 verifica que la acción se hizo, no permite deshacerla. Un agente que "organiza" 500 archivos según un plan aprobado pero mal interpretado es un desastre sin undo.
-**Para Wyss:** mover-a-papelera en vez de borrar, journal de operaciones de archivos (origen→destino) con operación inversa, snapshot previo en operaciones masivas. Confianza: MEDIUM (síntesis de mejores prácticas, no de una fuente única).
+Mobile Companion App (APK)
+    └──requires──> Daemon exposes an HTTP/WS bridge reachable from LAN (already exists per v0.1.0 bridge)
+    └──requires──> QR pairing flow (new) — encodes endpoint + cert fingerprint
+    └──enhances──> Routine Scheduler, Daily Assistant, Notion Adapter, Intake n8n (all become more useful once notifications reach the phone)
+```
 
-### 7. Idempotencia y concurrencia en rutinas
-**El error:** una rutina que dispara dos veces (reinicio del scheduler, reloj) y duplica efectos; dos tareas tocando los mismos archivos.
-**Para Wyss:** ejecución-única por (rutina, ventana), lock por recurso o cola serializada en v0.1. Confianza: MEDIUM.
+### Dependency Notes
 
-### 8. Interfaz multi-canal antes de lo previsto
-**Observación:** OpenClaw se volvió viral por vivir en Telegram/WhatsApp, no por su motor. Wyss arranca CLI (correcto para v0.1), pero el Flujo 6 (Fama) ya exige un canal de mensajería para trabajadores — y la bandeja de aprobaciones necesita notificar al owner fuera de la CLI. Diseñar la capa de canal como adaptador desde el principio, aunque solo CLI esté implementado. Confianza: MEDIUM.
+- **Daily Assistant requires Routine Scheduler:** the briefing is conceptually "a routine that runs once a day and composes a summary instead of proposing a single action." Building the scheduler generically enough to support both use cases avoids two parallel systems.
+- **Memory enhances almost everything:** treat it as infrastructure, not a standalone feature — build it early enough that Notion adapter, Scheduler, and Daily Assistant can consume it, but it doesn't block any of them (they work with empty memory too).
+- **Mobile Companion App conflicts with rushing remote-access scope:** LAN-only pairing is simpler and safer; don't let "but what if I'm not home" pull VPN/relay work into v1.0 — that's explicitly out of scope (see Anti-Features).
+- **Intake n8n conflicts with copying n8n's own HITL pattern wholesale:** n8n's native "gated tool" / "wait for webhook" approval nodes are a *parallel* approval system to Wyss's bandeja. Webhooks should land as an unclassified proposal that flows into Wyss's own `CognitivePolicyEngine`, not use n8n's approval UI as the gate — otherwise there are two different approval systems with different audit trails, breaking AUDIT-01.
 
----
+## MVP Definition
 
-## Anti-features (deliberadamente NO construir — y por qué eso es correcto)
+### Launch With (v1)
 
-| Anti-feature | Por qué evitarlo | Qué hace Wyss en su lugar | Evidencia |
-|--------------|------------------|---------------------------|-----------|
-| **Comunicación libre agente-a-agente (swarms, A2A)** | Comportamiento emergente no auditable; las "conversaciones diversas" de AutoGen son su feature menos usable en producción; Microsoft mismo lo pasó a mantenimiento. | RF-011: solo el orquestador delega. Hub-and-spoke. | HIGH |
-| **Agentes auto-mejorables que escriben sus propias skills** | El feature "AGI-like" de OpenClaw es exactamente lo que habilitó backdoors persistentes vía memoria local y RCE. Código autogenerado sin revisión = nivel D por definición. | Agentes config-driven; nuevas capacidades = nueva config aprobada por el owner. | HIGH |
-| **Autonomía total sin confirmación (modo AutoGPT)** | AutoGPT demostró el patrón: loops infinitos, costo descontrolado, acciones destructivas. Es la razón por la que el ecosistema entero migró a HITL. | Política A/B/C/D. | HIGH |
-| **Memoria de largo plazo escribible por contenido externo** | Vector de persistencia de OpenClaw: la inyección escribe en memoria y sobrevive sesiones. | Solo el owner (o extracción supervisada) escribe en memoria/preferencias; contenido de BC nunca escribe memoria directamente. | HIGH |
-| **GUI / no-code builder temprano (estilo AutoGen Studio)** | Costo enorme, congela el modelo de datos antes de validarlo. AutoGen Studio no salvó a AutoGen. | CLI + archivos de config versionables; GUI post-validación. | MEDIUM |
-| **Voz como interfaz primaria en v0.1** | Complejidad transversal (STT/TTS/turnos) que no valida ninguna hipótesis del núcleo. | Texto primero; voz como adaptador de canal futuro (UC-007 ya prevé voz solo como input de trabajadores). | MEDIUM |
-| **Framework multi-agente genérico propio** | Wyss es un producto opinado, no un framework. Competir con LangGraph en generalidad es perder. | Núcleo mínimo propio (o LangGraph como motor interno — decisión de STACK, no de features). | MEDIUM |
-| **Fine-tuning de modelos propios** | Costo/mantenimiento injustificado; el routing de modelos (RF-007) da el 90% del beneficio. | Model Router + prompts por agente. | HIGH |
+- [ ] **Routine Scheduler core** — NL-to-cron/RRule parsing, persistent job store, routine fires → generates plan → B/C lands in bandeja exactly like manual action — essential because MULTI-02 is an explicit Active requirement and everything else (Daily Assistant, some Notion flows) depends on it existing
+- [ ] **Memory (per-agent MEMORY.md, owner-editable)** — essential because AGENT-04 is an explicit Active requirement and Daily Assistant/personalization needs it to not feel generic
+- [ ] **Notion adapter — read + policy-gated write** — essential per milestone scope; read path alone is low-risk (level A), write path must go through existing plan+confirm flow — can ship read-only first if write proves complex, but both are milestone targets
+- [ ] **Daily Assistant — structured daily summary (agenda + Pellegrini snapshot + bandeja pending + failed-routine alerts)** — essential per milestone scope; built as a special scheduled routine, so mostly a composition/prompt-design task once Scheduler + Memory exist
+- [ ] **Mobile APK — QR pairing + LAN discovery + bandeja view + CONFIRMAR from phone** — essential per milestone scope (the headline v1.0 feature); notifications can be a v1.x follow-up if push infra proves too complex for the milestone window
+- [ ] **Intake n8n — webhook → unclassified proposal → existing policy engine → bandeja** — essential per milestone scope; keep the n8n side dumb (just POST a payload), keep all classification/audit logic inside Wyss
 
----
+### Add After Validation (v1.x)
 
-## Phase Mapping (qué feature pertenece a qué fase)
+- [ ] **Mobile push notifications (local/foreground-aware first, then evaluate FCM opt-in)** — trigger: owner reports missing bandeja items because they didn't have the app open
+- [ ] **Notion write for more action types beyond simple property/page edits (e.g., database schema changes)** — trigger: real usage reveals which Notion write patterns the owner actually needs beyond the initial adapter scope
+- [ ] **Daily Assistant curation ("show me more of X, less of Y")** like ChatGPT Pulse's "curate" — trigger: owner finds the fixed-section briefing too rigid or missing something recurring
 
-Ordenado por dependencias y por la prioridad declarada en los flujos (Flujo 1 = el más frecuente). Las features nuevas detectadas en esta investigación van en **negrita**.
+### Future Consideration (v2+)
 
-### Fase 1 — Núcleo de conocimiento (Flujos 1 y 4)
-- Ingesta incremental + indexación híbrida (RF-012/013/014)
-- Consulta con fuente y extracto (UC-001)
-- Auditoría base (RF-022/023) + **tracing de llamadas LLM** (omisión #2 — barato ahora, caro después)
-- **Eval set semilla: consultas doradas + progreso de indexación visible** (omisión #1, table stake)
-- **Indicador de frescura del índice** (puede ser solo metadato "indexado al X" en v0.1)
+- [ ] **Remote (off-LAN) mobile access via Tailscale/VPN** — defer: explicitly out of v1.0 scope per project constraints; adds a security surface that needs its own design pass, not a bolt-on
+- [ ] **Cross-agent memory synthesis / "memory of memories"** (orchestrator-level insight built from multiple agents' MEMORY.md files) — defer: needs the per-agent scoping to mature and prove useful standalone first; premature to build a meta-layer
+- [ ] **Notion real-time bidirectional sync** — defer: not even solved by mature commercial Notion integrations in 2026; stick to read+confirmed-write
 
-### Fase 2 — Orquestador + política + ejecución (Flujo 2)
-- Intent router, generación de plan (RF-001/002/003/004)
-- Policy Engine A/B/C/D (RF-018/019/020) + **evals del clasificador de política** (falso-A = bug crítico)
-- Ejecución local con allowlist + verificación posterior (RF-016/017)
-- **Undo/journal de operaciones de archivos** (omisión #6 — junto con la primera acción modificadora, no después)
-- **Política de errores: retry/escalar/abortar** (table stake)
-- Flujo 7 completo: Model Router + Context Minimizer + Cost Tracker con gate
+## Feature Prioritization Matrix
 
-### Fase 3 — Agentes + permisos (Flujos 2 y 5)
-- Instanciación config-driven (RF-008), aislamiento (RF-009), reporte (RF-010), no-horizontal (RF-011)
-- Permission Manager con alcance/vigencia/revocación inmediata (RF-015)
-- **Defensa de prompt injection: niveles de confianza por BC + separación instrucción/dato** (omisión #5 — obligatorio ANTES de que agentes consuman BC con contenido de origen externo)
-- **Memoria del agente: esquema + persistencia de interacciones y preferencias** (table stake ausente; la extracción inteligente puede madurar después, el almacenamiento no puede esperar)
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Routine Scheduler core | HIGH | MEDIUM | P1 |
+| Memory (per-agent, editable) | HIGH | MEDIUM | P1 |
+| Mobile APK (pairing + bandeja view) | HIGH | HIGH | P1 |
+| Notion adapter (read + gated write) | MEDIUM-HIGH | MEDIUM-HIGH | P1 |
+| Daily Assistant | MEDIUM-HIGH | LOW-MEDIUM (once Scheduler+Memory exist) | P1 |
+| Intake n8n webhooks | MEDIUM | LOW-MEDIUM | P1 |
+| Mobile push notifications (true background) | MEDIUM | HIGH (LAN + off-LAN duality) | P2 |
+| Daily Assistant curation/preferences | LOW-MEDIUM | LOW | P2 |
+| Remote/off-LAN mobile access | LOW (for current single-owner use) | HIGH | P3 |
+| Notion real-time bidirectional sync | LOW | VERY HIGH | P3 |
 
-### Fase 4 — Rutinas + operación desatendida (Flujo 3)
-- Scheduler (RF-006) con **idempotencia** (omisión #7)
-- **Bandeja de aprobaciones pendientes + notificación al owner** (table stake — sin esto el Flujo 3 no cierra)
-- **Estado durable de tareas + resume** (table stake — las rutinas desatendidas lo vuelven obligatorio)
-- UC-006: creación guiada de rutinas con confirmación fuerte
+## Competitor Feature Analysis
 
-### Fase 5 — Team mode (Flujo 6)
-- Adaptador de canal de mensajería (el patrón Fama lo exige; diseñar la abstracción en Fase 1-2, implementar acá)
-- Permisos de trabajador (subconjunto del Permission Manager de Fase 3)
-- **Endurecer anti-injection: input de trabajadores = contenido no confiable siempre** (extiende omisión #5)
-
-### Fase 6 — Producto replicable (UC-010)
-- Replicación de instancia (RF-024) — valida que las Fases 1-5 fueron realmente config-driven
-- Proceso guiado de onboarding de cliente
-- Sandboxing reforzado (contenedores) si la instancia corre en entorno ajeno
-
-### Señales para el roadmap
-- **Fases con mayor necesidad de research adicional:** Fase 1 (chunking/embeddings a escala 2TB, performance FTS5+vectores), Fase 3 (esquema de memoria, técnicas concretas anti-injection), Fase 5 (integración de canal de mensajería).
-- **Fases de patrones estándar (poco research):** Fase 2 (planning+HITL bien documentado), Fase 4 (scheduling es territorio conocido; lo nuevo es la bandeja de aprobaciones).
-
----
+| Feature | ChatGPT Pulse / Claude Cowork | n8n (HITL + Notion nodes) | Home Assistant Companion | Our Approach |
+|---------|-------------------------------|----------------------------|---------------------------|--------------|
+| Scheduled proactive task → approval | Pulse shows cards, no explicit human-approval gate for actions (it's read-only research); Cowork asks for review before executing recurring tasks | Gated tool nodes pause and wait for Slack/email approval, but approval state lives in n8n's own execution, separate from any broader audit system | N/A (automations run without a generic approval layer; user pre-approves scenes and automations once at authoring time) | Scheduler output is a plan through the *same* `OrchestratorPort` + policy engine as manual actions — one audit trail, not a bolted-on approval node |
+| Memory transparency | Claude: human-readable, editable, deletion is real. ChatGPT: explicit list + opaque implicit recall (two-tier, less transparent) | N/A | N/A | Match Claude's transparency bar; go further with per-agent scoping instead of one global profile |
+| External service write-back | N/A (Pulse/Cowork don't write to Notion) | n8n Notion nodes write directly via API calls, with no built-in graduated risk/approval concept — a page edit and a delete are equally "just a node" | N/A | Notion writes classified A-D like any other action; destructive Notion ops treated as high-risk, gated like file/shell D-level actions |
+| Companion app connectivity | N/A (cloud-hosted, no local pairing concept) | N/A | Auto-discovers LAN server, manual URL fallback, FCM-based push, critical-alert support on iOS | Auto-discover + QR pairing with cert pinning (stronger security default than "tap through the SSL warning"); push notification strategy deliberately deferred pending LAN-vs-off-LAN design (see Anti-Features and Pitfalls) |
 
 ## Sources
 
-- [AI Agent Frameworks Compared: LangGraph vs CrewAI vs AutoGen (2026)](https://pecollective.com/blog/ai-agent-frameworks-compared/) — MEDIUM
-- [Best Multi-Agent Frameworks in 2026](https://gurusup.com/blog/best-multi-agent-frameworks-2026) — MEDIUM
-- [What we wish we knew about building AI agents — PostHog](https://newsletter.posthog.com/p/what-we-wish-we-knew-before-building) — HIGH (post-mortem de primera mano)
-- [Demystifying evals for AI agents — Anthropic](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) — HIGH (fuente oficial)
-- [A Survey on AgentOps (arXiv 2508.02121)](https://arxiv.org/pdf/2508.02121) — HIGH
-- [Build long-running AI agents that pause, resume — Google ADK](https://developers.googleblog.com/build-long-running-ai-agents-that-pause-resume-and-never-lose-context-with-adk/) — HIGH (fuente oficial)
-- [Personal AI Agents like OpenClaw Are a Security Nightmare — Cisco](https://blogs.cisco.com/ai/personal-ai-agents-like-openclaw-are-a-security-nightmare) — HIGH
-- [What Security Teams Need to Know About OpenClaw — CrowdStrike](https://www.crowdstrike.com/en-us/blog/what-security-teams-need-to-know-about-openclaw-ai-super-agent/) — HIGH
-- [OpenClaw AI Agent Flaws — The Hacker News](https://thehackernews.com/2026/03/openclaw-ai-agent-flaws-could-enable.html) — MEDIUM
-- [Types of AI Agent Memory (CoALA) — Atlan](https://atlan.com/know/types-of-ai-agent-memory/) — MEDIUM
-- [AI agent memory: stateful systems — Redis](https://redis.io/blog/ai-agent-memory-stateful-systems/) — MEDIUM (vendor, pero alineado con CoALA)
-- [Context Engineering for AI Agents — Towards Data Science](https://towardsdatascience.com/deep-dive-into-context-engineering-for-ai-agents/) — MEDIUM
-- [Building Effective AI Coding Agents: Lessons Learned (arXiv 2603.05344)](https://arxiv.org/pdf/2603.05344) — HIGH
-- [Khoj — open source personal AI](https://railway.com/deploy/khoj) + GitHub — HIGH para features de Khoj
-- [8 Best Open-Source Personal AI Assistants in 2026 — Vellum](https://www.vellum.ai/blog/best-open-source-personal-ai-assistants) — MEDIUM
+- [AI Agent Job Scheduling: Best Patterns for 2026 | Fast.io](https://fast.io/resources/ai-agent-job-scheduling/) — MEDIUM confidence (industry blog, cross-checked against multiple similar sources)
+- [Polling Agents in AI Assistants: 11 Implementation Patterns](https://www.glukhov.org/ai-systems/architecture/polling-agents-ai-assistants-implementation-patterns) — MEDIUM confidence
+- [Introducing ChatGPT Pulse | OpenAI](https://openai.com/index/introducing-chatgpt-pulse/) — HIGH confidence (official announcement)
+- [OpenAI launches ChatGPT Pulse to proactively write you morning briefs | TechCrunch](https://techcrunch.com/2025/09/25/openai-launches-chatgpt-pulse-to-proactively-write-you-morning-briefs/) — HIGH confidence (reputable tech press)
+- [Claude Memory: 3 Layers Most Users Miss (2026 Setup)](https://www.shareuhack.com/en/posts/claude-memory-feature-guide-2026) — MEDIUM confidence
+- [How to Use Claude Memory vs ChatGPT Memory: Which Is Better for Power Users? | MindStudio](https://www.mindstudio.ai/blog/claude-memory-vs-chatgpt-memory-comparison) — MEDIUM confidence, corroborates markdown vs vector-store distinction
+- [Use Claude's chat search and memory to build on previous context | Claude Help Center](https://support.claude.com/en/articles/11817273-use-claude-s-chat-search-and-memory-to-build-on-previous-context) — HIGH confidence (official docs)
+- [Getting Started | Home Assistant Companion Docs](https://companion.home-assistant.io/docs/getting_started/) — HIGH confidence (official docs)
+- [Companion app for Android: It's been a while - Home Assistant blog](https://www.home-assistant.io/blog/2025/07/23/companion-app-for-android/) — HIGH confidence (official blog)
+- [How to Access Jellyfin Remotely in 2026 - WunderTech](https://www.wundertech.net/how-to-access-jellyfin-remotely/) — MEDIUM confidence
+- [Networking | Jellyfin official docs](https://jellyfin.org/docs/general/post-install/networking/) — HIGH confidence
+- [Request limits - Notion Docs](https://developers.notion.com/reference/request-limits) — HIGH confidence (official docs)
+- [Notion API Rate Limits Are Breaking Your Automation — Here's the Real Fix - DEV Community](https://dev.to/kanta13jp1/notion-api-rate-limits-are-breaking-your-automation-heres-the-real-fix-o5p) — MEDIUM confidence, corroborated by official rate-limit docs
+- [How to Integrate with the Notion API: Architecture Guide for B2B SaaS | Truto Blog](https://truto.one/blog/how-to-integrate-with-the-notion-api-architecture-guide-for-b2b-saas/) — MEDIUM confidence
+- [Human-in-the-loop for AI tool calls | n8n Docs](https://docs.n8n.io/advanced-ai/human-in-the-loop-tools/) — HIGH confidence (official docs)
+- [Human in the loop automation: Build AI workflows that keep humans in control – n8n Blog](https://blog.n8n.io/human-in-the-loop-automation/) — HIGH confidence (official blog)
+- [Push Notifications Capacitor Plugin API | Capacitor Documentation](https://capacitorjs.com/docs/apis/push-notifications) — HIGH confidence (official docs) — confirms FCM dependency for true push
+- [Local Notifications Capacitor Plugin API | Capacitor Documentation](https://capacitorjs.com/docs/apis/local-notifications) — HIGH confidence (official docs) — confirms local-only path exists without a push server
+- [Capacitor Android app do Javascript rest calls to Nginx server with self-signed certificate - Ionic Forum](https://forum.ionicframework.com/t/capacitor-android-app-do-javascript-rest-calls-to-nginx-server-with-self-signed-certificate/200959) — LOW-MEDIUM confidence (community forum, no official Capacitor guidance found for this specific case — flagged as a gap, see PITFALLS.md)
+- [Run prompts on a schedule - Claude Code Docs](https://code.claude.com/docs/en/scheduled-tasks) — HIGH confidence (official docs), used for NL-to-cron pattern precedent
+- [RRule vs Cron — rrule.net](https://www.rrule.net/guides/rrule-vs-cron) — MEDIUM confidence
+
+---
+*Feature research for: Wyss v1.0 — Routine Scheduler, Notion adapter, Daily Assistant, Memory, Android companion app*
+*Researched: 2026-07-10*
