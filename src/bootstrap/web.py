@@ -1,6 +1,7 @@
 """Bridge HTTP local para Wyss: FastAPI como composition root web."""
 
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -46,6 +47,10 @@ from orchestrator.pending_store import PendingProposal, PendingStore
 
 _TOKEN_COOKIE = "wyss_token"
 _HTTP_422 = 422
+
+# Rechazos del middleware van al log (visible con el log_level=warning de uvicorn):
+# sin esto el server es mudo ante un 403/401 y el teléfono es indiagnosticable.
+_LOG = logging.getLogger("wyss.web")
 
 # Lanzador de apps de escritorio: SOLO rutas fijas, jamás input del cliente.
 # borjes-toggle maneja running/no-running (SIGUSR1 o launch+reveal).
@@ -117,6 +122,10 @@ def build_web_app(
     async def local_security_middleware(request: Request, call_next: ASGIHandler) -> Response:
         host = request.headers.get("host", "")
         if not _is_allowed_host(host, allowed_hosts):
+            _LOG.warning(
+                "403 host no permitido: Host=%r (permitidos: %s) en %s %s",
+                host, sorted(allowed_hosts), request.method, request.url.path,
+            )
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
                 error="host no permitido",
@@ -124,7 +133,14 @@ def build_web_app(
             )
 
         origin = request.headers.get("origin")
-        if origin is not None and not _is_allowed_origin(origin, allowed_hosts, allowed_scheme):
+        sec_fetch_site = request.headers.get("sec-fetch-site", "")
+        if not _origin_allowed(origin, sec_fetch_site, allowed_hosts, allowed_scheme):
+            _LOG.warning(
+                "403 origen no permitido: Origin=%r Sec-Fetch-Site=%r "
+                "(esquema esperado %s, hosts: %s) en %s %s",
+                origin, sec_fetch_site, allowed_scheme, sorted(allowed_hosts),
+                request.method, request.url.path,
+            )
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
                 error="origen no permitido",
@@ -133,6 +149,13 @@ def build_web_app(
 
         auth_response = _authenticate_request(request, token, secure_cookie=tls)
         if auth_response is not None:
+            # jamás loguear el token/cookie: solo el hecho del rechazo
+            if auth_response.status_code == status.HTTP_401_UNAUTHORIZED:
+                _LOG.warning(
+                    "401 sin token válido en %s %s (¿cookie perdida o server "
+                    "reiniciado con token nuevo?)",
+                    request.method, request.url.path,
+                )
             return auth_response
 
         return await call_next(request)
@@ -426,6 +449,30 @@ def _is_allowed_host(value: str, allowed: frozenset[str]) -> bool:
 def _is_allowed_origin(value: str, allowed: frozenset[str], scheme: str) -> bool:
     parsed = urlsplit(value)
     return parsed.scheme == scheme and parsed.hostname in allowed
+
+
+def _origin_allowed(
+    origin: str | None, sec_fetch_site: str, allowed: frozenset[str], scheme: str
+) -> bool:
+    """Política de Origin del bridge.
+
+    - Sin header Origin → permitido (los GET same-origin no lo mandan; la capa de
+      auth es la cookie SameSite=Strict, que jamás viaja cross-site).
+    - Origin presente → debe matchear esquema servido + host de la allowlist.
+    - Origin literal "null": los browsers reales (Chrome Android con certificado
+      self-signed aceptado, WebViews) lo serializan así incluso en POSTs
+      same-origin — el smoke físico del teléfono murió acá. Se acepta SOLO si
+      `Sec-Fetch-Site: same-origin` lo respalda: es un header prohibido que el
+      JS de un atacante no puede setear. Un iframe sandboxeado o un form
+      cross-site también mandan Origin null, pero llegan con Sec-Fetch-Site
+      cross-site/nested → 403 (y además sin la cookie Strict → 401 antes de
+      tocar nada). Esto NO relaja el caso cross-site.
+    """
+    if origin is None:
+        return True
+    if _is_allowed_origin(origin, allowed, scheme):
+        return True
+    return origin == "null" and sec_fetch_site == "same-origin"
 
 
 def _authenticate_request(

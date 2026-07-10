@@ -105,6 +105,82 @@ async def test_host_check(client: httpx.AsyncClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# PR-14 (smoke físico): Origin "null" de browsers reales — Chrome Android con
+# cert self-signed aceptado serializa Origin: null en POSTs same-origin.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _fake_rpc(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_rpc(
+        _socket_path: Path, _method: str, _params: dict[str, object]
+    ) -> dict[str, Any]:
+        return {"ok": True}
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+
+
+async def test_origin_null_with_sec_fetch_same_origin_allowed(
+    client: httpx.AsyncClient, _fake_rpc: None
+) -> None:
+    """El caso del teléfono real: Origin null + Sec-Fetch-Site same-origin pasa."""
+    response = await client.post(
+        "/api/ask",
+        json={"instruction": "hola"},
+        headers={**_AUTH, "Origin": "null", "Sec-Fetch-Site": "same-origin"},
+    )
+    assert response.status_code == 200
+
+
+async def test_origin_null_without_sec_fetch_rejected(
+    client: httpx.AsyncClient, _fake_rpc: None
+) -> None:
+    """Origin null sin respaldo de Sec-Fetch-Site (iframe sandboxeado viejo) → 403."""
+    response = await client.post(
+        "/api/ask",
+        json={"instruction": "hola"},
+        headers={**_AUTH, "Origin": "null"},
+    )
+    assert response.status_code == 403
+
+
+async def test_origin_null_cross_site_rejected(
+    client: httpx.AsyncClient, _fake_rpc: None
+) -> None:
+    """Origin null desde otro sitio (Sec-Fetch-Site: cross-site) → 403."""
+    response = await client.post(
+        "/api/ask",
+        json={"instruction": "hola"},
+        headers={**_AUTH, "Origin": "null", "Sec-Fetch-Site": "cross-site"},
+    )
+    assert response.status_code == 403
+
+
+async def test_evil_origin_rejected_even_with_sec_fetch(
+    client: httpx.AsyncClient, _fake_rpc: None
+) -> None:
+    """Un Origin explícito inválido manda SIEMPRE, aunque Sec-Fetch mienta."""
+    response = await client.post(
+        "/api/ask",
+        json={"instruction": "hola"},
+        headers={**_AUTH, "Origin": "http://evil.com", "Sec-Fetch-Site": "same-origin"},
+    )
+    assert response.status_code == 403
+
+
+async def test_rejections_are_logged(
+    client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """El middleware ya no es mudo: los 403 quedan en el log con el motivo."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="wyss.web"):
+        await client.get("/api/status", headers={"Host": "evil.com", **_AUTH})
+
+    assert any("host no permitido" in rec.getMessage() for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
 # PR-10: modo TLS — cookie Secure y Origin https (un solo esquema, el servido)
 # ---------------------------------------------------------------------------
 
