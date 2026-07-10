@@ -108,7 +108,11 @@ Plans:
   2. El owner pide crear/editar en Notion y el write cae como propuesta B/C con preview del cambio antes de confirmar
   3. El adapter respeta rate limits (retry/backoff en 429) y pagina resultados completos
   4. El token de Notion vive en config/.env (nunca en repo) y toda llamada queda auditada
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 10-01-PLAN.md — Paquete src/notion/ (client/tool/markdown/pagination) + dep + tests sin red
+- [ ] 10-02-PLAN.md — Registro en política/planner: _BASE_LEVELS + 5 conftests + _ACTION_TYPES + minimizer token
+- [ ] 10-03-PLAN.md — Dispatch en PlanExecutor + inyección desde composition root + preview de writes
+- [ ] 10-04-PLAN.md — Checkpoint: smoke real contra el workspace del owner (token real)
 **Research flags**: base_levels específicos de notion.* (planning), paginación/429 testear temprano
 
 #### Phase 11: Owner Memory
