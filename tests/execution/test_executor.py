@@ -169,6 +169,80 @@ async def test_notion_without_adapter_returns_legible_failure() -> None:
     git.execute.assert_not_called()
 
 
+async def test_dispatch_memory_prefix_to_injected_tool() -> None:
+    """memory.* se despacha al Tool de memoria inyectado, no a file/shell/git."""
+    filesystem = _ok_adapter("file-entry")
+    shell = _ok_adapter("shell-entry")
+    git = _ok_adapter("git-entry")
+    memory = _ok_adapter("memory-entry")
+    journal = MagicMock()
+    journal.restore = MagicMock(return_value=True)
+    journal.mark_applied = MagicMock()
+    audit = MagicMock()
+    audit.log = MagicMock()
+
+    executor = PlanExecutor(
+        filesystem=filesystem,
+        shell=shell,
+        git=git,
+        journal=journal,
+        audit=audit,
+        memory=memory,
+    )
+    plan = _make_plan(
+        Action(
+            type="memory.remember",
+            target="preferences",
+            parameters={"value": "cafe sin azucar"},
+        )
+    )
+
+    result = await executor.run(plan)
+
+    assert result.success
+    memory.execute.assert_awaited_once_with(plan.steps[0])
+    filesystem.execute.assert_not_called()
+    shell.execute.assert_not_called()
+    git.execute.assert_not_called()
+
+
+async def test_memory_without_adapter_returns_legible_failure() -> None:
+    """Si no se inyecta MemoryTool, memory.* falla como ToolResult accionable."""
+    filesystem = _ok_adapter("file-entry")
+    shell = _ok_adapter("shell-entry")
+    git = _ok_adapter("git-entry")
+    journal = MagicMock()
+    journal.restore = MagicMock(return_value=True)
+    journal.mark_applied = MagicMock()
+    audit = MagicMock()
+    audit.log = MagicMock()
+
+    executor = PlanExecutor(
+        filesystem=filesystem,
+        shell=shell,
+        git=git,
+        journal=journal,
+        audit=audit,
+    )
+    plan = _make_plan(
+        Action(
+            type="memory.remember",
+            target="preferences",
+            parameters={"value": "cafe sin azucar"},
+        )
+    )
+
+    result = await executor.run(plan)
+
+    assert not result.success
+    assert result.failed_step == 0
+    assert "Memoria no configurada" in result.detail
+    assert "memory.remember" in result.detail
+    filesystem.execute.assert_not_called()
+    shell.execute.assert_not_called()
+    git.execute.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Test 2: ABORT rollback en orden inverso
 # ---------------------------------------------------------------------------

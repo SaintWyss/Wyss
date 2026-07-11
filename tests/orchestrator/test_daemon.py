@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from core.domain import AuditEventType, Outcome, RiskLevel
+from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
 from core.domain.policy import PolicyDecision
 from core.policy import CognitivePolicyEngine
@@ -49,6 +50,35 @@ class _MemoryWriter:
         return None
 
 
+class _FakeMemoryStore:
+    def __init__(self) -> None:
+        self._facts: dict[str, MemoryFact] = {}
+
+    def list_all(self) -> list[MemoryFact]:
+        return list(self._facts.values())
+
+    def edit(self, fact_id: str, value: str) -> bool:
+        fact = self._facts.get(fact_id)
+        if fact is None:
+            return False
+        self._facts[fact_id] = MemoryFact(
+            id=fact.id,
+            category=fact.category,
+            value=value,
+            tier=fact.tier,
+            source=fact.source,
+            created_at=fact.created_at,
+            updated_at="2026-01-02T00:00:00+00:00",
+        )
+        return True
+
+    def forget(self, fact_id: str) -> bool:
+        return self._facts.pop(fact_id, None) is not None
+
+    def add(self, fact: MemoryFact) -> None:
+        self._facts[fact.id] = fact
+
+
 @pytest.fixture
 def routine_store(tmp_path: Path) -> Iterator[RoutineStore]:
     store = RoutineStore(tmp_path / "routines.db")
@@ -70,6 +100,11 @@ def _routine_scheduler(
         audit=fake_audit,
         routine_store=routine_store,
     )
+
+
+@pytest.fixture
+def memory_store() -> _FakeMemoryStore:
+    return _FakeMemoryStore()
 
 
 async def _handle_rpc(
@@ -94,6 +129,7 @@ async def test_stale_socket_cleanup(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -122,6 +158,7 @@ async def test_stale_socket_cleanup(
         pending_store=pending_store,
         audit=fake_audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=scheduler,
         reaper_interval_s=3600,
     )
@@ -137,6 +174,7 @@ async def test_ask_round_trip(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -147,6 +185,7 @@ async def test_ask_round_trip(
         pending_store=pending_store,
         audit=fake_audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
     )
     response = await _handle_rpc(daemon, "ask", {"instruction": "leer /tmp/source.txt"})
@@ -165,6 +204,7 @@ async def test_routine_handlers_round_trip_via_rpc(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -175,6 +215,7 @@ async def test_routine_handlers_round_trip_via_rpc(
         pending_store=pending_store,
         audit=fake_audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=scheduler,
     )
 
@@ -215,10 +256,74 @@ async def test_routine_handlers_round_trip_via_rpc(
     assert routine_store.get(routine_id) is None
 
 
+async def test_memory_handlers_round_trip_via_rpc(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+) -> None:
+    memory_store.add(
+        MemoryFact(
+            id="fact-1",
+            category="preferences",
+            value="cafe sin azucar",
+            tier="owner",
+            source="owner",
+            created_at="2026-01-01T00:00:00+00:00",
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        scheduler=scheduler,
+    )
+
+    listed = await _handle_rpc(daemon, "memory.list", {})
+    facts = listed["result"]["facts"]
+    assert facts == [
+        {
+            "id": "fact-1",
+            "category": "preferences",
+            "value": "cafe sin azucar",
+            "tier": "owner",
+            "source": "owner",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        }
+    ]
+
+    edited = await _handle_rpc(
+        daemon, "memory.edit", {"fact_id": "fact-1", "value": "mate amargo"}
+    )
+    assert edited["result"] == {"ok": True}
+    assert memory_store.list_all()[0].value == "mate amargo"
+
+    missing_edit = await _handle_rpc(
+        daemon, "memory.edit", {"fact_id": "missing", "value": "x"}
+    )
+    assert missing_edit["result"] == {"ok": False}
+
+    forgotten = await _handle_rpc(daemon, "memory.forget", {"fact_id": "fact-1"})
+    assert forgotten["result"] == {"ok": True}
+    assert memory_store.list_all() == []
+
+    missing_forget = await _handle_rpc(daemon, "memory.forget", {"fact_id": "missing"})
+    assert missing_forget["result"] == {"ok": False}
+
+
 async def test_routine_add_invalid_schedule_returns_rpc_error(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -229,6 +334,7 @@ async def test_routine_add_invalid_schedule_returns_rpc_error(
         pending_store=pending_store,
         audit=fake_audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=scheduler,
     )
     response = await _handle_rpc(
@@ -253,6 +359,7 @@ async def test_aclose_shutdowns_scheduler_without_waiting(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
     routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
 ) -> None:
@@ -281,6 +388,7 @@ async def test_aclose_shutdowns_scheduler_without_waiting(
         pending_store=pending_store,
         audit=fake_audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=scheduler,
         reaper_interval_s=3600,
     )

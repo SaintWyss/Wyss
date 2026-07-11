@@ -14,6 +14,7 @@ from typing import Any, cast
 import pytest
 
 from core.domain import AuditEventType
+from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
 from core.orchestrator.intent import IntentCategory, IntentClassification
 from core.policy import CognitivePolicyEngine
@@ -45,6 +46,19 @@ class _MemoryWriter:
 
     async def wait_closed(self) -> None:
         return None
+
+
+class _FakeMemoryStore:
+    def list_all(self) -> list[MemoryFact]:
+        return []
+
+    def edit(self, fact_id: str, value: str) -> bool:
+        del fact_id, value
+        return False
+
+    def forget(self, fact_id: str) -> bool:
+        del fact_id
+        return False
 
 
 async def _rpc(daemon: DaemonServer, method: str, params: dict[str, object]) -> dict[str, Any]:
@@ -113,6 +127,7 @@ def _daemon(
         pending_store=pending_store,
         audit=audit,
         routine_store=cast(RoutineStore, object()),
+        memory_store=_FakeMemoryStore(),
         scheduler=cast(RoutineScheduler, object()),
         runner=runner,
     )

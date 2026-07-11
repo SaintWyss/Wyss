@@ -116,6 +116,7 @@ class PlanExecutor:
         journal: UndoJournal,
         audit: object,  # AuditPort — Protocol, tipado como object para evitar import circular
         notion: Tool | None = None,
+        memory: Tool | None = None,
     ) -> None:
         self._filesystem = filesystem
         self._shell = shell
@@ -126,6 +127,10 @@ class PlanExecutor:
                 "Notion no configurado; defini NOTION_TOKEN en config/.env "
                 "y comparti la pagina/base con la integracion"
             ),
+        )
+        self._memory = memory or _UnavailableTool(
+            name="memory",
+            detail="Memoria no configurada; el store de memoria no esta disponible",
         )
         self._journal = journal
         self._audit = audit
@@ -142,6 +147,7 @@ class PlanExecutor:
           "shell.*" → ShellAdapter
           "git.*"  → GitAdapter
           "notion.*" → Tool Notion inyectado
+          "memory.*" → Tool memoria inyectado
 
         Levanta ValueError para prefijos desconocidos (fail-closed, D-69).
         """
@@ -154,6 +160,8 @@ class PlanExecutor:
             return self._git
         if prefix == "notion":
             return self._notion
+        if prefix == "memory":
+            return self._memory
         raise ValueError(f"no adapter for action type: {action.type!r}")
 
     # ------------------------------------------------------------------

@@ -76,6 +76,8 @@ from knowledge.secret_filter import SecretFilter
 from knowledge.state_store import BcFreshness, StateStore
 from knowledge.vector_index import ChromaVectorIndex, chromadb
 from ledger.sqlite_store import SqliteLedgerStore
+from memory.store import MemoryStore
+from memory.tool import MemoryTool
 from notion.client import build_notion_client
 from notion.tool import NotionTool
 from orchestrator.daemon import run_daemon
@@ -88,8 +90,10 @@ from orchestrator.scheduler import RoutineScheduler, preview_next_fires, validat
 app = typer.Typer(help="Wyss CLI")
 fin_app = typer.Typer(help="Ledger de finanzas")
 routine_app = typer.Typer(help="Rutinas programadas")
+memory_app = typer.Typer(help="Memoria del owner")
 app.add_typer(fin_app, name="fin")
 app.add_typer(routine_app, name="routine")
+app.add_typer(memory_app, name="memory")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -399,12 +403,14 @@ def start(
     audit: SqliteAuditLogger | None = None
     pending_store: PendingStore | None = None
     routine_store: RoutineStore | None = None
+    memory_store: MemoryStore | None = None
     try:
         settings = load_settings(config)
         audit = SqliteAuditLogger(settings.audit_db)
         pending_store = PendingStore(_pending_db_path(settings))
         engine = CognitivePolicyEngine(settings.policy)
         routine_store = RoutineStore(_routine_db_path(settings))
+        memory_store = MemoryStore(_memory_db_path(settings))
         scheduler = RoutineScheduler(
             engine=engine,
             pending_store=pending_store,
@@ -418,6 +424,7 @@ def start(
                 pending_store,
                 audit,
                 routine_store,
+                memory_store,
                 scheduler,
             )
         )
@@ -446,6 +453,8 @@ def start(
         stderr_console.print(f"Error sistémico: {exc}", style="red")
         raise typer.Exit(code=1) from exc
     finally:
+        if memory_store is not None:
+            memory_store.close()
         if routine_store is not None:
             routine_store.close()
         if pending_store is not None:
@@ -458,6 +467,7 @@ def _build_plan_runner(
     settings: BootstrapWyssSettings,
     engine: CognitivePolicyEngine,
     audit: SqliteAuditLogger,
+    memory_store: MemoryStore,
 ) -> tuple[PlanExecutor, UndoJournal]:
     """Arma la capa de ejecución real (D-69): adapters + journal tras el mismo engine.
 
@@ -473,6 +483,7 @@ def _build_plan_runner(
         if notion_token
         else None
     )
+    memory_tool = MemoryTool(store=memory_store, audit=audit)
     executor = PlanExecutor(
         filesystem=FileSystemAdapter(engine, audit, journal),
         shell=ShellAdapter(audit),
@@ -480,6 +491,7 @@ def _build_plan_runner(
         journal=journal,
         audit=audit,
         notion=notion,
+        memory=memory_tool,
     )
     return executor, journal
 
@@ -490,9 +502,10 @@ async def _run_start_daemon(
     pending_store: PendingStore,
     audit: SqliteAuditLogger,
     routine_store: RoutineStore,
+    memory_store: MemoryStore,
     scheduler: RoutineScheduler,
 ) -> None:
-    runner, journal = _build_plan_runner(settings, engine, audit)
+    runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
     try:
         if settings.orchestrator.mode == "deterministic":
             await run_daemon(
@@ -502,6 +515,7 @@ async def _run_start_daemon(
                 pending_store=pending_store,
                 audit=audit,
                 routine_store=routine_store,
+                memory_store=memory_store,
                 scheduler=scheduler,
                 runner=runner,
             )
@@ -517,10 +531,15 @@ async def _run_start_daemon(
             await run_daemon(
                 _socket_path(settings),
                 engine=engine,
-                orchestrator=LLMOrchestrator(gateway, tier=settings.orchestrator.tier),
+                orchestrator=LLMOrchestrator(
+                    gateway,
+                    tier=settings.orchestrator.tier,
+                    memory=memory_store,
+                ),
                 pending_store=pending_store,
                 audit=audit,
                 routine_store=routine_store,
+                memory_store=memory_store,
                 scheduler=scheduler,
                 runner=runner,
             )
@@ -758,6 +777,106 @@ def _routine_mutation(method: str, routine_id: str, success_message: str, config
     except typer.Exit:
         raise
     except (FileNotFoundError, ConnectionRefusedError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, RuntimeError) as exc:
+        _error_panel(str(exc), "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+
+
+@memory_app.command("list")
+def memory_list(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista hechos recordados."""
+    try:
+        settings = load_settings(config)
+        result = asyncio.run(_json_rpc_call(_socket_path(settings), "memory.list", {}))
+        facts = result.get("facts", [])
+        if not isinstance(facts, list):
+            raise RuntimeError("respuesta de memoria inválida")
+        _print_memory_table(facts)
+    except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except (ConfigError, RuntimeError) as exc:
+        _error_panel(str(exc), "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+
+
+@memory_app.command("edit")
+def memory_edit(
+    fact_id: str,
+    value: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Edita un hecho recordado."""
+    _memory_mutation(
+        "memory.edit",
+        {"fact_id": fact_id, "value": value},
+        fact_id,
+        "Memoria editada",
+        config,
+    )
+
+
+@memory_app.command("rm")
+def memory_rm(
+    fact_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Borra un hecho recordado."""
+    _memory_mutation(
+        "memory.forget",
+        {"fact_id": fact_id},
+        fact_id,
+        "Memoria borrada",
+        config,
+    )
+
+
+def _memory_mutation(
+    method: str,
+    params: dict[str, object],
+    fact_id: str,
+    success_message: str,
+    config: Path,
+) -> None:
+    try:
+        settings = load_settings(config)
+        result = asyncio.run(_json_rpc_call(_socket_path(settings), method, params))
+        if result.get("ok"):
+            console.print(f"{success_message}: {fact_id}", style="green")
+            return
+        _error_panel(
+            f"memoria no encontrada: {fact_id}",
+            "listá disponibles con: wyss memory list",
+        )
+        raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
+    except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
         _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
         raise typer.Exit(code=1) from exc
     except (ConfigError, RuntimeError) as exc:
@@ -1617,6 +1736,32 @@ def _print_routines_table(routines: Sequence[object]) -> None:
     console.print(table)
 
 
+def _print_memory_table(facts: Sequence[object]) -> None:
+    if not facts:
+        _empty_state(
+            "Sin memoria guardada.",
+            'wyss ask "recordá que prefiero café sin azúcar"',
+        )
+        return
+    table = Table(title="Memoria")
+    table.add_column("id", no_wrap=True)
+    table.add_column("category")
+    table.add_column("value", overflow="fold")
+    table.add_column("tier")
+    table.add_column("updated_at")
+    for item in facts:
+        if not isinstance(item, Mapping):
+            continue
+        table.add_row(
+            str(item.get("id", "")),
+            str(item.get("category", "")),
+            str(item.get("value", "")),
+            str(item.get("tier", "")),
+            str(item.get("updated_at", "")),
+        )
+    console.print(table)
+
+
 def _format_routine_schedule(schedule: object) -> str:
     if not isinstance(schedule, Mapping):
         return "-"
@@ -1633,6 +1778,10 @@ def _pending_db_path(settings: WyssSettings) -> Path:
 
 def _routine_db_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "routines.db"
+
+
+def _memory_db_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "memory.db"
 
 
 async def _json_rpc_call(

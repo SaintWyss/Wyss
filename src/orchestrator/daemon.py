@@ -11,11 +11,13 @@ from typing import Any
 from uuid import uuid4
 
 from core.domain import ActorType, AuditEvent, AuditEventType, Outcome, RiskLevel
+from core.domain.memory import MemoryFact
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
 from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
 from core.ports.execution import PlanRunner
+from core.ports.memory import MemoryAdmin
 from core.ports.orchestrator import OrchestratorPort
 from orchestrator.dispatcher import dispatch, ttl_for_risk
 from orchestrator.pending_store import PendingStore
@@ -63,6 +65,7 @@ class DaemonServer:
         pending_store: PendingStore,
         audit: AuditPort,
         routine_store: RoutineStore,
+        memory_store: MemoryAdmin,
         scheduler: RoutineScheduler,
         runner: PlanRunner | None = None,
     ) -> None:
@@ -71,6 +74,7 @@ class DaemonServer:
         self._pending_store = pending_store
         self._audit = audit
         self._routine_store = routine_store
+        self._memory_store = memory_store
         self._scheduler = scheduler
         self._runner = runner
         self._handlers: dict[str, JsonHandler] = {
@@ -83,6 +87,9 @@ class DaemonServer:
             "routine.pause": self._routine_pause,
             "routine.resume": self._routine_resume,
             "routine.delete": self._routine_delete,
+            "memory.list": self._memory_list,
+            "memory.edit": self._memory_edit,
+            "memory.forget": self._memory_forget,
         }
 
     async def handle(
@@ -357,6 +364,22 @@ class DaemonServer:
             self._scheduler.remove_routine(routine_id)
         return {"ok": ok}
 
+    async def _memory_list(self, params: Mapping[str, Any]) -> JsonDict:
+        del params
+        facts = [_memory_to_json(fact) for fact in self._memory_store.list_all()]
+        return {"facts": facts}
+
+    async def _memory_edit(self, params: Mapping[str, Any]) -> JsonDict:
+        fact_id = _memory_fact_id_param(params)
+        value = _memory_value_param(params)
+        ok = self._memory_store.edit(fact_id, value)
+        return {"ok": ok}
+
+    async def _memory_forget(self, params: Mapping[str, Any]) -> JsonDict:
+        fact_id = _memory_fact_id_param(params)
+        ok = self._memory_store.forget(fact_id)
+        return {"ok": ok}
+
     async def _safe_health_check(self) -> bool:
         try:
             return await self._orchestrator.health_check()
@@ -386,6 +409,7 @@ async def start_daemon(
     pending_store: PendingStore,
     audit: AuditPort,
     routine_store: RoutineStore,
+    memory_store: MemoryAdmin,
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
@@ -399,6 +423,7 @@ async def start_daemon(
         pending_store=pending_store,
         audit=audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=scheduler,
         runner=runner,
     )
@@ -433,6 +458,7 @@ async def run_daemon(
     pending_store: PendingStore,
     audit: AuditPort,
     routine_store: RoutineStore,
+    memory_store: MemoryAdmin,
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
@@ -445,6 +471,7 @@ async def run_daemon(
         pending_store=pending_store,
         audit=audit,
         routine_store=routine_store,
+        memory_store=memory_store,
         scheduler=scheduler,
         runner=runner,
         reaper_interval_s=reaper_interval_s,
@@ -489,6 +516,20 @@ def _routine_id_param(params: Mapping[str, Any]) -> str:
     return routine_id
 
 
+def _memory_fact_id_param(params: Mapping[str, Any]) -> str:
+    fact_id = str(params.get("fact_id", "")).strip()
+    if not fact_id:
+        raise ValueError("fact_id requerido")
+    return fact_id
+
+
+def _memory_value_param(params: Mapping[str, Any]) -> str:
+    value = str(params.get("value", "")).strip()
+    if not value:
+        raise ValueError("value requerido")
+    return value
+
+
 def _routine_to_json(routine: Routine) -> JsonDict:
     return {
         "id": routine.id,
@@ -501,6 +542,18 @@ def _routine_to_json(routine: Routine) -> JsonDict:
         "catch_up": routine.catch_up,
         "last_fired_at": routine.last_fired_at,
         "last_outcome": routine.last_outcome,
+    }
+
+
+def _memory_to_json(fact: MemoryFact) -> JsonDict:
+    return {
+        "id": str(fact.id),
+        "category": str(fact.category),
+        "value": str(fact.value),
+        "tier": str(fact.tier),
+        "source": str(fact.source),
+        "created_at": str(fact.created_at),
+        "updated_at": str(fact.updated_at),
     }
 
 
