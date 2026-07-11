@@ -52,6 +52,14 @@ class MemoryTool:
             return result
 
         value = raw_value.strip()
+        # Fallback robusto: los planners LLM suelen poner el hecho directamente
+        # en target y OMITIR parameters.value — en ese caso target ES el hecho y
+        # la categoría cae al default. Un value presente pero vacío sigue
+        # rechazando (vacío explícito ≠ omitido).
+        category = action.target
+        if not value and "value" not in action.parameters:
+            value = action.target.strip()
+            category = _category_param(action)
         if not value:
             result = ToolResult(
                 success=False,
@@ -63,7 +71,7 @@ class MemoryTool:
 
         try:
             fact_id = self._store.remember(
-                category=action.target,
+                category=category,
                 value=value,
                 tier="owner",
                 source="owner",
@@ -82,7 +90,7 @@ class MemoryTool:
             detail="memoria recordada",
             payload={
                 "fact_id": fact_id,
-                "category": action.target,
+                "category": category,
                 "output": f"Recordado: {value}",
             },
         )
@@ -110,6 +118,14 @@ class MemoryTool:
                 payload=payload,
             )
         )
+
+
+def _category_param(action: Action) -> str:
+    """Categoría desde parameters cuando target trae el hecho (fallback LLM)."""
+    raw = action.parameters.get("category", "")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return "general"
 
 
 def _truncate(value: str, limit: int) -> str:

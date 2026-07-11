@@ -140,3 +140,21 @@ def test_max_risk_b_y_describe_legible(memory_store: MemoryStore) -> None:
             parameters={"value": "cafe sin azucar"},
         )
     )
+
+
+async def test_remember_con_hecho_en_target(memory_store: MemoryStore) -> None:
+    """Smoke físico fase 11: el planner LLM pone el hecho en target sin
+    parameters.value — el tool debe recordarlo igual (categoría default)."""
+    audit = FakeAuditPort()
+    tool = MemoryTool(store=memory_store, audit=audit)
+
+    result = await tool.execute(
+        Action(type="memory.remember", target="mi materia activa es AdR", parameters={})
+    )
+
+    assert result.success, result.detail
+    facts = memory_store.list_all()
+    assert len(facts) == 1
+    assert facts[0].value == "mi materia activa es AdR"
+    assert facts[0].category == "general"
+    assert facts[0].tier == "owner"
