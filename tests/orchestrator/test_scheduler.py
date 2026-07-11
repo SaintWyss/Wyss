@@ -79,6 +79,51 @@ def test_routine_ttl_for() -> None:
     assert routine_ttl_for(RiskLevel.C) == 86400
 
 
+async def test_schedule_digest_registers_internal_job(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    routine_store: RoutineStore,
+) -> None:
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    calls = 0
+
+    async def callback() -> None:
+        nonlocal calls
+        calls += 1
+
+    scheduler.schedule_digest(hour=8, minute=0, callback=callback)
+
+    job = scheduler._scheduler.get_job("internal:digest")
+    assert job is not None
+    assert job.id == "internal:digest"
+    assert scheduler._scheduler.get_job("routine:internal:digest") is None
+    await job.func()
+    assert calls == 1
+
+
+async def test_schedule_digest_does_not_touch_routine_store(
+    monkeypatch: pytest.MonkeyPatch,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    routine_store: RoutineStore,
+) -> None:
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+
+    def fail_list_active() -> list[Routine]:
+        raise AssertionError("schedule_digest no debe leer RoutineStore")
+
+    monkeypatch.setattr(routine_store, "list_active", fail_list_active)
+
+    async def callback() -> None:
+        return None
+
+    scheduler.schedule_digest(hour=8, minute=0, callback=callback)
+
+    assert routine_store.list_all() == []
+
+
 async def test_routine_fire_respects_policy_gate(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,

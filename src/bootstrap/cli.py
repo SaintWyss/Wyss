@@ -18,6 +18,7 @@ import httpx
 import typer
 import uvicorn
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from rich.table import Table
@@ -404,6 +405,7 @@ def start(
     pending_store: PendingStore | None = None
     routine_store: RoutineStore | None = None
     memory_store: MemoryStore | None = None
+    ledger_store: SqliteLedgerStore | None = None
     try:
         settings = load_settings(config)
         audit = SqliteAuditLogger(settings.audit_db)
@@ -411,6 +413,7 @@ def start(
         engine = CognitivePolicyEngine(settings.policy)
         routine_store = RoutineStore(_routine_db_path(settings))
         memory_store = MemoryStore(_memory_db_path(settings))
+        ledger_store = SqliteLedgerStore(_ledger_db_path(settings))
         scheduler = RoutineScheduler(
             engine=engine,
             pending_store=pending_store,
@@ -425,6 +428,7 @@ def start(
                 audit,
                 routine_store,
                 memory_store,
+                ledger_store,
                 scheduler,
             )
         )
@@ -455,6 +459,8 @@ def start(
     finally:
         if memory_store is not None:
             memory_store.close()
+        if ledger_store is not None:
+            ledger_store.close()
         if routine_store is not None:
             routine_store.close()
         if pending_store is not None:
@@ -503,6 +509,7 @@ async def _run_start_daemon(
     audit: SqliteAuditLogger,
     routine_store: RoutineStore,
     memory_store: MemoryStore,
+    ledger_store: SqliteLedgerStore,
     scheduler: RoutineScheduler,
 ) -> None:
     runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
@@ -516,8 +523,13 @@ async def _run_start_daemon(
                 audit=audit,
                 routine_store=routine_store,
                 memory_store=memory_store,
+                ledger=ledger_store,
                 scheduler=scheduler,
                 runner=runner,
+                digest_enabled=settings.digest.enabled,
+                digest_hour=settings.digest.hour,
+                digest_minute=settings.digest.minute,
+                digest_dir=settings.data_dir / "digests",
             )
             return
 
@@ -540,8 +552,13 @@ async def _run_start_daemon(
                 audit=audit,
                 routine_store=routine_store,
                 memory_store=memory_store,
+                ledger=ledger_store,
                 scheduler=scheduler,
                 runner=runner,
+                digest_enabled=settings.digest.enabled,
+                digest_hour=settings.digest.hour,
+                digest_minute=settings.digest.minute,
+                digest_dir=settings.data_dir / "digests",
             )
     finally:
         journal.close()
@@ -566,7 +583,43 @@ def ask(
             )
         )
         _render_ask_result(result)
-    except (FileNotFoundError, ConnectionRefusedError) as exc:
+    except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+        _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
+        raise typer.Exit(code=1) from exc
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    except AuditIntegrityError as exc:
+        _error_panel(str(exc), _ACCION_INTEGRIDAD)
+        raise typer.Exit(code=1) from exc
+    except (OSError, sqlite3.Error, RuntimeError) as exc:
+        stderr_console.print(f"Error sistémico: {exc}", style="red")
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("digest")
+def digest(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Pide el digest diario on-demand al daemon."""
+    try:
+        settings = load_settings(config)
+        result = asyncio.run(_json_rpc_call(_socket_path(settings), "digest.today", {}))
+        markdown = result.get("markdown")
+        if not isinstance(markdown, str):
+            raise RuntimeError("respuesta de digest inválida")
+        generated_at = str(result.get("generated_at", "sin timestamp"))
+        console.print(
+            Panel(
+                Markdown(markdown),
+                title=f"Digest generado {generated_at}",
+                expand=False,
+            )
+        )
+    except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
         _error_panel("el daemon no está corriendo", "levantalo con: wyss start")
         raise typer.Exit(code=1) from exc
     except ConfigError as exc:

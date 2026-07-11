@@ -9,10 +9,12 @@ from typing import Any, cast
 import pytest
 
 from core.domain import AuditEventType, Outcome, RiskLevel
+from core.domain.ledger import Transaccion
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
 from core.domain.policy import PolicyDecision
 from core.policy import CognitivePolicyEngine
+from core.ports.ledger import LedgerPort
 from orchestrator.daemon import DaemonServer, start_daemon
 from orchestrator.dispatcher import dispatch
 from orchestrator.pending_store import PendingStore
@@ -79,6 +81,37 @@ class _FakeMemoryStore:
         self._facts[fact.id] = fact
 
 
+class _FakeLedger:
+    def record(self, transaccion: Transaccion) -> None:
+        del transaccion
+
+    def balance(self, desde: str, hasta: str) -> tuple[float, float]:
+        del desde, hasta
+        return 1000.0, 250.0
+
+    def surplus(self, desde: str, hasta: str) -> float:
+        del desde, hasta
+        return 750.0
+
+    def query_by_category(self, desde: str, hasta: str) -> dict[str, float]:
+        del desde, hasta
+        return {"super": 250.0}
+
+    def coverage_days(self, desde: str, hasta: str) -> int:
+        del desde, hasta
+        return 2
+
+
+class _SpyRunner:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run(self, plan: Plan) -> object:
+        del plan
+        self.calls += 1
+        return object()
+
+
 @pytest.fixture
 def routine_store(tmp_path: Path) -> Iterator[RoutineStore]:
     store = RoutineStore(tmp_path / "routines.db")
@@ -107,6 +140,11 @@ def memory_store() -> _FakeMemoryStore:
     return _FakeMemoryStore()
 
 
+@pytest.fixture
+def fake_ledger() -> LedgerPort:
+    return _FakeLedger()
+
+
 async def _handle_rpc(
     daemon: DaemonServer, method: str, params: dict[str, object]
 ) -> dict[str, Any]:
@@ -132,6 +170,7 @@ async def test_stale_socket_cleanup(
     memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
 ) -> None:
     """ORCH-01: el daemon limpia un socket stale al arrancar y rebindea."""
     socket_path = tmp_path / "wyss.sock"
@@ -159,6 +198,7 @@ async def test_stale_socket_cleanup(
         audit=fake_audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=fake_ledger,
         scheduler=scheduler,
         reaper_interval_s=3600,
     )
@@ -177,6 +217,7 @@ async def test_ask_round_trip(
     memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
 ) -> None:
     """ORCH-02: `ask` por JSON-RPC sobre el socket devuelve respuesta del dispatcher."""
     daemon = DaemonServer(
@@ -186,6 +227,7 @@ async def test_ask_round_trip(
         audit=fake_audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=fake_ledger,
         scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
     )
     response = await _handle_rpc(daemon, "ask", {"instruction": "leer /tmp/source.txt"})
@@ -207,6 +249,7 @@ async def test_routine_handlers_round_trip_via_rpc(
     memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
 ) -> None:
     scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
     daemon = DaemonServer(
@@ -216,6 +259,7 @@ async def test_routine_handlers_round_trip_via_rpc(
         audit=fake_audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=fake_ledger,
         scheduler=scheduler,
     )
 
@@ -263,6 +307,7 @@ async def test_memory_handlers_round_trip_via_rpc(
     memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
 ) -> None:
     memory_store.add(
         MemoryFact(
@@ -283,6 +328,7 @@ async def test_memory_handlers_round_trip_via_rpc(
         audit=fake_audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=fake_ledger,
         scheduler=scheduler,
     )
 
@@ -326,6 +372,7 @@ async def test_routine_add_invalid_schedule_returns_rpc_error(
     memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
 ) -> None:
     scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
     daemon = DaemonServer(
@@ -335,6 +382,7 @@ async def test_routine_add_invalid_schedule_returns_rpc_error(
         audit=fake_audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=fake_ledger,
         scheduler=scheduler,
     )
     response = await _handle_rpc(
@@ -362,6 +410,7 @@ async def test_aclose_shutdowns_scheduler_without_waiting(
     memory_store: _FakeMemoryStore,
     fake_audit: FakeAudit,
     fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
 ) -> None:
     socket_path = tmp_path / "wyss.sock"
     scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
@@ -389,6 +438,7 @@ async def test_aclose_shutdowns_scheduler_without_waiting(
         audit=fake_audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=fake_ledger,
         scheduler=scheduler,
         reaper_interval_s=3600,
     )
@@ -397,6 +447,86 @@ async def test_aclose_shutdowns_scheduler_without_waiting(
 
     assert waits == [False]
     assert not socket_path.exists()
+
+
+async def test_digest_today_rpc_returns_markdown_and_audits(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    plan = Plan(
+        task_id="digest-pending",
+        summary="mover",
+        steps=(Action("file.move", "/tmp/a"),),
+        rationale="test",
+    )
+    decision = PolicyDecision(
+        task_id=plan.task_id,
+        risk_level=RiskLevel.B,
+        outcome=Outcome.CONFIRM_SIMPLE,
+    )
+    pending_store.save(plan, decision, ttl_seconds=3600)
+    routine_store.add("rutina digest", "cron", "0 8 * * *", _plan_json())
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+    )
+
+    response = await _handle_rpc(daemon, "digest.today", {})
+
+    assert "error" not in response
+    result = response["result"]
+    assert isinstance(result["markdown"], str)
+    assert "## Pendientes de bandeja" in result["markdown"]
+    assert "## Finanzas Pellegrini" in result["markdown"]
+    assert "## Rutinas" in result["markdown"]
+    assert isinstance(result["generated_at"], str)
+    event = fake_audit.events[-1]
+    assert event.event_type == AuditEventType.DIGEST_GENERATED
+    assert event.actor_id == "digest"
+    assert "date" in event.payload
+
+
+async def test_digest_today_empty_state_and_no_dispatch(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    runner = _SpyRunner()
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        runner=runner,
+    )
+
+    response = await _handle_rpc(daemon, "digest.today", {})
+
+    assert "error" not in response
+    markdown = str(response["result"]["markdown"])
+    assert "Sin pendientes" in markdown
+    assert "Sin rutinas" in markdown
+    assert runner.calls == 0
+    assert pending_store.load_pending() == []
 
 
 async def test_dispatch_d_rejects_and_audits(

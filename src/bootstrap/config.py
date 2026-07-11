@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core.domain.agent import AgentDefinition
 from core.domain.config import GatewaySettings
@@ -261,6 +261,16 @@ class OrchestratorConfigModel(BaseModel):
     budget_usd: float | None = None
 
 
+class DigestConfigModel(BaseModel):
+    """Sección [digest]: generación diaria local del Daily Assistant."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    hour: int = Field(default=8, ge=0, le=23)
+    minute: int = Field(default=0, ge=0, le=59)
+
+
 class WyssConfigModel(BaseModel):
     """Raíz del config.toml validado. `frozen=True` + `extra="forbid"` (fail-closed total)."""
 
@@ -272,6 +282,7 @@ class WyssConfigModel(BaseModel):
     gateway: GatewayConfigModel = GatewayConfigModel()
     ingest: IngestConfigModel = IngestConfigModel()
     orchestrator: OrchestratorConfigModel = OrchestratorConfigModel()
+    digest: DigestConfigModel = DigestConfigModel()
     agents: list[AgentConfigModel] = []
 
 
@@ -285,10 +296,20 @@ class OrchestratorSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class DigestSettings:
+    """Config del digest diario usada solo en bootstrap/orchestrator."""
+
+    enabled: bool = False
+    hour: int = 8
+    minute: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class WyssSettings(DomainWyssSettings):
     """WyssSettings extendido por bootstrap; sigue siendo instancia del tipo de dominio."""
 
     orchestrator: OrchestratorSettings = field(default_factory=OrchestratorSettings)
+    digest: DigestSettings = field(default_factory=DigestSettings)
 
 
 def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
@@ -427,6 +448,15 @@ def _to_orchestrator_settings(model: OrchestratorConfigModel) -> OrchestratorSet
     )
 
 
+def _to_digest_settings(model: DigestConfigModel) -> DigestSettings:
+    """Mapea [digest] Pydantic → DigestSettings frozen."""
+    return DigestSettings(
+        enabled=model.enabled,
+        hour=model.hour,
+        minute=model.minute,
+    )
+
+
 def _to_settings(model: WyssConfigModel) -> WyssSettings:
     """Construye el WyssSettings de dominio desde el modelo Pydantic validado.
 
@@ -454,6 +484,7 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         gateway=_to_gateway_settings(model.gateway, model.agents, model.orchestrator),
         ingest=_to_ingest_settings(model.ingest),
         orchestrator=_to_orchestrator_settings(model.orchestrator),
+        digest=_to_digest_settings(model.digest),
         agents=tuple(_to_agent_definition(agent) for agent in model.agents),
     )
 

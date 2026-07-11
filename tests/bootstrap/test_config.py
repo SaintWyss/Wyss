@@ -30,6 +30,9 @@ def test_loads_valid_config(valid_config: Path) -> None:
     assert settings.policy.thresholds.dir_count_c == 5
     assert settings.policy.thresholds.delete_count_d == 50
     assert settings.policy.thresholds.sensitive_dirs == ("~/.ssh", "/etc", "data")
+    assert settings.digest.enabled is False
+    assert settings.digest.hour == 8
+    assert settings.digest.minute == 0
 
 
 def test_config_not_found(tmp_path: Path) -> None:
@@ -62,6 +65,26 @@ def test_extra_key_in_policy_rejected(write_config: Callable[[str], Path]) -> No
         "[policy]\nfile_count_b = 10\ntypo_threshold = 99\n"
     )
     with pytest.raises(ConfigError, match="typo_threshold"):
+        load_settings(path)
+
+
+def test_digest_hour_range_rejected(write_config: Callable[[str], Path]) -> None:
+    """[digest].hour fuera de rango falla con loc digest.hour."""
+    path = write_config(
+        'data_dir = "data"\naudit_db = "data/audit.db"\n'
+        "[digest]\nhour = 25\n"
+    )
+    with pytest.raises(ConfigError, match=r"digest\.hour"):
+        load_settings(path)
+
+
+def test_digest_extra_key_rejected(write_config: Callable[[str], Path]) -> None:
+    """Un typo bajo [digest] aborta el boot por extra=forbid."""
+    path = write_config(
+        'data_dir = "data"\naudit_db = "data/audit.db"\n'
+        "[digest]\nenbaled = true\n"
+    )
+    with pytest.raises(ConfigError, match=r"digest\.enbaled"):
         load_settings(path)
 
 

@@ -6,6 +6,7 @@ import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -17,12 +18,15 @@ from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
 from core.ports.execution import PlanRunner
+from core.ports.ledger import LedgerPort
 from core.ports.memory import MemoryAdmin
 from core.ports.orchestrator import OrchestratorPort
+from orchestrator.digest import compose_digest, write_digest_file
 from orchestrator.dispatcher import dispatch, ttl_for_risk
 from orchestrator.pending_store import PendingStore
 from orchestrator.routine_store import Routine, RoutineStore
 from orchestrator.scheduler import (
+    ARG_TZ,
     RoutineScheduler,
     preview_next_fires,
     register_routines,
@@ -66,6 +70,7 @@ class DaemonServer:
         audit: AuditPort,
         routine_store: RoutineStore,
         memory_store: MemoryAdmin,
+        ledger: LedgerPort,
         scheduler: RoutineScheduler,
         runner: PlanRunner | None = None,
     ) -> None:
@@ -75,6 +80,7 @@ class DaemonServer:
         self._audit = audit
         self._routine_store = routine_store
         self._memory_store = memory_store
+        self._ledger = ledger
         self._scheduler = scheduler
         self._runner = runner
         self._handlers: dict[str, JsonHandler] = {
@@ -90,6 +96,7 @@ class DaemonServer:
             "memory.list": self._memory_list,
             "memory.edit": self._memory_edit,
             "memory.forget": self._memory_forget,
+            "digest.today": self._digest_today,
         }
 
     async def handle(
@@ -380,6 +387,34 @@ class DaemonServer:
         ok = self._memory_store.forget(fact_id)
         return {"ok": ok}
 
+    async def _digest_today(self, params: Mapping[str, Any]) -> JsonDict:
+        """Compone el digest on-demand con ventana mes corriente → hoy en Argentina."""
+        del params
+        now = datetime.now(ARG_TZ)
+        today = now.date()
+        window = _digest_window(today)
+        markdown = compose_digest(
+            today=today,
+            pending=self._pending_store.load_pending(),
+            ledger=self._ledger,
+            window=window,
+            routines=self._routine_store.list_all(),
+            memory=self._memory_store.list_all(),
+        )
+        self._audit.log(
+            AuditEvent.new(
+                actor_type=ActorType.SYSTEM,
+                actor_id="digest",
+                event_type=AuditEventType.DIGEST_GENERATED,
+                message="digest generado",
+                payload={"date": today.isoformat()},
+            )
+        )
+        return {
+            "markdown": markdown,
+            "generated_at": now.isoformat(timespec="seconds"),
+        }
+
     async def _safe_health_check(self) -> bool:
         try:
             return await self._orchestrator.health_check()
@@ -410,9 +445,14 @@ async def start_daemon(
     audit: AuditPort,
     routine_store: RoutineStore,
     memory_store: MemoryAdmin,
+    ledger: LedgerPort,
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
+    digest_enabled: bool = False,
+    digest_hour: int = 8,
+    digest_minute: int = 0,
+    digest_dir: Path | None = None,
 ) -> RunningDaemon:
     """Arranca el Unix socket server y devuelve recursos cerrables."""
     await _cleanup_stale_socket(socket_path)
@@ -424,6 +464,7 @@ async def start_daemon(
         audit=audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=ledger,
         scheduler=scheduler,
         runner=runner,
     )
@@ -441,6 +482,36 @@ async def start_daemon(
         audit=audit,
         on_queued=daemon._execute_plan if runner is not None else None,
     )
+    if digest_enabled:
+        target_dir = digest_dir if digest_dir is not None else socket_path.parent / "digests"
+
+        async def digest_job() -> None:
+            today = datetime.now(ARG_TZ).date()
+            window = _digest_window(today)
+            markdown = compose_digest(
+                today=today,
+                pending=pending_store.load_pending(),
+                ledger=ledger,
+                window=window,
+                routines=routine_store.list_all(),
+                memory=memory_store.list_all(),
+            )
+            output = write_digest_file(target_dir, today, markdown)
+            audit.log(
+                AuditEvent.new(
+                    actor_type=ActorType.SYSTEM,
+                    actor_id="digest",
+                    event_type=AuditEventType.DIGEST_GENERATED,
+                    message="digest programado generado",
+                    payload={"date": today.isoformat(), "path": str(output)},
+                )
+            )
+
+        scheduler.schedule_digest(
+            hour=digest_hour,
+            minute=digest_minute,
+            callback=digest_job,
+        )
     scheduler.start()
     return RunningDaemon(
         server=server,
@@ -459,9 +530,14 @@ async def run_daemon(
     audit: AuditPort,
     routine_store: RoutineStore,
     memory_store: MemoryAdmin,
+    ledger: LedgerPort,
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     reaper_interval_s: float = 30.0,
+    digest_enabled: bool = False,
+    digest_hour: int = 8,
+    digest_minute: int = 0,
+    digest_dir: Path | None = None,
 ) -> None:
     """Corre el daemon hasta cancelación/señal y limpia socket al salir."""
     running = await start_daemon(
@@ -472,9 +548,14 @@ async def run_daemon(
         audit=audit,
         routine_store=routine_store,
         memory_store=memory_store,
+        ledger=ledger,
         scheduler=scheduler,
         runner=runner,
         reaper_interval_s=reaper_interval_s,
+        digest_enabled=digest_enabled,
+        digest_hour=digest_hour,
+        digest_minute=digest_minute,
+        digest_dir=digest_dir,
     )
     try:
         await running.server.serve_forever()
@@ -488,6 +569,11 @@ def _error_response(req_id: object, code: int, message: str) -> JsonDict:
         "error": {"code": code, "message": message},
         "id": req_id,
     }
+
+
+def _digest_window(today: date) -> tuple[str, str]:
+    start = today.replace(day=1)
+    return (start.isoformat(), today.isoformat())
 
 
 def _is_expired(expires_at: str) -> bool:

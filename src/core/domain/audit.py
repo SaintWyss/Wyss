@@ -35,6 +35,7 @@ class AuditEventType(StrEnum):
     SPAN_FAILED = "span.failed"
     # SCHED-05: disparo de rutina, distinguible de command.received en la traza
     ROUTINE_TRIGGERED = "routine.triggered"
+    DIGEST_GENERATED = "digest.generated"
 
 
 @dataclass(frozen=True, slots=True)

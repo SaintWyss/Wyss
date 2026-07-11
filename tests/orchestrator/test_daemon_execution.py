@@ -14,6 +14,7 @@ from typing import Any, cast
 import pytest
 
 from core.domain import AuditEventType
+from core.domain.ledger import Transaccion
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
 from core.orchestrator.intent import IntentCategory, IntentClassification
@@ -59,6 +60,27 @@ class _FakeMemoryStore:
     def forget(self, fact_id: str) -> bool:
         del fact_id
         return False
+
+
+class _FakeLedger:
+    def record(self, transaccion: Transaccion) -> None:
+        del transaccion
+
+    def balance(self, desde: str, hasta: str) -> tuple[float, float]:
+        del desde, hasta
+        return 0.0, 0.0
+
+    def surplus(self, desde: str, hasta: str) -> float:
+        del desde, hasta
+        return 0.0
+
+    def query_by_category(self, desde: str, hasta: str) -> dict[str, float]:
+        del desde, hasta
+        return {}
+
+    def coverage_days(self, desde: str, hasta: str) -> int:
+        del desde, hasta
+        return 0
 
 
 async def _rpc(daemon: DaemonServer, method: str, params: dict[str, object]) -> dict[str, Any]:
@@ -128,6 +150,7 @@ def _daemon(
         audit=audit,
         routine_store=cast(RoutineStore, object()),
         memory_store=_FakeMemoryStore(),
+        ledger=_FakeLedger(),
         scheduler=cast(RoutineScheduler, object()),
         runner=runner,
     )

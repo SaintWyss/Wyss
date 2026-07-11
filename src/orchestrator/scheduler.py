@@ -30,7 +30,9 @@ ROUTINE_TTL_SECONDS = 24 * 60 * 60
 MIN_INTERVAL_SECONDS = 60
 MISFIRE_GRACE_SECONDS = 5 * 60
 _MAX_MISSED_COUNT = 10_000
+_DIGEST_JOB_ID = "internal:digest"
 QueuedPlanCallback = Callable[[Plan], Awaitable[dict[str, object]]]
+DigestCallback = Callable[[], Awaitable[None]]
 
 
 def routine_ttl_for(level: RiskLevel) -> int:
@@ -189,6 +191,29 @@ class RoutineScheduler:
             trigger=trigger,
             id=_job_id(routine.id),
             args=[routine.id],
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=MISFIRE_GRACE_SECONDS,
+        )
+
+    def schedule_digest(
+        self,
+        *,
+        hour: int,
+        minute: int,
+        callback: DigestCallback,
+    ) -> None:
+        """Registra el digest como job interno, fuera de RoutineStore/dispatch.
+
+        El digest programado es un trabajo del sistema, no una Routine de usuario ni un
+        action type. Por eso no reconstruye Plan ni cruza el gate de política (DAILY-02).
+        """
+        trigger = CronTrigger(hour=hour, minute=minute, timezone=ARG_TZ)
+        self._scheduler.add_job(
+            callback,
+            trigger=trigger,
+            id=_DIGEST_JOB_ID,
             replace_existing=True,
             coalesce=True,
             max_instances=1,
