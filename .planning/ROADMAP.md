@@ -20,7 +20,7 @@
 - [x] **Phase 7: Modelo de Agentes** - AgentBase config-driven + permisos estructurales
 - [x] **Phase 8: Primer Agente (Finanzas)** - Pellegrini coach + ledger SQLite
 - [x] **Phase 9: Routine Scheduler** - Rutinas programadas que caen a la bandeja por política
-- [ ] **Phase 10: Notion Adapter** - Leer/escribir Notion como acciones gateadas
+- [x] **Phase 10: Notion Adapter** - Leer/escribir Notion como acciones gateadas
 - [ ] **Phase 11: Owner Memory** - Memoria persistente, editable y trust-tiered
 - [ ] **Phase 12: Daily Assistant** - Digest diario proactivo (solo lectura)
 - [ ] **Phase 13: Intake n8n** - Webhook externo → propuesta → bandeja con bearer token

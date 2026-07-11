@@ -17,10 +17,10 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### Notion adapter (NOTION)
 
-- [ ] **NOTION-01**: Owner puede pedir en lenguaje natural leer una página/database de Notion y ver el contenido (nivel A con base_levels explícito para notion.*)
-- [ ] **NOTION-02**: Owner puede pedir crear/editar contenido en Notion; el write cae como propuesta B/C con preview del cambio antes de confirmar
-- [ ] **NOTION-03**: El adapter respeta rate limits (retry/backoff en 429) y pagina resultados completos
-- [ ] **NOTION-04**: El token de Notion vive en config/.env (jamás en repo) y toda llamada queda auditada
+- [x] **NOTION-01**: Owner puede pedir en lenguaje natural leer una página/database de Notion y ver el contenido (nivel A con base_levels explícito para notion.*)
+- [x] **NOTION-02**: Owner puede pedir crear/editar contenido en Notion; el write cae como propuesta B/C con preview del cambio antes de confirmar
+- [x] **NOTION-03**: El adapter respeta rate limits (retry/backoff en 429) y pagina resultados completos
+- [x] **NOTION-04**: El token de Notion vive en config/.env (jamás en repo) y toda llamada queda auditada
 
 ### Memoria del owner (MEM)
 
@@ -82,10 +82,10 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 | SCHED-03 | Phase 9 — Routine Scheduler | Complete |
 | SCHED-04 | Phase 9 — Routine Scheduler | Complete |
 | SCHED-05 | Phase 9 — Routine Scheduler | Complete |
-| NOTION-01 | Phase 10 — Notion Adapter | Pending |
-| NOTION-02 | Phase 10 — Notion Adapter | Pending |
-| NOTION-03 | Phase 10 — Notion Adapter | Pending |
-| NOTION-04 | Phase 10 — Notion Adapter | Pending |
+| NOTION-01 | Phase 10 — Notion Adapter | Complete |
+| NOTION-02 | Phase 10 — Notion Adapter | Complete |
+| NOTION-03 | Phase 10 — Notion Adapter | Complete |
+| NOTION-04 | Phase 10 — Notion Adapter | Complete |
 | MEM-01 | Phase 11 — Owner Memory | Pending |
 | MEM-02 | Phase 11 — Owner Memory | Pending |
 | MEM-03 | Phase 11 — Owner Memory | Pending |
