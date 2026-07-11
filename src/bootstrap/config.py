@@ -77,6 +77,7 @@ _BASE_LEVELS: dict[str, RiskLevel] = {
     # query = lectura → A; record = mutación owner-instruida → B (segunda muralla, no D).
     "finance.query": RiskLevel.A,
     "finance.record": RiskLevel.B,
+    "memory.remember": RiskLevel.B,
 }
 
 

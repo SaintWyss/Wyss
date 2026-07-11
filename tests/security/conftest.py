@@ -22,6 +22,7 @@ _BASE_LEVELS: dict[str, RiskLevel] = {
     "notion.query_database": RiskLevel.A,
     "file.move": RiskLevel.B,
     "file.rename": RiskLevel.B,
+    "memory.remember": RiskLevel.B,
     "file.create": RiskLevel.C,
     "file.write": RiskLevel.C,
     "file.delete": RiskLevel.C,
