@@ -5,10 +5,12 @@ import logging
 import os
 import sqlite3
 import subprocess
+from collections import deque
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from secrets import compare_digest
+from time import monotonic
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -17,7 +19,7 @@ import typer
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from starlette import status
 
 from audit.sqlite_logger import SqliteAuditLogger
@@ -36,9 +38,9 @@ from bootstrap.cli import (
     build_retrieval,
     query_audit_events,
 )
+from bootstrap.config import WyssSettings
 from core.domain import Query, TipoTransaccion, Transaccion
 from core.domain.audit import ActorType
-from core.domain.config import WyssSettings
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
 from core.domain.security import Subject
 from knowledge.state_store import BcFreshness, StateStore
@@ -79,6 +81,14 @@ class AskBody(BaseModel):
     instruction: str
 
 
+class IntakeBody(BaseModel):
+    """Body de POST /api/intake."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str = Field(min_length=1, max_length=2000)
+
+
 class ConfirmBody(BaseModel):
     """Body de POST /api/confirm/{pending_id}."""
 
@@ -103,6 +113,7 @@ def build_web_app(
     settings: WyssSettings,
     *,
     token: str,
+    intake_token: str | None = None,
     lan_hosts: frozenset[str] = frozenset(),
     tls: bool = False,
 ) -> FastAPI:
@@ -120,6 +131,7 @@ def build_web_app(
     web_app = FastAPI()
     allowed_hosts = frozenset({"127.0.0.1", "localhost"} | lan_hosts)
     allowed_scheme = "https" if tls else "http"
+    intake_limiter = _IntakeRateLimiter(settings.intake.max_per_minute)
 
     @web_app.middleware("http")
     async def local_security_middleware(request: Request, call_next: ASGIHandler) -> Response:
@@ -149,6 +161,18 @@ def build_web_app(
                 error="origen no permitido",
                 accion="usá la interfaz local servida por wyss web",
             )
+
+        if request.url.path == "/api/intake":
+            # Única exención de cookie: n8n no tiene cookie jar y usa bearer dedicado.
+            auth_response = _authenticate_intake(
+                request,
+                intake_token=intake_token,
+                enabled=settings.intake.enabled,
+                limiter=intake_limiter,
+            )
+            if auth_response is not None:
+                return auth_response
+            return await call_next(request)
 
         auth_response = _authenticate_request(request, token, secure_cookie=tls)
         if auth_response is not None:
@@ -394,6 +418,21 @@ def build_web_app(
                 accion="levantalo con: wyss start",
             ) from exc
 
+    @web_app.post("/api/intake")
+    async def api_intake(body: IntakeBody) -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(
+                _socket_path(settings),
+                "intake.propose",
+                {"instruction": body.instruction},
+            )
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+
     @web_app.post("/api/confirm/{pending_id}")
     async def api_confirm(pending_id: str, body: ConfirmBody) -> dict[str, Any]:
         db_path = _pending_db_path(settings)
@@ -510,6 +549,65 @@ def _authenticate_request(
             status.HTTP_401_UNAUTHORIZED,
             error="no autorizado",
             accion="abrí la URL con token que imprime wyss web",
+        )
+    return None
+
+
+class _IntakeRateLimiter:
+    def __init__(self, max_per_minute: int) -> None:
+        self._max_per_minute = max_per_minute
+        self._hits: deque[float] = deque()
+
+    def allow(self) -> bool:
+        now = monotonic()
+        window_start = now - 60.0
+        while self._hits and self._hits[0] <= window_start:
+            self._hits.popleft()
+        if len(self._hits) >= self._max_per_minute:
+            return False
+        self._hits.append(now)
+        return True
+
+
+def _authenticate_intake(
+    request: Request,
+    *,
+    intake_token: str | None,
+    enabled: bool,
+    limiter: _IntakeRateLimiter,
+) -> Response | None:
+    if not enabled or intake_token is None:
+        return _error_response(
+            status.HTTP_404_NOT_FOUND,
+            error="intake deshabilitado",
+            accion="habilitá [intake].enabled en config.toml",
+        )
+
+    authorization = request.headers.get("authorization", "")
+    prefix = "Bearer "
+    presented = authorization.removeprefix(prefix) if authorization.startswith(prefix) else ""
+    if not presented or not compare_digest(presented, intake_token):
+        _LOG.warning(
+            "401 bearer de intake inválido en %s %s",
+            request.method,
+            request.url.path,
+        )
+        return _error_response(
+            status.HTTP_401_UNAUTHORIZED,
+            error="no autorizado",
+            accion="enviá Authorization: Bearer <token de data/intake_token>",
+        )
+
+    if not limiter.allow():
+        _LOG.warning(
+            "429 rate limit de intake excedido en %s %s",
+            request.method,
+            request.url.path,
+        )
+        return _error_response(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            error="rate limit excedido",
+            accion="reintentá más tarde o ajustá [intake].max_per_minute",
         )
     return None
 

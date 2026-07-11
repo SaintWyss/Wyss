@@ -33,6 +33,8 @@ def test_loads_valid_config(valid_config: Path) -> None:
     assert settings.digest.enabled is False
     assert settings.digest.hour == 8
     assert settings.digest.minute == 0
+    assert settings.intake.enabled is False
+    assert settings.intake.max_per_minute == 30
 
 
 def test_config_not_found(tmp_path: Path) -> None:
@@ -85,6 +87,43 @@ def test_digest_extra_key_rejected(write_config: Callable[[str], Path]) -> None:
         "[digest]\nenbaled = true\n"
     )
     with pytest.raises(ConfigError, match=r"digest\.enbaled"):
+        load_settings(path)
+
+
+def test_intake_config_explicit_values(write_config: Callable[[str], Path]) -> None:
+    """[intake] es opt-in y mapea max_per_minute al settings frozen."""
+    path = write_config(
+        'data_dir = "data"\naudit_db = "data/audit.db"\n'
+        "[intake]\nenabled = true\nmax_per_minute = 10\n"
+    )
+
+    settings = load_settings(path)
+
+    assert settings.intake.enabled is True
+    assert settings.intake.max_per_minute == 10
+
+
+def test_intake_extra_key_rejected(write_config: Callable[[str], Path]) -> None:
+    """Un typo bajo [intake] aborta el boot por extra=forbid."""
+    path = write_config(
+        'data_dir = "data"\naudit_db = "data/audit.db"\n'
+        "[intake]\nenbaled = true\n"
+    )
+    with pytest.raises(ConfigError, match=r"intake\.enbaled"):
+        load_settings(path)
+
+
+@pytest.mark.parametrize("value", [0, 601])
+def test_intake_max_per_minute_range_rejected(
+    write_config: Callable[[str], Path],
+    value: int,
+) -> None:
+    """[intake].max_per_minute respeta ge=1/le=600."""
+    path = write_config(
+        'data_dir = "data"\naudit_db = "data/audit.db"\n'
+        f"[intake]\nmax_per_minute = {value}\n"
+    )
+    with pytest.raises(ConfigError, match=r"intake\.max_per_minute"):
         load_settings(path)
 
 

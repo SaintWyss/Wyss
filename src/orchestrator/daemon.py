@@ -14,6 +14,8 @@ from uuid import uuid4
 from core.domain import ActorType, AuditEvent, AuditEventType, Outcome, RiskLevel
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
+from core.domain.policy import PolicyDecision
+from core.domain.risk import outcome_for
 from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort
@@ -85,6 +87,7 @@ class DaemonServer:
         self._runner = runner
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
+            "intake.propose": self._intake_propose,
             "confirm": self._confirm,
             "status": self._status,
             "audit": self._audit_events,
@@ -185,6 +188,55 @@ class DaemonServer:
             executed = await self._execute_plan(plan)
             return {"outcome": "executed", **executed}
         return dispatched
+
+    async def _intake_propose(self, params: Mapping[str, Any]) -> JsonDict:
+        instruction = str(params.get("instruction", "")).strip()
+        if not instruction:
+            raise ValueError("instruction requerido")
+        self._audit.log(
+            AuditEvent.new(
+                actor_type=ActorType.SYSTEM,
+                actor_id="intake",
+                event_type=AuditEventType.COMMAND_RECEIVED,
+                message=f"[intake externo] {instruction}",
+            )
+        )
+        if not await self._safe_health_check():
+            return {
+                "outcome": "degraded",
+                "message": "Orquestador Hermes no disponible.",
+                "fallback_available": True,
+            }
+
+        intent = await self._orchestrator.classify_intent(instruction)
+        if (
+            intent.category == IntentCategory.AMBIGUOUS_REQUEST
+            or intent.clarification_needed
+        ):
+            return {
+                "outcome": "clarification_needed",
+                "message": "Necesito una instrucción más específica.",
+                "category": intent.category.value,
+            }
+        plan = await self._orchestrator.draft_plan(instruction, intent)
+        self._audit.log(
+            AuditEvent.new(
+                task_id=plan.task_id,
+                actor_type=ActorType.SYSTEM,
+                actor_id="daemon",
+                event_type=AuditEventType.PLAN_CREATED,
+                message="plan creado por orquestador",
+                payload={"summary": plan.summary, "steps": len(plan.steps)},
+            )
+        )
+        decision = _floor_intake_decision(self._engine.evaluate(plan))
+        return await dispatch(
+            plan,
+            decision,
+            pending_store=self._pending_store,
+            audit=self._audit,
+            ttl_for=ttl_for_risk,
+        )
 
     async def _confirm(self, params: Mapping[str, Any]) -> JsonDict:
         pending_id = str(params.get("pending_id", "")).strip()
@@ -420,6 +472,26 @@ class DaemonServer:
             return await self._orchestrator.health_check()
         except Exception:
             return False
+
+
+def _floor_intake_decision(decision: PolicyDecision) -> PolicyDecision:
+    """Aplica el floor B para intake externo sin tocar D/REJECT."""
+    if decision.outcome == Outcome.REJECT or decision.risk_level >= RiskLevel.D:
+        return decision
+    risk_level = max(decision.risk_level, RiskLevel.B)
+    outcome = outcome_for(risk_level)
+    if risk_level == decision.risk_level and outcome == decision.outcome:
+        return decision
+    reasons = decision.reasons
+    if risk_level > decision.risk_level:
+        reasons = (*reasons, "floor B por origen intake externo")
+    return PolicyDecision(
+        task_id=decision.task_id,
+        risk_level=risk_level,
+        outcome=outcome,
+        matched_rules=decision.matched_rules,
+        reasons=reasons,
+    )
 
 
 async def _cleanup_stale_socket(path: Path) -> None:

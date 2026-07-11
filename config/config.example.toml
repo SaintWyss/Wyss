@@ -118,6 +118,14 @@ hour = 8
 minute = 0
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Intake externo para n8n: opt-in explícito, con bearer dedicado.
+# El token vive en data/intake_token; JAMÁS usa la cookie del pairing.
+# Con enabled=false, POST /api/intake devuelve 404.
+[intake]
+enabled = false
+max_per_minute = 30
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Agentes declarativos (Fase 7+, D-73): cada [[agents]] se valida al boot y se
 # convierte en un AgentDefinition frozen. Agregar un agente NO toca código (regla de
 # extensibilidad). `model_tier` referencia un tier de [gateway.tiers]; `budget_usd` es

@@ -271,6 +271,15 @@ class DigestConfigModel(BaseModel):
     minute: int = Field(default=0, ge=0, le=59)
 
 
+class IntakeConfigModel(BaseModel):
+    """Sección [intake]: propuestas externas opt-in."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    max_per_minute: int = Field(default=30, ge=1, le=600)
+
+
 class WyssConfigModel(BaseModel):
     """Raíz del config.toml validado. `frozen=True` + `extra="forbid"` (fail-closed total)."""
 
@@ -283,6 +292,7 @@ class WyssConfigModel(BaseModel):
     ingest: IngestConfigModel = IngestConfigModel()
     orchestrator: OrchestratorConfigModel = OrchestratorConfigModel()
     digest: DigestConfigModel = DigestConfigModel()
+    intake: IntakeConfigModel = IntakeConfigModel()
     agents: list[AgentConfigModel] = []
 
 
@@ -305,11 +315,20 @@ class DigestSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class IntakeSettings:
+    """Config de intake externo; enabled=False exige opt-in explícito."""
+
+    enabled: bool = False
+    max_per_minute: int = 30
+
+
+@dataclass(frozen=True, slots=True)
 class WyssSettings(DomainWyssSettings):
     """WyssSettings extendido por bootstrap; sigue siendo instancia del tipo de dominio."""
 
     orchestrator: OrchestratorSettings = field(default_factory=OrchestratorSettings)
     digest: DigestSettings = field(default_factory=DigestSettings)
+    intake: IntakeSettings = field(default_factory=IntakeSettings)
 
 
 def _to_deny_rule(model: DenyRuleModel) -> DenyRule:
@@ -457,6 +476,14 @@ def _to_digest_settings(model: DigestConfigModel) -> DigestSettings:
     )
 
 
+def _to_intake_settings(model: IntakeConfigModel) -> IntakeSettings:
+    """Mapea [intake] Pydantic → IntakeSettings frozen."""
+    return IntakeSettings(
+        enabled=model.enabled,
+        max_per_minute=model.max_per_minute,
+    )
+
+
 def _to_settings(model: WyssConfigModel) -> WyssSettings:
     """Construye el WyssSettings de dominio desde el modelo Pydantic validado.
 
@@ -485,6 +512,7 @@ def _to_settings(model: WyssConfigModel) -> WyssSettings:
         ingest=_to_ingest_settings(model.ingest),
         orchestrator=_to_orchestrator_settings(model.orchestrator),
         digest=_to_digest_settings(model.digest),
+        intake=_to_intake_settings(model.intake),
         agents=tuple(_to_agent_definition(agent) for agent in model.agents),
     )
 

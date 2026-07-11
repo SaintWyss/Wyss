@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from core.domain import AuditEventType, Outcome, RiskLevel
+from core.domain import ActorType, AuditEventType, Outcome, RiskLevel
 from core.domain.ledger import Transaccion
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
@@ -240,6 +240,142 @@ async def test_ask_round_trip(
         AuditEventType.PLAN_CREATED,
         AuditEventType.POLICY_DECISION,
     }
+
+
+async def test_intake_propose_floors_a_to_pending_b_and_never_executes(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    runner = _SpyRunner()
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        runner=runner,
+    )
+
+    response = await _handle_rpc(daemon, "intake.propose", {"instruction": "leer /tmp/a"})
+
+    assert "error" not in response
+    assert response["result"]["outcome"] == "pending"
+    assert response["result"]["risk_level"] == "B"
+    assert runner.calls == 0
+    pending = pending_store.load_pending()
+    assert len(pending) == 1
+    assert pending[0].risk_level == "B"
+    received = next(
+        event
+        for event in fake_audit.events
+        if event.event_type == AuditEventType.COMMAND_RECEIVED
+    )
+    assert received.actor_type is ActorType.SYSTEM
+    assert received.actor_id == "intake"
+    assert received.message == "[intake externo] leer /tmp/a"
+
+
+@pytest.mark.parametrize(
+    ("instruction", "expected_level"),
+    [
+        ("mover /tmp/a /tmp/b", "B"),
+        ("borrar /tmp/a", "C"),
+    ],
+)
+async def test_intake_propose_preserves_b_or_c_as_pending(
+    instruction: str,
+    expected_level: str,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+    )
+
+    response = await _handle_rpc(daemon, "intake.propose", {"instruction": instruction})
+
+    assert "error" not in response
+    assert response["result"]["outcome"] == "pending"
+    assert response["result"]["risk_level"] == expected_level
+    pending = pending_store.load_pending()
+    assert len(pending) == 1
+    assert pending[0].risk_level == expected_level
+
+
+async def test_intake_propose_preserves_d_reject(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+    )
+
+    response = await _handle_rpc(
+        daemon, "intake.propose", {"instruction": "formatear disco"}
+    )
+
+    assert "error" not in response
+    assert response["result"]["outcome"] == "rejected"
+    assert pending_store.load_pending() == []
+
+
+async def test_intake_propose_empty_instruction_returns_rpc_error(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+    )
+
+    response = await _handle_rpc(daemon, "intake.propose", {"instruction": "   "})
+
+    assert "error" in response
+    assert response["error"]["message"] == "instruction requerido"
+    assert pending_store.load_pending() == []
 
 
 async def test_routine_handlers_round_trip_via_rpc(

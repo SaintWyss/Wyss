@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -14,9 +15,8 @@ from httpx import Response
 
 import bootstrap.web as web_mod
 from bootstrap.cli import _json_rpc_call
-from bootstrap.config import load_settings
+from bootstrap.config import WyssSettings, load_settings
 from bootstrap.web import build_web_app
-from core.domain.config import WyssSettings
 from core.domain.plan import Action, Plan
 from core.domain.policy import PolicyDecision
 from core.domain.risk import Outcome, RiskLevel
@@ -25,6 +25,7 @@ from orchestrator.pending_store import PendingStore
 
 _TOKEN = "token-test"
 _AUTH = {"Cookie": f"wyss_token={_TOKEN}"}
+_INTAKE_TOKEN = "intake-token-test-abcdefghijklmnopqrstuvwxyz"
 
 
 @pytest.fixture
@@ -39,14 +40,47 @@ def settings(tmp_path: Path) -> WyssSettings:
     return load_settings(config)
 
 
+def _settings_with_intake(tmp_path: Path, *, max_per_minute: int = 30) -> WyssSettings:
+    config = tmp_path / "config.toml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f'data_dir = "{data_dir.as_posix()}"\n'
+        f'audit_db = "{(data_dir / "audit.db").as_posix()}"\n'
+        "[intake]\n"
+        "enabled = true\n"
+        f"max_per_minute = {max_per_minute}\n",
+        encoding="utf-8",
+    )
+    return load_settings(config)
+
+
 @pytest.fixture
 def app(settings: WyssSettings) -> FastAPI:
     return build_web_app(settings, token=_TOKEN)
 
 
 @pytest.fixture
+def intake_app(tmp_path: Path) -> FastAPI:
+    return build_web_app(
+        _settings_with_intake(tmp_path),
+        token=_TOKEN,
+        intake_token=_INTAKE_TOKEN,
+    )
+
+
+@pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://127.0.0.1",
+    ) as async_client:
+        yield async_client
+
+
+@pytest.fixture
+async def intake_client(intake_app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=intake_app, raise_app_exceptions=False)
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://127.0.0.1",
@@ -422,6 +456,145 @@ async def test_ask_and_confirm_use_daemon_contract(
         ("confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}),
         ("confirm", {"pending_id": pending_id, "response": ""}),
     ]
+
+
+async def test_intake_valid_bearer_calls_daemon_contract(
+    intake_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def fake_rpc(
+        _socket_path: Path,
+        method: str,
+        params: dict[str, object],
+    ) -> dict[str, Any]:
+        calls.append((method, params))
+        return {"outcome": "pending", "pending_id": "p1", "risk_level": "B"}
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+
+    response = await intake_client.post(
+        "/api/intake",
+        json={"instruction": "crear propuesta"},
+        headers={"Authorization": f"Bearer {_INTAKE_TOKEN}"},
+    )
+
+    assert response.status_code == 200
+    assert _json(response)["outcome"] == "pending"
+    assert calls == [("intake.propose", {"instruction": "crear propuesta"})]
+
+
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer token-incorrecto"}])
+async def test_intake_requires_valid_bearer_and_never_logs_token(
+    intake_client: httpx.AsyncClient,
+    caplog: pytest.LogCaptureFixture,
+    headers: dict[str, str],
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="wyss.web"):
+        response = await intake_client.post(
+            "/api/intake",
+            json={"instruction": "crear propuesta"},
+            headers=headers,
+        )
+
+    assert response.status_code == 401
+    assert _json(response)["error"] == "no autorizado"
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert _INTAKE_TOKEN not in messages
+    assert "token-incorrecto" not in messages
+
+
+async def test_intake_disabled_returns_404_even_with_bearer(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        "/api/intake",
+        json={"instruction": "crear propuesta"},
+        headers={"Authorization": f"Bearer {_INTAKE_TOKEN}"},
+    )
+
+    assert response.status_code == 404
+    assert _json(response)["error"] == "intake deshabilitado"
+
+
+async def test_intake_does_not_accept_pairing_cookie(
+    intake_client: httpx.AsyncClient,
+) -> None:
+    response = await intake_client.post(
+        "/api/intake",
+        json={"instruction": "crear propuesta"},
+        headers=_AUTH,
+    )
+
+    assert response.status_code == 401
+
+
+async def test_cookie_exemption_is_only_for_intake(
+    intake_client: httpx.AsyncClient,
+) -> None:
+    response = await intake_client.get("/api/status")
+
+    assert response.status_code == 401
+
+
+async def test_intake_rate_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = build_web_app(
+        _settings_with_intake(tmp_path, max_per_minute=2),
+        token=_TOKEN,
+        intake_token=_INTAKE_TOKEN,
+    )
+
+    async def fake_rpc(
+        _socket_path: Path,
+        _method: str,
+        _params: dict[str, object],
+    ) -> dict[str, Any]:
+        return {"outcome": "pending", "pending_id": "p1", "risk_level": "B"}
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://127.0.0.1",
+    ) as client:
+        headers = {"Authorization": f"Bearer {_INTAKE_TOKEN}"}
+        assert (
+            await client.post("/api/intake", json={"instruction": "uno"}, headers=headers)
+        ).status_code == 200
+        assert (
+            await client.post("/api/intake", json={"instruction": "dos"}, headers=headers)
+        ).status_code == 200
+        limited = await client.post(
+            "/api/intake", json={"instruction": "tres"}, headers=headers
+        )
+
+    assert limited.status_code == 429
+    assert _json(limited)["error"] == "rate limit excedido"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"instruction": "x" * 2001},
+        {},
+        {"instruction": "x", "extra": True},
+    ],
+)
+async def test_intake_body_validation(
+    intake_client: httpx.AsyncClient,
+    payload: dict[str, object],
+) -> None:
+    response = await intake_client.post(
+        "/api/intake",
+        json=payload,
+        headers={"Authorization": f"Bearer {_INTAKE_TOKEN}"},
+    )
+
+    assert response.status_code == 422
 
 
 async def test_confirm_unknown_pending(client: httpx.AsyncClient) -> None:

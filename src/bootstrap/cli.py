@@ -1300,6 +1300,11 @@ def web(
         )
 
     token = _load_or_create_web_token(settings.data_dir)
+    intake_token = (
+        _load_or_create_intake_token(settings.data_dir)
+        if settings.intake.enabled
+        else None
+    )
     local_url = f"{scheme}://127.0.0.1:{port}/?token={token}"
     if not lan:
         console.print(
@@ -1310,7 +1315,7 @@ def web(
             )
         )
         uvicorn.run(
-            build_web_app(settings, token=token, tls=tls),
+            build_web_app(settings, token=token, intake_token=intake_token, tls=tls),
             host="127.0.0.1",
             port=port,
             log_level="warning",
@@ -1327,7 +1332,12 @@ def web(
             f"Teléfono: {phone_url}\n\n"
             "Pairing: abrí la URL de teléfono UNA vez; quedás logueado 30 días\n"
             "(el token persiste en data/web_token: reiniciar el server no desloguea).\n"
-            "App: menú de Chrome → 'Agregar a la pantalla de inicio' → ícono Wyss.\n"
+            + (
+                "Intake n8n habilitado: bearer en data/intake_token.\n"
+                if settings.intake.enabled
+                else ""
+            )
+            + "App: menú de Chrome → 'Agregar a la pantalla de inicio' → ícono Wyss.\n"
             "⚠ Expuesto a la red local. El PC decide y ejecuta; el teléfono solo\n"
             "propone y confirma. Solo se acepta el host exacto de esta máquina.\n"
             f"Firewall (ufw): sudo ufw allow from 192.168.0.0/16 to any port {port} proto tcp"
@@ -1337,7 +1347,13 @@ def web(
         )
     )
     uvicorn.run(
-        build_web_app(settings, token=token, lan_hosts=frozenset({lan_ip}), tls=tls),
+        build_web_app(
+            settings,
+            token=token,
+            intake_token=intake_token,
+            lan_hosts=frozenset({lan_ip}),
+            tls=tls,
+        ),
         host="0.0.0.0",  # opt-in explícito (--lan); Host allowlist + token gatean
         port=port,
         log_level="warning",
@@ -1354,6 +1370,25 @@ def _load_or_create_web_token(data_dir: Path) -> str:
     nivel de protección que la key TLS y las DBs; borrar el archivo rota el token.
     """
     token_file = data_dir / "web_token"
+    if token_file.exists():
+        stored = token_file.read_text(encoding="utf-8").strip()
+        if len(stored) >= 32:
+            return stored
+    token = secrets.token_urlsafe(32)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(token, encoding="utf-8")
+    token_file.chmod(0o600)
+    return token
+
+
+def _load_or_create_intake_token(data_dir: Path) -> str:
+    """Token de intake estable entre reinicios (data/intake_token, 0600).
+
+    Igual que el token web, queda protegido por permisos de owner; borrar el
+    archivo rota el bearer. En FS sin chmod POSIX estricto, el chmod puede ser
+    best-effort del sistema.
+    """
+    token_file = data_dir / "intake_token"
     if token_file.exists():
         stored = token_file.read_text(encoding="utf-8").strip()
         if len(stored) >= 32:
