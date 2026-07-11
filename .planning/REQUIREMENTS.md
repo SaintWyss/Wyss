@@ -31,9 +31,9 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### Daily Assistant (DAILY)
 
-- [ ] **DAILY-01**: Owner recibe un digest diario a hora configurable: pendientes de bandeja, snapshot Pellegrini, fallas de rutinas
-- [ ] **DAILY-02**: El digest es solo lectura (nivel A) — nunca ejecuta ni propone writes por sí solo
-- [ ] **DAILY-03**: Owner puede ver el digest del día en la web y pedirlo on-demand
+- [x] **DAILY-01**: Owner recibe un digest diario a hora configurable: pendientes de bandeja, snapshot Pellegrini, fallas de rutinas
+- [x] **DAILY-02**: El digest es solo lectura (nivel A) — nunca ejecuta ni propone writes por sí solo
+- [x] **DAILY-03**: Owner puede ver el digest del día en la web y pedirlo on-demand
 
 ### Intake n8n (INTAKE)
 
@@ -90,9 +90,9 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 | MEM-02 | Phase 11 — Owner Memory | Complete |
 | MEM-03 | Phase 11 — Owner Memory | Complete |
 | MEM-04 | Phase 11 — Owner Memory | Complete |
-| DAILY-01 | Phase 12 — Daily Assistant | Pending |
-| DAILY-02 | Phase 12 — Daily Assistant | Pending |
-| DAILY-03 | Phase 12 — Daily Assistant | Pending |
+| DAILY-01 | Phase 12 — Daily Assistant | Complete |
+| DAILY-02 | Phase 12 — Daily Assistant | Complete |
+| DAILY-03 | Phase 12 — Daily Assistant | Complete |
 | INTAKE-01 | Phase 13 — Intake n8n | Pending |
 | INTAKE-02 | Phase 13 — Intake n8n | Pending |
 | INTAKE-03 | Phase 13 — Intake n8n | Pending |
