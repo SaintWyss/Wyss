@@ -124,7 +124,12 @@ Plans:
   2. El owner ve, edita y borra su memoria — legible, nunca un blob opaco
   3. La memoria distingue trust tiers (owner-stated vs ingested-external); el contenido externo jamás se recuerda sin confirmación
   4. El contenido recordado se inyecta como DATO (no instrucción) en los prompts del planner — un fact con instrucciones inyectadas no altera el plan (test anti-injection)
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 11-01-PLAN.md — Fundación: MemoryFact + MemoryPort/MemoryAdmin + MemoryStore SQLite + registro import-linter
+  - [ ] 11-02-PLAN.md — Write-path: MemoryTool (tier hardcodeado) + base_level memory.remember=B + 5 conftests
+  - [ ] 11-03-PLAN.md — Anti-injection: _format_memory_safe + inyección en _draft_prompt + test MEM-04
+  - [ ] 11-04-PLAN.md — Cableado: 5ta rama executor + RPC memory.list/edit/forget en el daemon
+  - [ ] 11-05-PLAN.md — Composition root + CLI memory list/edit/rm + smoke real (human-verify)
 **Research flags**: formato de trust-tier markers (planning)
 
 #### Phase 12: Daily Assistant
