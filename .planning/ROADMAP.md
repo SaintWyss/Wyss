@@ -140,7 +140,13 @@ Plans:
   1. El owner recibe un digest diario a hora configurable con pendientes de bandeja, snapshot Pellegrini y fallas de rutinas
   2. El digest es solo lectura (nivel A) — nunca ejecuta ni propone writes por sí solo
   3. El owner ve el digest del día en la web y puede pedirlo on-demand
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 12-01-PLAN.md — Composer puro compose_digest() + seccion [digest] en config + AuditEventType.DIGEST_GENERATED [DAILY-01/02]
+- [ ] 12-02-PLAN.md — RPC digest.today (LedgerPort inyectado) + job interno del scheduler que materializa data/digests/*.md [DAILY-01/03]
+- [ ] 12-03-PLAN.md — CLI `wyss digest` (thin RPC client) + composition root (ledger real + digest job) [DAILY-01/03]
+- [ ] 12-04-PLAN.md — Checkpoint: digest real on-demand + archivo programado, solo lectura verificada [DAILY-01..03]
+**Decisiones de planning**: fallas de rutinas desde RoutineStore.last_outcome (no audit read port); ledger via core.ports.ledger.LedgerPort (independence); digest programado = job interno del scheduler (no Routine ni action type — minima superficie, MULTI-02 intacto); materializa a archivo data/digests/YYYY-MM-DD.md; web (WEB-02) llega en fase 14, fase 12 deja el RPC listo.
 
 #### Phase 13: Intake n8n
 **Goal**: Workflows n8n externos pueden postear propuestas que rutean por el gate de política hasta la bandeja, con bearer token dedicado.
