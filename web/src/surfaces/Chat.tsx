@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, WyssApiError, type AskResult, type RiskLevel } from '../api'
+import { api, WyssApiError, type AskResult, type DigestToday, type RiskLevel } from '../api'
 import { useDictado } from '../dictado'
 import { ErrorNote, ResultadoEjecucion, RiskChip, Salidas } from '../ui'
 import { Sello, type Resolucion } from '../documento'
@@ -49,7 +49,8 @@ export function Chat({ daemonAlive }: { daemonAlive: boolean }) {
   }
 
   return (
-    <section className="mx-auto flex h-full max-w-3xl flex-col">
+    <div className="mx-auto flex h-full max-w-3xl gap-6 xl:max-w-5xl">
+      <section className="flex h-full min-w-0 flex-1 flex-col">
       <div className="flex-1">
         {mensajes.length === 0 && (
           <div className="mt-16 text-center">
@@ -127,7 +128,49 @@ export function Chat({ daemonAlive }: { daemonAlive: boolean }) {
           {enviando ? '…' : 'Enviar'}
         </button>
       </form>
-    </section>
+      </section>
+      <DigestMini />
+    </div>
+  )
+}
+
+/** Resumen del digest del día, solo en pantallas anchas (≥xl). El contenido es DATO. */
+function DigestMini() {
+  const [data, setData] = useState<DigestToday | null>(null)
+  const [fallo, setFallo] = useState(false)
+
+  useEffect(() => {
+    api
+      .digestToday()
+      .then(setData)
+      .catch(() => setFallo(true))
+  }, [])
+
+  return (
+    <aside className="hidden w-72 shrink-0 xl:block">
+      <div className="sticky top-0 rounded-md border border-borde bg-papel/60 p-4">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-humo/60">
+          digest del día
+        </p>
+        {data ? (
+          <>
+            <pre className="mt-2 max-h-72 overflow-hidden whitespace-pre-wrap font-mono text-xs leading-relaxed text-hueso/90">
+              {data.markdown.split('\n').slice(0, 8).join('\n')}
+            </pre>
+            <a
+              href="#/digest"
+              className="mt-2 inline-block font-mono text-xs text-celeste underline underline-offset-2"
+            >
+              ver completo
+            </a>
+          </>
+        ) : (
+          <p className="mt-2 text-xs text-humo">
+            {fallo ? 'sin digest (¿daemon caído?)' : 'cargando…'}
+          </p>
+        )}
+      </div>
+    </aside>
   )
 }
 

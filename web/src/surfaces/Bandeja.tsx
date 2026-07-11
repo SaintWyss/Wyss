@@ -20,7 +20,7 @@ export function Bandeja({ daemonAlive }: { daemonAlive: boolean }) {
   useEffect(load, [load])
 
   return (
-    <section className="mx-auto max-w-3xl">
+    <section className="mx-auto max-w-3xl xl:max-w-5xl">
       <div className="flex items-baseline justify-between">
         <h2 className="display text-xl font-semibold">Bandeja</h2>
         <button
@@ -34,7 +34,7 @@ export function Bandeja({ daemonAlive }: { daemonAlive: boolean }) {
         Propuestas que esperan tu decisión. Nada se ejecuta sin tu sello.
       </p>
 
-      <div className="mt-6 flex flex-col gap-4">
+      <div className="mt-6 grid gap-4 xl:grid-cols-2">
         {error && <ErrorNote error={error.message} accion={error.accion} />}
         {pending !== null && pending.length === 0 && !error && (
           <EmptyState

@@ -5,16 +5,38 @@ import { Chat } from './surfaces/Chat'
 import { Buscar } from './surfaces/Buscar'
 import { Finanzas } from './surfaces/Finanzas'
 import { Auditoria } from './surfaces/Auditoria'
+import { Rutinas } from './surfaces/Rutinas'
+import { Digest } from './surfaces/Digest'
+import { Memoria } from './surfaces/Memoria'
 
-type Surface = 'chat' | 'bandeja' | 'buscar' | 'pellegrini' | 'auditoria'
+type Surface =
+  | 'chat'
+  | 'bandeja'
+  | 'rutinas'
+  | 'digest'
+  | 'buscar'
+  | 'memoria'
+  | 'pellegrini'
+  | 'auditoria'
 
 // Los agentes van con su nombre propio (Pellegrini = finanzas; Belgrano vendrá después).
 const SURFACES: { id: Surface; label: string; rol?: string }[] = [
   { id: 'chat', label: 'Chat' },
   { id: 'bandeja', label: 'Bandeja' },
+  { id: 'rutinas', label: 'Rutinas' },
+  { id: 'digest', label: 'Digest' },
   { id: 'buscar', label: 'Buscar' },
+  { id: 'memoria', label: 'Memoria' },
   { id: 'pellegrini', label: 'Pellegrini', rol: 'finanzas' },
   { id: 'auditoria', label: 'Auditoría' },
+]
+
+// Sidebar desktop: los 8 destinos agrupados por intención (UI-SPEC fase 14).
+const GRUPOS: { titulo: string; items: Surface[] }[] = [
+  { titulo: 'Operar', items: ['chat', 'bandeja'] },
+  { titulo: 'Automatizar', items: ['rutinas', 'digest'] },
+  { titulo: 'Saber', items: ['buscar', 'memoria'] },
+  { titulo: 'Cuentas', items: ['pellegrini', 'auditoria'] },
 ]
 
 /** Lanza la app de escritorio Borjes vía el bridge (ruta fija, sin argumentos). */
@@ -136,41 +158,51 @@ export default function App() {
 
   return (
     <div className="flex h-dvh">
-      <aside className="hidden w-44 shrink-0 flex-col border-r border-borde px-4 py-5 md:flex">
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-borde px-4 py-5 lg:flex">
         <h1 className="display text-lg font-bold tracking-tight">WYSS</h1>
         <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-humo">
           mesa de despacho
         </p>
-        <nav className="mt-8 flex flex-col gap-1" aria-label="Secciones">
-          {SURFACES.map(({ id, label, rol }) => {
-            const active = surface === id
-            return (
-              <button
-                key={id}
-                onClick={() => navigate(id)}
-                aria-current={active ? 'page' : undefined}
-                className={`flex items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-sm transition-colors ${
-                  active
-                    ? 'bg-papel text-hueso shadow-[inset_2px_0_0_0_var(--color-celeste)]'
-                    : 'text-humo hover:bg-papel/60 hover:text-hueso'
-                }`}
-              >
-                <span>
-                  {label}
-                  {rol && (
-                    <span className="ml-1.5 font-mono text-[10px] text-humo/70">
-                      {rol}
-                    </span>
-                  )}
-                </span>
-                {id === 'bandeja' && pendingCount > 0 && (
-                  <span className="rounded-full bg-celeste px-1.5 font-mono text-[10px] font-bold text-tinta">
-                    {pendingCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+        <nav className="mt-7 flex flex-col gap-4" aria-label="Secciones">
+          {GRUPOS.map(({ titulo, items }) => (
+            <div key={titulo}>
+              <p className="mb-1 px-2.5 font-mono text-[10px] uppercase tracking-widest text-humo/60">
+                {titulo}
+              </p>
+              <div className="flex flex-col gap-0.5">
+                {items.map((id) => {
+                  const { label, rol } = SURFACES.find((s) => s.id === id)!
+                  const active = surface === id
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => navigate(id)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`flex items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-sm transition-colors ${
+                        active
+                          ? 'bg-papel text-hueso shadow-[inset_2px_0_0_0_var(--color-celeste)]'
+                          : 'text-humo hover:bg-papel/60 hover:text-hueso'
+                      }`}
+                    >
+                      <span>
+                        {label}
+                        {rol && (
+                          <span className="ml-1.5 font-mono text-[10px] text-humo/70">
+                            {rol}
+                          </span>
+                        )}
+                      </span>
+                      {id === 'bandeja' && pendingCount > 0 && (
+                        <span className="rounded-full bg-celeste px-1.5 font-mono text-[10px] font-bold text-tinta">
+                          {pendingCount}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
         <div className="mt-auto">
           <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-humo/60">
@@ -202,7 +234,7 @@ export default function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-borde px-4 py-2.5 md:px-6">
           <div className="flex items-center gap-2 text-sm">
-            <span className="display mr-1 text-sm font-bold tracking-tight md:hidden">
+            <span className="display mr-1 text-sm font-bold tracking-tight lg:hidden">
               WYSS
             </span>
             {bridgeError !== null ? (
@@ -243,14 +275,17 @@ export default function App() {
         <main className="min-w-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
           {surface === 'chat' && <Chat daemonAlive={daemonAlive === true} />}
           {surface === 'bandeja' && <Bandeja daemonAlive={daemonAlive === true} />}
+          {surface === 'rutinas' && <Rutinas />}
+          {surface === 'digest' && <Digest />}
           {surface === 'buscar' && <Buscar kbs={kbs} />}
+          {surface === 'memoria' && <Memoria />}
           {surface === 'pellegrini' && <Finanzas />}
           {surface === 'auditoria' && <Auditoria />}
         </main>
 
         <nav
           aria-label="Secciones"
-          className="flex shrink-0 border-t border-borde bg-tinta pb-[env(safe-area-inset-bottom)] md:hidden"
+          className="flex shrink-0 overflow-x-auto border-t border-borde bg-tinta pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
           {SURFACES.map(({ id, label }) => {
             const active = surface === id
@@ -259,7 +294,7 @@ export default function App() {
                 key={id}
                 onClick={() => navigate(id)}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex-1 px-1 py-2.5 text-center text-[11px] transition-colors ${
+                className={`relative min-w-[72px] flex-1 whitespace-nowrap px-2 py-2.5 text-center text-[11px] transition-colors ${
                   active
                     ? 'text-hueso shadow-[inset_0_2px_0_0_var(--color-celeste)]'
                     : 'text-humo'
