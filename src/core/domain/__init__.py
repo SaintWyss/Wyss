@@ -40,6 +40,7 @@ from core.domain.knowledge import (
     Vector,
 )
 from core.domain.ledger import TipoTransaccion, Transaccion
+from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
 from core.domain.policy import (
     DEFAULT_SENSITIVE_DIRS,
@@ -77,6 +78,7 @@ __all__ = [
     "IndexIntegrityError",
     "IngestRunResult",
     "IngestSettings",
+    "MemoryFact",
     "ModelRequest",
     "ModelResponse",
     "OrchestratorUnavailable",

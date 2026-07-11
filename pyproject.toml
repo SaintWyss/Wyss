@@ -51,6 +51,7 @@ packages = [
   "src/audit",
   "src/bootstrap",
   "src/ledger",
+  "src/memory",
   "src/notion",
 ]
 
@@ -90,6 +91,7 @@ root_packages = [
   "audit",
   "bootstrap",
   "ledger",
+  "memory",
   "notion",
 ]
 
@@ -107,6 +109,7 @@ forbidden_modules = [
   "audit",
   "bootstrap",
   "ledger",
+  "memory",
   "notion",
 ]
 
@@ -121,5 +124,6 @@ modules = [
   "execution",
   "audit",
   "ledger",
+  "memory",
   "notion",
 ]
