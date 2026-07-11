@@ -1,0 +1,2 @@
+"""Tests del adapter Notion."""
+
