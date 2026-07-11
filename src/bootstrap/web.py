@@ -97,6 +97,14 @@ class ConfirmBody(BaseModel):
     approve: bool
 
 
+class MemoryEditBody(BaseModel):
+    """Body de POST /api/memory/{fact_id}."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
+
+
 class TransaccionBody(BaseModel):
     """Body de POST /api/fin/transaccion."""
 
@@ -467,6 +475,162 @@ def build_web_app(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 error="el daemon no está corriendo",
                 accion="levantalo con: wyss start",
+            ) from exc
+
+    @web_app.get("/api/routines")
+    async def api_routines() -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(_socket_path(settings), "routine.list", {})
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.post("/api/routines/{routine_id}/pause")
+    async def api_routine_pause(routine_id: str) -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(
+                _socket_path(settings),
+                "routine.pause",
+                {"routine_id": routine_id},
+            )
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.post("/api/routines/{routine_id}/resume")
+    async def api_routine_resume(routine_id: str) -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(
+                _socket_path(settings),
+                "routine.resume",
+                {"routine_id": routine_id},
+            )
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.delete("/api/routines/{routine_id}")
+    async def api_routine_delete(routine_id: str) -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(
+                _socket_path(settings),
+                "routine.delete",
+                {"routine_id": routine_id},
+            )
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.get("/api/digest/today")
+    async def api_digest_today() -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(_socket_path(settings), "digest.today", {})
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.get("/api/memory")
+    async def api_memory() -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(_socket_path(settings), "memory.list", {})
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.post("/api/memory/{fact_id}")
+    async def api_memory_edit(fact_id: str, body: MemoryEditBody) -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(
+                _socket_path(settings),
+                "memory.edit",
+                {"fact_id": fact_id, "value": body.value},
+            )
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
+            ) from exc
+
+    @web_app.delete("/api/memory/{fact_id}")
+    async def api_memory_forget(fact_id: str) -> dict[str, Any]:
+        try:
+            return await _json_rpc_call(
+                _socket_path(settings),
+                "memory.forget",
+                {"fact_id": fact_id},
+            )
+        except (FileNotFoundError, ConnectionRefusedError, PermissionError) as exc:
+            raise WebError(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                error="el daemon no está corriendo",
+                accion="levantalo con: wyss start",
+            ) from exc
+        except RuntimeError as exc:
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la operación: {exc}",
+                accion="revisá los datos o reintentá",
             ) from exc
 
     web_app.mount(

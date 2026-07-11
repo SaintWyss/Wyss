@@ -94,6 +94,19 @@ def _json(response: Response) -> dict[str, Any]:
     return cast(dict[str, Any], data)
 
 
+async def _request(
+    client: httpx.AsyncClient,
+    method: str,
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+    json_body: dict[str, object] | None = None,
+) -> Response:
+    if json_body is None:
+        return await client.request(method, path, headers=headers)
+    return await client.request(method, path, headers=headers, json=json_body)
+
+
 def _plan(task_id: str = "task-web") -> Plan:
     return Plan(
         task_id=task_id,
@@ -456,6 +469,229 @@ async def test_ask_and_confirm_use_daemon_contract(
         ("confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}),
         ("confirm", {"pending_id": pending_id, "response": ""}),
     ]
+
+
+_MANAGEMENT_ROUTE_CASES: tuple[
+    tuple[
+        str,
+        str,
+        dict[str, object] | None,
+        str,
+        dict[str, object],
+        dict[str, object],
+    ],
+    ...,
+] = (
+    (
+        "GET",
+        "/api/routines",
+        None,
+        "routine.list",
+        {},
+        {
+            "routines": [
+                {
+                    "id": "r1",
+                    "name": "Digest",
+                    "schedule": {"kind": "interval", "expr": "120s"},
+                    "status": "active",
+                    "catch_up": True,
+                    "last_fired_at": None,
+                    "last_outcome": "executed",
+                }
+            ]
+        },
+    ),
+    (
+        "POST",
+        "/api/routines/r1/pause",
+        None,
+        "routine.pause",
+        {"routine_id": "r1"},
+        {"ok": True},
+    ),
+    (
+        "POST",
+        "/api/routines/r1/resume",
+        None,
+        "routine.resume",
+        {"routine_id": "r1"},
+        {"ok": True},
+    ),
+    (
+        "DELETE",
+        "/api/routines/r1",
+        None,
+        "routine.delete",
+        {"routine_id": "r1"},
+        {"ok": True},
+    ),
+    (
+        "GET",
+        "/api/digest/today",
+        None,
+        "digest.today",
+        {},
+        {"markdown": "# Digest\n\nHola", "generated_at": "2026-07-11T08:00:00-03:00"},
+    ),
+    (
+        "GET",
+        "/api/memory",
+        None,
+        "memory.list",
+        {},
+        {
+            "facts": [
+                {
+                    "id": "f1",
+                    "category": "profile",
+                    "value": "usa Python",
+                    "tier": "core",
+                    "source": "owner",
+                    "created_at": "2026-07-01T10:00:00-03:00",
+                    "updated_at": "2026-07-02T10:00:00-03:00",
+                }
+            ]
+        },
+    ),
+    (
+        "POST",
+        "/api/memory/f1",
+        {"value": "usa Python 3.12"},
+        "memory.edit",
+        {"fact_id": "f1", "value": "usa Python 3.12"},
+        {"ok": True},
+    ),
+    (
+        "DELETE",
+        "/api/memory/f1",
+        None,
+        "memory.forget",
+        {"fact_id": "f1"},
+        {"ok": True},
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json_body", "expected_method", "expected_params", "rpc_result"),
+    _MANAGEMENT_ROUTE_CASES,
+)
+async def test_management_routes_proxy_daemon_contract(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    json_body: dict[str, object] | None,
+    expected_method: str,
+    expected_params: dict[str, object],
+    rpc_result: dict[str, object],
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def fake_rpc(
+        _socket_path: Path,
+        rpc_method: str,
+        params: dict[str, object],
+    ) -> dict[str, Any]:
+        calls.append((rpc_method, params))
+        return rpc_result
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+
+    response = await _request(
+        client,
+        method,
+        path,
+        headers=_AUTH,
+        json_body=json_body,
+    )
+
+    assert response.status_code == 200
+    assert _json(response) == rpc_result
+    assert calls == [(expected_method, expected_params)]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json_body", "_expected_method", "_expected_params", "_rpc_result"),
+    _MANAGEMENT_ROUTE_CASES,
+)
+async def test_management_routes_require_cookie(
+    client: httpx.AsyncClient,
+    method: str,
+    path: str,
+    json_body: dict[str, object] | None,
+    _expected_method: str,
+    _expected_params: dict[str, object],
+    _rpc_result: dict[str, object],
+) -> None:
+    response = await _request(client, method, path, json_body=json_body)
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json_body", "_expected_method", "_expected_params", "_rpc_result"),
+    _MANAGEMENT_ROUTE_CASES,
+)
+async def test_management_routes_report_daemon_down(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    json_body: dict[str, object] | None,
+    _expected_method: str,
+    _expected_params: dict[str, object],
+    _rpc_result: dict[str, object],
+) -> None:
+    async def fake_rpc(
+        _socket_path: Path,
+        _method: str,
+        _params: dict[str, object],
+    ) -> dict[str, Any]:
+        raise ConnectionRefusedError
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+
+    response = await _request(
+        client,
+        method,
+        path,
+        headers=_AUTH,
+        json_body=json_body,
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": "el daemon no está corriendo",
+        "accion": "levantalo con: wyss start",
+    }
+
+
+async def test_management_routes_report_daemon_runtime_error(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_rpc(
+        _socket_path: Path,
+        _method: str,
+        _params: dict[str, object],
+    ) -> dict[str, Any]:
+        raise RuntimeError("id inválido")
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+
+    response = await client.post(
+        "/api/memory/f1",
+        json={"value": "nuevo valor"},
+        headers=_AUTH,
+    )
+
+    assert response.status_code == 502
+    assert _json(response) == {
+        "error": "el daemon rechazó la operación: id inválido",
+        "accion": "revisá los datos o reintentá",
+    }
 
 
 async def test_intake_valid_bearer_calls_daemon_contract(

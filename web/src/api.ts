@@ -117,6 +117,38 @@ export interface DaemonStatus {
   alive: boolean
 }
 
+export interface Routine {
+  id: string
+  name: string
+  schedule: {
+    kind: string
+    expr: string
+  }
+  status: 'active' | 'paused' | string
+  catch_up: boolean
+  last_fired_at: string | null
+  last_outcome: string | null
+}
+
+export interface MemoryFact {
+  id: string
+  category: string
+  value: string
+  tier: string
+  source: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DigestToday {
+  markdown: string
+  generated_at: string
+}
+
+export interface OkResult {
+  ok: boolean
+}
+
 /** Error con causa + acción, shape estable del bridge. */
 export class WyssApiError extends Error {
   accion: string
@@ -160,6 +192,30 @@ export const api = {
   status: () => apiFetch<{ kbs: KbFreshness[] }>('/api/status'),
   daemon: () => apiFetch<DaemonStatus>('/api/daemon'),
   pending: () => apiFetch<{ pending: Pending[] }>('/api/pending'),
+  routines: () => apiFetch<{ routines: Routine[] }>('/api/routines'),
+  pauseRoutine: (id: string) =>
+    apiFetch<OkResult>(`/api/routines/${encodeURIComponent(id)}/pause`, {
+      method: 'POST',
+    }),
+  resumeRoutine: (id: string) =>
+    apiFetch<OkResult>(`/api/routines/${encodeURIComponent(id)}/resume`, {
+      method: 'POST',
+    }),
+  deleteRoutine: (id: string) =>
+    apiFetch<OkResult>(`/api/routines/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  digestToday: () => apiFetch<DigestToday>('/api/digest/today'),
+  memoryList: () => apiFetch<{ facts: MemoryFact[] }>('/api/memory'),
+  editMemory: (id: string, value: string) =>
+    apiFetch<OkResult>(`/api/memory/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      body: JSON.stringify({ value }),
+    }),
+  forgetMemory: (id: string) =>
+    apiFetch<OkResult>(`/api/memory/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
   search: (q: string, kb?: string, limit = 10) => {
     const params = new URLSearchParams({ q, limit: String(limit) })
     if (kb) params.set('kb', kb)
