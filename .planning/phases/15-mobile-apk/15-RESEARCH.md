@@ -301,14 +301,14 @@ async def api_pair() -> dict[str, str]:
 
 **If this table is empty:** N/A — see entries above; all four should be confirmed with a device-level spike before the plan locks in the exact native code shape.
 
-## Open Questions
+## Open Questions (RESOLVED — 2026-07-11)
 
 1. **Does `@capacitor-mlkit/barcode-scanning`'s camera permission flow work smoothly from within a bundled-local (non-network) WebView context, or does it need to be a fully native Activity instead?**
    - What we know: The plugin is designed to work in any Capacitor WebView context per its own docs; peer-dep compatible with Capacitor 7.
    - What's unclear: Whether Android's runtime camera-permission dialog interacts cleanly with a WebView that has no `server.url` (some Capacitor plugins assume a live web server context for certain lifecycle callbacks).
    - Recommendation: Spike this first — `npx cap add android`, add the plugin, get a live QR scan working against a hardcoded fingerprint before writing the full pairing/pinning plugin. This is the single highest-value 30-minute verification before planning locks the task breakdown.
 
-2. **Should the app persist pairing state across app reinstalls (i.e., should the fingerprint+URL survive `adb uninstall` + reinstall), or is re-pairing on every fresh install acceptable?**
+2. **Should the app persist pairing state across app reinstalls (i.e., should the fingerprint+URL survive `adb uninstall` + reinstall), or is re-pairing on every fresh install acceptable?** — RESOLVED: re-pairing tras reinstalación aceptado para v1.0
    - What we know: `SharedPreferences` data is wiped on uninstall by default (no Android Auto Backup configured for this data in the plan above).
    - What's unclared: Owner's UX expectation for reinstalls during development iteration (likely frequent, given sideload/no Play Store).
    - Recommendation: Accept re-pairing on reinstall for v1.0 (matches APK-06's "re-pairing is a normal, expected flow" framing) — do not add Android Auto Backup complexity for this.
