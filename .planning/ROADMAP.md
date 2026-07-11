@@ -171,7 +171,12 @@ Plans:
   2. El owner ve el digest diario en la web
   3. El owner edita su memoria desde la web
   4. La UI desktop recibe un glow-up cohesivo de página entera: aprovecha la pantalla grande, jerarquía clara, sin huecos de layout
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 14-01-PLAN.md — Endpoints bridge + api.ts client + tests backend (codex)
+- [ ] 14-02-PLAN.md — Superficie Rutinas (claude)
+- [ ] 14-03-PLAN.md — Superficies Digest + Memoria (claude)
+- [ ] 14-04-PLAN.md — Nav shell agrupada + glow-up + gates front (claude/codex)
+- [ ] 14-05-PLAN.md — Smoke visual desktop + celu (checkpoint owner)
 **UI hint**: yes
 
 #### Phase 15: Mobile APK
