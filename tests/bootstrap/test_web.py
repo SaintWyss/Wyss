@@ -16,6 +16,7 @@ from httpx import Response
 import bootstrap.web as web_mod
 from bootstrap.cli import _json_rpc_call
 from bootstrap.config import WyssSettings, load_settings
+from bootstrap.tls import ensure_certificate, fingerprint_sha256
 from bootstrap.web import build_web_app
 from core.domain.plan import Action, Plan
 from core.domain.policy import PolicyDecision
@@ -279,6 +280,48 @@ async def test_without_tls_cookie_not_secure(client: httpx.AsyncClient) -> None:
 
     assert redirect.status_code == 302
     assert "secure" not in redirect.headers["set-cookie"].lower()
+
+
+async def test_api_pair_requires_tls_and_cookie(settings: WyssSettings) -> None:
+    cert, _key = ensure_certificate(settings.data_dir / "tls", [_LAN_IP])
+    pair_app = build_web_app(
+        settings,
+        token=_TOKEN,
+        lan_hosts=frozenset({_LAN_IP}),
+        tls=True,
+        lan_ip=_LAN_IP,
+        port=7777,
+        cert=cert,
+    )
+    pair_transport = httpx.ASGITransport(app=pair_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=pair_transport,
+        base_url=f"https://{_LAN_IP}:7777",
+    ) as pair_client:
+        response = await pair_client.get("/api/pair", headers=_AUTH)
+        assert response.status_code == 200
+        assert _json(response) == {
+            "v": 1,
+            "url": f"https://{_LAN_IP}:7777",
+            "fp": fingerprint_sha256(cert),
+            "token": _TOKEN,
+        }
+
+        unauthenticated = await pair_client.get("/api/pair")
+        assert unauthenticated.status_code == 401
+
+    local_app = build_web_app(settings, token=_TOKEN, lan_ip=_LAN_IP, port=7777, cert=cert)
+    local_transport = httpx.ASGITransport(app=local_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=local_transport,
+        base_url="http://127.0.0.1",
+    ) as local_client:
+        rejected = await local_client.get("/api/pair", headers=_AUTH)
+        assert rejected.status_code == 400
+        assert _json(rejected) == {
+            "error": "pairing requiere --lan --tls",
+            "accion": "reiniciá con: wyss web --lan --tls",
+        }
 
 
 async def test_origin_check(
@@ -979,6 +1022,30 @@ async def test_lan_origin_permitido_y_ajeno(lan_client: httpx.AsyncClient) -> No
     )
     assert rejected.status_code == 403
     assert _json(rejected)["error"] == "origen no permitido"
+
+
+async def test_origin_localhost_collision_still_rejected(settings: WyssSettings) -> None:
+    lan_app = build_web_app(
+        settings,
+        token=_TOKEN,
+        lan_hosts=frozenset({_LAN_IP}),
+        tls=True,
+    )
+    transport = httpx.ASGITransport(app=lan_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=f"https://{_LAN_IP}:7777",
+    ) as lan_client:
+        rejected = await lan_client.get(
+            "/api/status",
+            headers={
+                **_AUTH,
+                "Origin": "https://localhost",
+                "Sec-Fetch-Site": "cross-site",
+            },
+        )
+        assert rejected.status_code == 403
+        assert _json(rejected)["error"] == "origen no permitido"
 
 
 async def test_default_sigue_solo_localhost(client: httpx.AsyncClient) -> None:

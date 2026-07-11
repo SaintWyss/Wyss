@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Producto final — app móvil + asistente diario
 status: executing
-last_updated: "2026-07-11T14:00:22.846Z"
-last_activity: 2026-07-11 -- Phase 14 execution started
+last_updated: "2026-07-11T22:13:13.636Z"
+last_activity: 2026-07-11 -- Phase 15 execution started
 progress:
   total_phases: 7
-  completed_phases: 5
-  total_plans: 26
-  completed_plans: 21
-  percent: 71
+  completed_phases: 6
+  total_plans: 32
+  completed_plans: 26
+  percent: 81
 ---
 
 # Wyss — State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** Encontrar cualquier cosa en 2 TB en segundos + delegar tareas a agentes con control total y auditoría de todo.
-**Current focus:** Phase 14 — Web PC Polish
+**Current focus:** Phase 15 — Mobile APK
 
 ## Current Position
 
-Phase: 14 (Web PC Polish) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 14
-Last activity: 2026-07-11 -- Phase 14 execution started
+Phase: 15 (Mobile APK) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 15
+Last activity: 2026-07-11 -- Phase 15 execution started
 
 ## v1.0 Roadmap (Phases 9-15)
 

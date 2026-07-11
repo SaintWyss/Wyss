@@ -39,6 +39,7 @@ from bootstrap.cli import (
     query_audit_events,
 )
 from bootstrap.config import WyssSettings
+from bootstrap.tls import fingerprint_sha256
 from core.domain import Query, TipoTransaccion, Transaccion
 from core.domain.audit import ActorType
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
@@ -124,6 +125,9 @@ def build_web_app(
     intake_token: str | None = None,
     lan_hosts: frozenset[str] = frozenset(),
     tls: bool = False,
+    lan_ip: str | None = None,
+    port: int = 7777,
+    cert: Path | None = None,
 ) -> FastAPI:
     """Construye la app HTTP local autenticada para la UI web.
 
@@ -144,6 +148,7 @@ def build_web_app(
     @web_app.middleware("http")
     async def local_security_middleware(request: Request, call_next: ASGIHandler) -> Response:
         host = request.headers.get("host", "")
+        host_name = _host_name(host)
         if not _is_allowed_host(host, allowed_hosts):
             _LOG.warning(
                 "403 host no permitido: Host=%r (permitidos: %s) en %s %s",
@@ -157,7 +162,13 @@ def build_web_app(
 
         origin = request.headers.get("origin")
         sec_fetch_site = request.headers.get("sec-fetch-site", "")
-        if not _origin_allowed(origin, sec_fetch_site, allowed_hosts, allowed_scheme):
+        if not _origin_allowed(
+            origin,
+            sec_fetch_site,
+            host_name,
+            allowed_hosts,
+            allowed_scheme,
+        ):
             _LOG.warning(
                 "403 origen no permitido: Origin=%r Sec-Fetch-Site=%r "
                 "(esquema esperado %s, hosts: %s) en %s %s",
@@ -254,6 +265,21 @@ def build_web_app(
         finally:
             if store is not None:
                 store.close()
+
+    @web_app.get("/api/pair")
+    async def api_pair() -> dict[str, object]:
+        if lan_ip is None or not tls or cert is None:
+            raise WebError(
+                status.HTTP_400_BAD_REQUEST,
+                error="pairing requiere --lan --tls",
+                accion="reiniciá con: wyss web --lan --tls",
+            )
+        return {
+            "v": 1,
+            "url": f"https://{lan_ip}:{port}",
+            "fp": fingerprint_sha256(cert),
+            "token": token,
+        }
 
     @web_app.post("/api/apps/borjes")
     async def api_borjes() -> dict[str, object]:
@@ -654,10 +680,14 @@ def _daemon_down_response() -> JSONResponse:
 
 
 def _is_allowed_host(value: str, allowed: frozenset[str]) -> bool:
+    host = _host_name(value)
+    return host is not None and host in allowed
+
+
+def _host_name(value: str) -> str | None:
     if not value:
-        return False
-    host = value.rsplit("@", maxsplit=1)[-1].split(":", maxsplit=1)[0].lower()
-    return host in allowed
+        return None
+    return value.rsplit("@", maxsplit=1)[-1].split(":", maxsplit=1)[0].lower()
 
 
 def _is_allowed_origin(value: str, allowed: frozenset[str], scheme: str) -> bool:
@@ -666,7 +696,11 @@ def _is_allowed_origin(value: str, allowed: frozenset[str], scheme: str) -> bool
 
 
 def _origin_allowed(
-    origin: str | None, sec_fetch_site: str, allowed: frozenset[str], scheme: str
+    origin: str | None,
+    sec_fetch_site: str,
+    host_name: str | None,
+    allowed: frozenset[str],
+    scheme: str,
 ) -> bool:
     """Política de Origin del bridge.
 
@@ -685,6 +719,9 @@ def _origin_allowed(
     if origin is None:
         return True
     if _is_allowed_origin(origin, allowed, scheme):
+        origin_host = urlsplit(origin).hostname
+        if origin_host in {"127.0.0.1", "localhost"}:
+            return host_name in {"127.0.0.1", "localhost"}
         return True
     return origin == "null" and sec_fetch_site == "same-origin"
 

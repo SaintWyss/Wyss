@@ -1278,6 +1278,7 @@ def web(
     scheme = "https" if tls else "http"
     ssl_certfile: str | None = None
     ssl_keyfile: str | None = None
+    cert: Path | None = None
     tls_note = ""
     if tls:
         from bootstrap.tls import ensure_certificate, fingerprint_sha256
@@ -1315,7 +1316,15 @@ def web(
             )
         )
         uvicorn.run(
-            build_web_app(settings, token=token, intake_token=intake_token, tls=tls),
+            build_web_app(
+                settings,
+                token=token,
+                intake_token=intake_token,
+                tls=tls,
+                lan_ip=lan_ip,
+                port=port,
+                cert=cert,
+            ),
             host="127.0.0.1",
             port=port,
             log_level="warning",
@@ -1353,6 +1362,9 @@ def web(
             intake_token=intake_token,
             lan_hosts=frozenset({lan_ip}),
             tls=tls,
+            lan_ip=lan_ip,
+            port=port,
+            cert=cert,
         ),
         host="0.0.0.0",  # opt-in explícito (--lan); Host allowlist + token gatean
         port=port,
