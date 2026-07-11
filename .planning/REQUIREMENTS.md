@@ -24,10 +24,10 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### Memoria del owner (MEM)
 
-- [ ] **MEM-01**: Owner puede decirle a wyss que recuerde un hecho/preferencia y persiste (write = acción gateada ≥B)
-- [ ] **MEM-02**: Owner puede ver, editar y borrar su memoria — legible, nunca blob opaco
-- [ ] **MEM-03**: La memoria distingue trust tiers (owner-stated vs ingested-external); contenido externo jamás se recuerda sin confirmación
-- [ ] **MEM-04**: El contenido recordado se inyecta como DATO (no instrucción) en los prompts del planner — anti prompt-injection laundering
+- [x] **MEM-01**: Owner puede decirle a wyss que recuerde un hecho/preferencia y persiste (write = acción gateada ≥B)
+- [x] **MEM-02**: Owner puede ver, editar y borrar su memoria — legible, nunca blob opaco
+- [x] **MEM-03**: La memoria distingue trust tiers (owner-stated vs ingested-external); contenido externo jamás se recuerda sin confirmación
+- [x] **MEM-04**: El contenido recordado se inyecta como DATO (no instrucción) en los prompts del planner — anti prompt-injection laundering
 
 ### Daily Assistant (DAILY)
 
@@ -86,10 +86,10 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 | NOTION-02 | Phase 10 — Notion Adapter | Complete |
 | NOTION-03 | Phase 10 — Notion Adapter | Complete |
 | NOTION-04 | Phase 10 — Notion Adapter | Complete |
-| MEM-01 | Phase 11 — Owner Memory | Pending |
-| MEM-02 | Phase 11 — Owner Memory | Pending |
-| MEM-03 | Phase 11 — Owner Memory | Pending |
-| MEM-04 | Phase 11 — Owner Memory | Pending |
+| MEM-01 | Phase 11 — Owner Memory | Complete |
+| MEM-02 | Phase 11 — Owner Memory | Complete |
+| MEM-03 | Phase 11 — Owner Memory | Complete |
+| MEM-04 | Phase 11 — Owner Memory | Complete |
 | DAILY-01 | Phase 12 — Daily Assistant | Pending |
 | DAILY-02 | Phase 12 — Daily Assistant | Pending |
 | DAILY-03 | Phase 12 — Daily Assistant | Pending |
