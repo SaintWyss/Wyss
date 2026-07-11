@@ -37,9 +37,9 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### Intake n8n (INTAKE)
 
-- [ ] **INTAKE-01**: Un workflow n8n puede postear una propuesta a `POST /api/intake` con bearer token dedicado (nunca la cookie del pairing)
-- [ ] **INTAKE-02**: Toda propuesta de intake pasa por la política y cae a la bandeja como B/C — jamás auto-ejecuta
-- [ ] **INTAKE-03**: El endpoint tiene rate limit propio y rechaza sin token válido (401 auditado, sin loguear el token)
+- [x] **INTAKE-01**: Un workflow n8n puede postear una propuesta a `POST /api/intake` con bearer token dedicado (nunca la cookie del pairing)
+- [x] **INTAKE-02**: Toda propuesta de intake pasa por la política y cae a la bandeja como B/C — jamás auto-ejecuta
+- [x] **INTAKE-03**: El endpoint tiene rate limit propio y rechaza sin token válido (401 auditado, sin loguear el token)
 
 ### Web PC (WEB)
 
@@ -93,9 +93,9 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 | DAILY-01 | Phase 12 — Daily Assistant | Complete |
 | DAILY-02 | Phase 12 — Daily Assistant | Complete |
 | DAILY-03 | Phase 12 — Daily Assistant | Complete |
-| INTAKE-01 | Phase 13 — Intake n8n | Pending |
-| INTAKE-02 | Phase 13 — Intake n8n | Pending |
-| INTAKE-03 | Phase 13 — Intake n8n | Pending |
+| INTAKE-01 | Phase 13 — Intake n8n | Complete |
+| INTAKE-02 | Phase 13 — Intake n8n | Complete |
+| INTAKE-03 | Phase 13 — Intake n8n | Complete |
 | WEB-01 | Phase 14 — Web PC Polish | Pending |
 | WEB-02 | Phase 14 — Web PC Polish | Pending |
 | WEB-03 | Phase 14 — Web PC Polish | Pending |

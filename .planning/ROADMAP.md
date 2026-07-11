@@ -23,7 +23,7 @@
 - [x] **Phase 10: Notion Adapter** - Leer/escribir Notion como acciones gateadas
 - [x] **Phase 11: Owner Memory** - Memoria persistente, editable y trust-tiered
 - [x] **Phase 12: Daily Assistant** - Digest diario proactivo (solo lectura)
-- [ ] **Phase 13: Intake n8n** - Webhook externo → propuesta → bandeja con bearer token
+- [x] **Phase 13: Intake n8n** - Webhook externo → propuesta → bandeja con bearer token
 - [ ] **Phase 14: Web PC Polish** - Glow-up desktop + superficies de rutinas/digest/memoria
 - [ ] **Phase 15: Mobile APK** - Capacitor + pairing QR + cert pinning TOFU
 
