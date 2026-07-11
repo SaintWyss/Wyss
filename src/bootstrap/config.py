@@ -44,6 +44,7 @@ _GATEWAY_ENV_KEYS: tuple[str, ...] = (
     "LITELLM_MASTER_KEY",
     "GOOGLE_API_KEY",
     "OPENAI_API_KEY",
+    "NOTION_TOKEN",
 )
 
 # Providers que `bootstrap.gateway.build_gateway` sabe construir. Un tier que apunte a otro
@@ -61,12 +62,16 @@ _BASE_LEVELS: dict[str, RiskLevel] = {
     "git.status": RiskLevel.A,
     "git.log": RiskLevel.A,
     "git.diff": RiskLevel.A,
+    "notion.read_page": RiskLevel.A,
+    "notion.query_database": RiskLevel.A,
     "file.move": RiskLevel.B,
     "file.rename": RiskLevel.B,
     "file.create": RiskLevel.C,
     "file.write": RiskLevel.C,
     "file.delete": RiskLevel.C,
     "shell.run": RiskLevel.C,
+    "notion.create_page": RiskLevel.C,
+    "notion.update_page": RiskLevel.C,
     # Acciones de dominio financiero (Fase 8). Confirmado contra docs/10 §7: ninguna
     # escritura financiera es nivel D (§7 enumera las prohibiciones D y no las incluye).
     # query = lectura → A; record = mutación owner-instruida → B (segunda muralla, no D).

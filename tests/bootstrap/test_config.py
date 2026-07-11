@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from bootstrap.config import load_settings
 from core.domain.config import WyssSettings
 from core.domain.errors import ConfigError
+from core.domain.risk import RiskLevel
 from core.policy.builtin_deny import BUILTIN_DENY
 
 
@@ -112,3 +113,25 @@ def test_no_pydantic_in_settings(valid_config: Path) -> None:
     assert not isinstance(settings, BaseModel)
     assert not isinstance(settings.policy, BaseModel)
     assert type(settings).__name__ == "WyssSettings"
+
+
+def test_notion_token_entra_en_gateway_env_values(
+    valid_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """NOTION-04: el valor de NOTION_TOKEN queda disponible para el minimizer."""
+    secret = "secret_notion_token_de_test_abcdefgh"
+    monkeypatch.setenv("NOTION_TOKEN", secret)
+
+    settings = load_settings(valid_config)
+
+    assert secret in settings.gateway.env_values
+
+
+def test_notion_base_levels_en_config(valid_config: Path) -> None:
+    """NOTION-01/02: bootstrap registra lecturas A y escrituras C."""
+    settings = load_settings(valid_config)
+
+    assert settings.policy.base_levels["notion.read_page"] is RiskLevel.A
+    assert settings.policy.base_levels["notion.query_database"] is RiskLevel.A
+    assert settings.policy.base_levels["notion.create_page"] is RiskLevel.C
+    assert settings.policy.base_levels["notion.update_page"] is RiskLevel.C

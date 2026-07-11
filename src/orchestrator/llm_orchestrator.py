@@ -29,6 +29,11 @@ _ACTION_TYPES = (
     "git.log",
     "git.diff",
     "knowledge.query",
+    # Notion (Fase 10): si faltan acá, el planner tiende a degradar a shell.run.
+    "notion.read_page",
+    "notion.query_database",
+    "notion.create_page",
+    "notion.update_page",
     "finance.query",
     "finance.record",
 )
@@ -115,6 +120,9 @@ def _draft_prompt(instruction: str, intent: IntentClassification) -> str:
         "así que no inventes types. Para leer/listar/inspeccionar usá los types "
         "específicos (file.read/list/stat, git.status/log/diff), NUNCA shell.run: "
         "el shell escala el riesgo sin necesidad.\n"
+        "Para Notion, usá notion.read_page/notion.query_database para leer páginas o "
+        "bases por ID o URL (nivel A), y notion.create_page/notion.update_page para "
+        "escrituras (nivel C con confirmación); nunca shell.run para Notion.\n"
         "Rúbrica de estimated_risk (la política determinística puede SUBIR tu estimación, "
         "nunca bajarla — no sobreestimes):\n"
         "A = solo lectura/diagnóstico (read, list, stat, git status/log/diff).\n"

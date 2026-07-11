@@ -41,6 +41,16 @@ def test_env_value_presente_bloquea_sin_filtrar_el_valor() -> None:
     assert secreto not in exc_info.value.pattern_name
 
 
+def test_notion_token_env_value_bloquea_por_substring() -> None:
+    """NOTION-04: NOTION_TOKEN via env_values no puede viajar hacia un LLM."""
+    notion_token = "secret_notion_token_de_test_1234567890"
+    m = ContextMinimizer(env_values=frozenset({notion_token}), config_patterns=())
+    with pytest.raises(SecretDetected) as exc_info:
+        m.scan(f"consultar Notion con token {notion_token}")
+    assert exc_info.value.pattern_name == "env_value"
+    assert notion_token not in str(exc_info.value)
+
+
 def test_config_patterns_agrega_no_reemplaza() -> None:
     """Un patrón extra por config bloquea su match — config AGREGA a los built-ins (D-21)."""
     custom = (("custom_wyss", re.compile(r"WYSS-[0-9]{6}")),)

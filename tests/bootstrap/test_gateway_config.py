@@ -147,7 +147,7 @@ regex = "INT-[0-9"
 def test_env_values_cover_all_documented_env_keys(
     write_config: Callable[[str], Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """CR-01: los CUATRO secretos documentados en config/.env.example entran a env_values.
+    """CR-01/NOTION-04: los secretos documentados en .env.example entran a env_values.
 
     GOOGLE_API_KEY y OPENAI_API_KEY quedaban fuera de la red de substring del minimizer.
     """
@@ -156,6 +156,7 @@ def test_env_values_cover_all_documented_env_keys(
         "LITELLM_MASTER_KEY": "valor-litellm-de-test-456",
         "GOOGLE_API_KEY": "valor-google-de-test-789",
         "OPENAI_API_KEY": "valor-openai-de-test-012",
+        "NOTION_TOKEN": "valor-notion-de-test-345",
     }
     for key, value in expected.items():
         monkeypatch.setenv(key, value)

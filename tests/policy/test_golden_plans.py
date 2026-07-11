@@ -146,6 +146,32 @@ def test_unknown_action_type_es_C_no_A(engine: CognitivePolicyEngine) -> None:
     assert decision.outcome == Outcome.CONFIRM_STRONG
 
 
+def test_notion_read_page_es_A(engine: CognitivePolicyEngine) -> None:
+    """NOTION-01: notion.read_page está registrado como lectura nivel A."""
+    decision = engine.evaluate(_plan(Action("notion.read_page", "page-id")))
+    assert decision.risk_level == RiskLevel.A
+    assert decision.outcome == Outcome.EXECUTE
+
+
+@pytest.mark.parametrize("action_type", ["notion.create_page", "notion.update_page"])
+def test_notion_writes_son_C(
+    action_type: str, engine: CognitivePolicyEngine
+) -> None:
+    """NOTION-02: escrituras Notion requieren confirmación fuerte nivel C."""
+    decision = engine.evaluate(_plan(Action(action_type, "page-id")))
+    assert decision.risk_level == RiskLevel.C
+    assert decision.outcome == Outcome.CONFIRM_STRONG
+
+
+def test_notion_unknown_action_type_es_C_fail_closed(
+    engine: CognitivePolicyEngine,
+) -> None:
+    """Un notion.* no registrado conserva el fail-closed a C."""
+    decision = engine.evaluate(_plan(Action("notion.frobnicate", "page-id")))
+    assert decision.risk_level == RiskLevel.C
+    assert decision.outcome == Outcome.CONFIRM_STRONG
+
+
 def test_d_produce_reject_outcome(engine: CognitivePolicyEngine) -> None:
     plan = _plan(Action("file.write", "/etc/hosts"))
     decision = engine.evaluate(plan)

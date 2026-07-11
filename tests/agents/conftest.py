@@ -29,12 +29,16 @@ from tests.ports.fakes import FakePermissionStore, FakeRetrieval
 DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
     "file.read": RiskLevel.A,
     "file.list": RiskLevel.A,
+    "notion.read_page": RiskLevel.A,
+    "notion.query_database": RiskLevel.A,
     "file.move": RiskLevel.B,
     "file.rename": RiskLevel.B,
     "file.create": RiskLevel.C,
     "file.write": RiskLevel.C,
     "file.delete": RiskLevel.C,
     "shell.run": RiskLevel.C,
+    "notion.create_page": RiskLevel.C,
+    "notion.update_page": RiskLevel.C,
     "git.push": RiskLevel.C,
 }
 

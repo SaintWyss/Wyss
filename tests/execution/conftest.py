@@ -34,12 +34,16 @@ DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
     "git.status": RiskLevel.A,
     "git.log": RiskLevel.A,
     "git.diff": RiskLevel.A,
+    "notion.read_page": RiskLevel.A,
+    "notion.query_database": RiskLevel.A,
     "file.move": RiskLevel.B,
     "file.rename": RiskLevel.B,
     "file.create": RiskLevel.C,
     "file.write": RiskLevel.C,
     "file.delete": RiskLevel.C,
     "shell.run": RiskLevel.C,
+    "notion.create_page": RiskLevel.C,
+    "notion.update_page": RiskLevel.C,
     "git.push": RiskLevel.C,
 }
 
