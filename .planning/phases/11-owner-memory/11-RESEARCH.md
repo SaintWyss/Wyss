@@ -461,7 +461,7 @@ The MEM-04 test should add a `FakeMemoryPort`/fake store returning `MemoryFact(.
 
 **If this table is empty:** N/A — see rows above.
 
-## Open Questions
+## Open Questions (RESOLVED — recomendaciones adoptadas por el orquestador 2026-07-10; Wave 2 se ejecuta SECUENCIAL 02→03→04, sin riesgo de solape)
 
 1. **Should `memory.remember`'s `Action.target` be the category, or should category live in `parameters` with `target` being a free-form key/slug?**
    - What we know: `Action(type, target, parameters)` is the fixed domain shape; Notion uses `target` for the page/database ID (the "what am I operating on"), `parameters` for the content. For memory, there is no natural "ID" until the fact is created — `target` most naturally maps to `category` (the thing that groups facts for `Daily Assistant`/`recall(category=...)` filtering).
