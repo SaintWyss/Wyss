@@ -43,10 +43,10 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### Web PC (WEB)
 
-- [ ] **WEB-01**: Owner ve y gestiona rutinas desde la web (lista, estado, pausar/reanudar)
-- [ ] **WEB-02**: Owner ve el digest diario en la web
-- [ ] **WEB-03**: Owner edita su memoria desde la web
-- [ ] **WEB-04**: La UI desktop recibe glow-up cohesivo de página entera (aprovecha pantalla grande, jerarquía clara, sin huecos de layout)
+- [x] **WEB-01**: Owner ve y gestiona rutinas desde la web (lista, estado, pausar/reanudar)
+- [x] **WEB-02**: Owner ve el digest diario en la web
+- [x] **WEB-03**: Owner edita su memoria desde la web
+- [x] **WEB-04**: La UI desktop recibe glow-up cohesivo de página entera (aprovecha pantalla grande, jerarquía clara, sin huecos de layout)
 
 ### App móvil Android (APK)
 
@@ -96,10 +96,10 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 | INTAKE-01 | Phase 13 — Intake n8n | Complete |
 | INTAKE-02 | Phase 13 — Intake n8n | Complete |
 | INTAKE-03 | Phase 13 — Intake n8n | Complete |
-| WEB-01 | Phase 14 — Web PC Polish | Pending |
-| WEB-02 | Phase 14 — Web PC Polish | Pending |
-| WEB-03 | Phase 14 — Web PC Polish | Pending |
-| WEB-04 | Phase 14 — Web PC Polish | Pending |
+| WEB-01 | Phase 14 — Web PC Polish | Complete |
+| WEB-02 | Phase 14 — Web PC Polish | Complete |
+| WEB-03 | Phase 14 — Web PC Polish | Complete |
+| WEB-04 | Phase 14 — Web PC Polish | Complete |
 | APK-01 | Phase 15 — Mobile APK | Pending |
 | APK-02 | Phase 15 — Mobile APK | Pending |
 | APK-03 | Phase 15 — Mobile APK | Pending |
