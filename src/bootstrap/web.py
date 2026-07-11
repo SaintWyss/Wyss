@@ -432,6 +432,14 @@ def build_web_app(
                 error="el daemon no está corriendo",
                 accion="levantalo con: wyss start",
             ) from exc
+        except RuntimeError as exc:
+            # error JSON-RPC del daemon (p.ej. plan del LLM inválido): respuesta
+            # legible para el workflow, no un 500 con traceback
+            raise WebError(
+                status.HTTP_502_BAD_GATEWAY,
+                error=f"el daemon rechazó la propuesta: {exc}",
+                accion="revisá la instruction o reintentá",
+            ) from exc
 
     @web_app.post("/api/confirm/{pending_id}")
     async def api_confirm(pending_id: str, body: ConfirmBody) -> dict[str, Any]:

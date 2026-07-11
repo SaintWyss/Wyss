@@ -751,3 +751,24 @@ async def test_default_sigue_solo_localhost(client: httpx.AsyncClient) -> None:
         "/api/status", headers={"Host": f"{_LAN_IP}:7777", **_AUTH}
     )
     assert response.status_code == 403
+
+
+async def test_intake_rpc_error_es_legible(
+    intake_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Smoke fase 13: un error JSON-RPC del daemon (plan LLM inválido) salía
+    como 500 con traceback — debe ser 502 legible."""
+    async def fake_rpc(
+        _socket_path: Path, _method: str, _params: dict[str, object]
+    ) -> dict[str, Any]:
+        raise RuntimeError("plan del LLM inválido: steps inválidos")
+
+    monkeypatch.setattr(web_mod, "_json_rpc_call", fake_rpc)
+    response = await intake_client.post(
+        "/api/intake",
+        json={"instruction": "ping"},
+        headers={"Authorization": f"Bearer {_INTAKE_TOKEN}"},
+    )
+
+    assert response.status_code == 502
+    assert "plan del LLM inválido" in _json(response)["error"]
