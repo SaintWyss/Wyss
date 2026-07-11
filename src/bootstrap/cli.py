@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import secrets
 import sqlite3
 import subprocess
@@ -75,6 +76,8 @@ from knowledge.secret_filter import SecretFilter
 from knowledge.state_store import BcFreshness, StateStore
 from knowledge.vector_index import ChromaVectorIndex, chromadb
 from ledger.sqlite_store import SqliteLedgerStore
+from notion.client import build_notion_client
+from notion.tool import NotionTool
 from orchestrator.daemon import run_daemon
 from orchestrator.llm_orchestrator import LLMOrchestrator
 from orchestrator.pending_store import PendingStore
@@ -464,12 +467,19 @@ def _build_plan_runner(
     """
     exec_dir = settings.data_dir / "execution"
     journal = UndoJournal(exec_dir / "journal.db", backup_base_dir=exec_dir / "undo_backups")
+    notion_token = os.environ.get("NOTION_TOKEN")
+    notion = (
+        NotionTool(client=build_notion_client(notion_token), audit=audit)
+        if notion_token
+        else None
+    )
     executor = PlanExecutor(
         filesystem=FileSystemAdapter(engine, audit, journal),
         shell=ShellAdapter(audit),
         git=GitAdapter(audit, settings.data_dir),
         journal=journal,
         audit=audit,
+        notion=notion,
     )
     return executor, journal
 

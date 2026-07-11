@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from core.domain.audit import ActorType, AuditEvent, AuditEventType
 from core.domain.execution import ToolResult, Verification
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
+from core.domain.risk import RiskLevel
+from core.ports.execution import Tool
 from execution.filesystem import FileSystemAdapter
 from execution.git import GitAdapter
 from execution.journal import UndoJournal
@@ -63,6 +65,36 @@ def _visible_output(result: ToolResult) -> str | None:
     return None
 
 
+class _UnavailableTool:
+    """Tool placeholder para integraciones opcionales no configuradas."""
+
+    def __init__(self, *, name: str, detail: str) -> None:
+        self._name = name
+        self._detail = detail
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def max_risk(self) -> RiskLevel:
+        return RiskLevel.C
+
+    def describe(self, action: Action) -> str:
+        return f"{self._name} no configurado: {action.target}"
+
+    async def execute(self, action: Action) -> ToolResult:
+        return ToolResult(
+            success=False,
+            detail=f"{self._detail}: {action.type}",
+            payload={"configured": False, "tool": self._name},
+        )
+
+    async def verify(self, action: Action, result: ToolResult) -> Verification:
+        del action
+        return Verification(passed=result.success, detail=result.detail)
+
+
 class PlanExecutor:
     """Ejecuta un Plan confirmado paso a paso, enforcando on_error por Action.
 
@@ -83,10 +115,18 @@ class PlanExecutor:
         git: GitAdapter,
         journal: UndoJournal,
         audit: object,  # AuditPort — Protocol, tipado como object para evitar import circular
+        notion: Tool | None = None,
     ) -> None:
         self._filesystem = filesystem
         self._shell = shell
         self._git = git
+        self._notion = notion or _UnavailableTool(
+            name="notion",
+            detail=(
+                "Notion no configurado; defini NOTION_TOKEN en config/.env "
+                "y comparti la pagina/base con la integracion"
+            ),
+        )
         self._journal = journal
         self._audit = audit
 
@@ -94,13 +134,14 @@ class PlanExecutor:
     # Dispatch por prefijo
     # ------------------------------------------------------------------
 
-    def _adapter_for(self, action: Action) -> FileSystemAdapter | ShellAdapter | GitAdapter:
+    def _adapter_for(self, action: Action) -> FileSystemAdapter | ShellAdapter | GitAdapter | Tool:
         """Devuelve el adapter correcto basado en el prefijo de action.type.
 
         Taxonomía de prefijos:
           "file.*" → FileSystemAdapter
           "shell.*" → ShellAdapter
           "git.*"  → GitAdapter
+          "notion.*" → Tool Notion inyectado
 
         Levanta ValueError para prefijos desconocidos (fail-closed, D-69).
         """
@@ -111,6 +152,8 @@ class PlanExecutor:
             return self._shell
         if prefix == "git":
             return self._git
+        if prefix == "notion":
+            return self._notion
         raise ValueError(f"no adapter for action type: {action.type!r}")
 
     # ------------------------------------------------------------------
@@ -119,7 +162,7 @@ class PlanExecutor:
 
     async def _retry_with_backoff(
         self,
-        adapter: FileSystemAdapter | ShellAdapter | GitAdapter,
+        adapter: FileSystemAdapter | ShellAdapter | GitAdapter | Tool,
         action: Action,
         params: RetryParams,
     ) -> ToolResult:

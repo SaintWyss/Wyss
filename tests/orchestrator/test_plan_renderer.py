@@ -68,6 +68,57 @@ def test_render_plan_panel() -> None:
     assert "/tmp/a.txt" in rendered
 
 
+def test_notion_write_preview_shows_proposed_content() -> None:
+    plan = Plan(
+        task_id="task-notion",
+        summary="crear pagina Notion",
+        steps=(
+            Action(
+                type="notion.create_page",
+                target="database-123",
+                parameters={
+                    "title": "Reunion semanal",
+                    "markdown": "# Reunion semanal\n\n- revisar roadmap\n- cerrar pendientes",
+                    "properties": {"Name": {"title": "Reunion semanal"}},
+                },
+            ),
+        ),
+        rationale="test",
+    )
+    decision = _decision(RiskLevel.C)
+
+    text = plan_to_text(plan, decision)
+
+    assert "[notion.create_page] database-123" in text
+    assert "title: Reunion semanal" in text
+    assert "# Reunion semanal" in text
+    assert "revisar roadmap" in text
+    assert "properties:" in text
+
+
+def test_notion_write_preview_marks_truncated_content() -> None:
+    long_content = "x" * 1300
+    plan = Plan(
+        task_id="task-notion",
+        summary="actualizar pagina Notion",
+        steps=(
+            Action(
+                type="notion.update_page",
+                target="page-123",
+                parameters={"type": "update_content", "update_content": long_content},
+            ),
+        ),
+        rationale="test",
+    )
+
+    text = plan_to_text(plan, _decision(RiskLevel.C))
+
+    assert "[notion.update_page] page-123" in text
+    assert "type: update_content" in text
+    assert "truncado:" in text
+    assert "caracteres omitidos" in text
+
+
 def test_prompt_b_accepts_only_s() -> None:
     assert prompt_confirmation(_decision(RiskLevel.B), InputConsole("s")) is True
     assert prompt_confirmation(_decision(RiskLevel.B), InputConsole("n")) is False

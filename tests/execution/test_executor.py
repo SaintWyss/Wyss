@@ -107,6 +107,68 @@ async def test_dispatch_by_type_prefix() -> None:
         executor._adapter_for(Action(type="calendar.create", target="x"))
 
 
+async def test_dispatch_notion_prefix_to_injected_tool() -> None:
+    """notion.* se despacha al Tool notion inyectado, no a file/shell/git."""
+    filesystem = _ok_adapter("file-entry")
+    shell = _ok_adapter("shell-entry")
+    git = _ok_adapter("git-entry")
+    notion = _ok_adapter("notion-entry")
+    journal = MagicMock()
+    journal.restore = MagicMock(return_value=True)
+    journal.mark_applied = MagicMock()
+    audit = MagicMock()
+    audit.log = MagicMock()
+
+    executor = PlanExecutor(
+        filesystem=filesystem,
+        shell=shell,
+        git=git,
+        journal=journal,
+        audit=audit,
+        notion=notion,
+    )
+    plan = _make_plan(Action(type="notion.read_page", target="page-123"))
+
+    result = await executor.run(plan)
+
+    assert result.success
+    notion.execute.assert_awaited_once_with(plan.steps[0])
+    filesystem.execute.assert_not_called()
+    shell.execute.assert_not_called()
+    git.execute.assert_not_called()
+
+
+async def test_notion_without_adapter_returns_legible_failure() -> None:
+    """Si no se inyecta NotionTool, notion.* falla como ToolResult accionable."""
+    filesystem = _ok_adapter("file-entry")
+    shell = _ok_adapter("shell-entry")
+    git = _ok_adapter("git-entry")
+    journal = MagicMock()
+    journal.restore = MagicMock(return_value=True)
+    journal.mark_applied = MagicMock()
+    audit = MagicMock()
+    audit.log = MagicMock()
+
+    executor = PlanExecutor(
+        filesystem=filesystem,
+        shell=shell,
+        git=git,
+        journal=journal,
+        audit=audit,
+    )
+    plan = _make_plan(Action(type="notion.read_page", target="page-123"))
+
+    result = await executor.run(plan)
+
+    assert not result.success
+    assert result.failed_step == 0
+    assert "NOTION_TOKEN" in result.detail
+    assert "Notion no configurado" in result.detail
+    filesystem.execute.assert_not_called()
+    shell.execute.assert_not_called()
+    git.execute.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Test 2: ABORT rollback en orden inverso
 # ---------------------------------------------------------------------------
