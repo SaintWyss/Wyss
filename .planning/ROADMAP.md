@@ -156,7 +156,11 @@ Plans:
   1. Un workflow n8n postea a `POST /api/intake` con bearer token dedicado — nunca la cookie del pairing
   2. Toda propuesta de intake pasa por la política y cae a la bandeja como B/C — jamás auto-ejecuta
   3. El endpoint tiene rate limit propio y rechaza sin token válido (401 auditado, sin loguear el token)
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 13-01-PLAN.md — Config [intake] opt-in + RPC daemon intake.propose con floor B forzado (sin tocar dispatcher.py) [INTAKE-02]
+- [ ] 13-02-PLAN.md — Endpoint POST /api/intake: bearer dedicado (data/intake_token) + rate limit propio + exencion de cookie acotada [INTAKE-01, INTAKE-03]
+- [ ] 13-03-PLAN.md — Checkpoint: smoke real curl-como-n8n (bearer->bandeja, sin bearer->401, flood->429, cero auto-ejecucion) [INTAKE-01..03]
+**Decisiones de planning**: floor B via RPC nuevo reusando dispatch intacto (max(risk,B)+outcome_for antes de dispatch); origen auditado SYSTEM/intake distinguible de owner; intake JAMAS escribe a memoria (anti memory-poisoning); bearer estatico espeja _load_or_create_web_token; exencion de cookie SOLO para /api/intake (host+origin siguen); 401/429 via _LOG.warning sin loguear el token; rate limit en memoria por minuto; enabled=false default -> endpoint 404.
 
 #### Phase 14: Web PC Polish
 **Goal**: El owner gestiona rutinas, digest y memoria desde una web desktop cohesiva y con glow-up de página entera.
