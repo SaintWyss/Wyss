@@ -191,11 +191,11 @@ Plans:
   5. Ante server caído o IP cambiada, la app muestra un error accionable y permite re-pairing
 **Plans**: 6 plans
 Plans:
-- [ ] 15-01-PLAN.md — SPIKE device obligatorio: scaffold Capacitor mobile/ + loadUrl handoff + pinning hardcodeado (valida A1/A2) [APK-01/03/04]
+- [x] 15-01-PLAN.md — SPIKE device obligatorio: scaffold Capacitor mobile/ + loadUrl handoff + pinning hardcodeado (valida A1/A2) [APK-01/03/04]
 - [ ] 15-02-PLAN.md — Backend GET /api/pair + wiring cli.py + tests Wave 0 (api_pair auth + regresion Origin-collision) [APK-02/04]
-- [ ] 15-03-PLAN.md — Native pinning real + PairingPlugin core + funciones puras + unit tests JVM [APK-03/04]
-- [ ] 15-04-PLAN.md — Pantalla pairing bundled: escaneo ML Kit + handoff + error accionable/re-pair [APK-02/06]
-- [ ] 15-05-PLAN.md — SPA seccion "Parear telefono": QR SVG client-side desde /api/pair + vitest [APK-02]
+- [x] 15-03-PLAN.md — Native pinning real + PairingPlugin core + funciones puras + unit tests JVM [APK-03/04]
+- [x] 15-04-PLAN.md — Pantalla pairing bundled: escaneo ML Kit + handoff + error accionable/re-pair [APK-02/06]
+- [x] 15-05-PLAN.md — SPA seccion "Parear telefono": QR SVG client-side desde /api/pair + vitest [APK-02]
 - [ ] 15-06-PLAN.md — Checkpoint E2E device: instala + pairing QR + confirma B/C + cert rotado/server caido [APK-01/05/06]
 **Waves**: W1 {15-01 spike, 15-02 backend} · W2 {15-03 native, 15-05 SPA} · W3 {15-04 bundle UI} · W4 {15-06 device E2E}
 **Research flags**: HIGH — spike de cert pinning + schema del QR payload ANTES de construir (spike = 15-01, gate de wave)
@@ -235,7 +235,7 @@ Sin orphans, sin duplicados. MULTI-02 (nada B/C se auto-ejecuta) se cierra en Ph
 | 12. Daily Assistant | v1.0 | 0/TBD | Not started | - |
 | 13. Intake n8n | v1.0 | 0/TBD | Not started | - |
 | 14. Web PC Polish | v1.0 | 0/TBD | Not started | - |
-| 15. Mobile APK | v1.0 | 0/6 | Planned | - |
+| 15. Mobile APK | v1.0 | 4/6 | In Progress|  |
 
 ## Milestones del research (v1.0)
 
