@@ -1,0 +1,128 @@
+/* Paleta wyss (espejo de web/src/index.css) */
+:root {
+  --tinta: #101917;
+  --papel: #1a2422;
+  --borde: #2a3835;
+  --hueso: #e8e4d8;
+  --humo: #9ba39c;
+  --celeste: #86b9d6;
+  --riesgo-d: #b0413e;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--tinta);
+  color: var(--hueso);
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+.pairing {
+  width: 100%;
+  max-width: 420px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.marca {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.rotulo,
+.mono,
+.nota {
+  font-family: ui-monospace, monospace;
+}
+
+.rotulo {
+  margin-top: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--humo);
+}
+
+.tarjeta {
+  background: var(--papel);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.tarjeta.error {
+  border-color: color-mix(in srgb, var(--riesgo-d) 50%, transparent);
+}
+
+.tarjeta h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.tarjeta.error h2 {
+  color: var(--riesgo-d);
+}
+
+.detalle {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--humo);
+}
+
+.detalle.accion {
+  color: var(--hueso);
+}
+
+.nota {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--humo);
+  overflow-wrap: break-word;
+}
+
+button {
+  margin-top: 20px;
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+button:active {
+  opacity: 0.85;
+}
+
+.primario {
+  background: var(--celeste);
+  border: none;
+  color: var(--tinta);
+}
+
+.secundario {
+  background: transparent;
+  border: 1px solid var(--borde);
+  color: var(--humo);
+}
+
+button:disabled {
+  opacity: 0.4;
+}

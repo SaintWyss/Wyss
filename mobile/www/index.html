@@ -1,1 +1,47 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Wyss pairing</title></head><body><h1>pairing placeholder</h1></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Wyss — parear</title>
+  <link rel="stylesheet" href="pairing.css" />
+</head>
+<body>
+  <main class="pairing">
+    <header>
+      <h1 class="marca">WYSS</h1>
+      <p class="rotulo">mesa de despacho</p>
+    </header>
+
+    <!-- Estado: sin parear (default) -->
+    <section id="estado-scan" class="tarjeta" hidden>
+      <h2>Parear con la PC</h2>
+      <p class="detalle">
+        En la PC, abrí la sección <span class="mono">Parear</span> de Wyss y
+        escaneá el QR que aparece en pantalla. El teléfono queda conectado y
+        entra solo la próxima vez.
+      </p>
+      <button id="btn-escanear" class="primario" type="button">Escanear QR</button>
+      <p id="scan-detalle" class="nota" hidden></p>
+    </section>
+
+    <!-- Estado: error accionable (cert cambiado / server caído / QR inválido) -->
+    <section id="estado-error" class="tarjeta error" hidden>
+      <h2 id="error-titulo">No pude conectar</h2>
+      <p id="error-causa" class="detalle"></p>
+      <p id="error-accion" class="detalle accion"></p>
+      <button id="btn-reparear" class="primario" type="button">Re-parear</button>
+    </section>
+
+    <!-- Estado: pareado pero la pantalla quedó visible (conexión en curso) -->
+    <section id="estado-pareado" class="tarjeta" hidden>
+      <h2>Ya pareado</h2>
+      <p class="detalle">Conectando con el servidor…</p>
+      <button id="btn-olvidar" class="secundario" type="button">
+        Olvidar pairing y escanear de nuevo
+      </button>
+    </section>
+  </main>
+  <script src="pairing.js" defer></script>
+</body>
+</html>
