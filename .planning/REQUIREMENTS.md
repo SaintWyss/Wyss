@@ -50,12 +50,12 @@ Regla transversal inviolable: **nada B/C se auto-ejecuta** — todo productor de
 
 ### App móvil Android (APK)
 
-- [ ] **APK-01**: Owner instala un APK en Android que abre wyss como app nativa
-- [ ] **APK-02**: Pairing por QR: la web/CLI muestra un QR con URL del bridge + fingerprint del cert; la app lo escanea y queda pareada sin tipear nada
-- [ ] **APK-03**: La app confía SOLO en el cert cuya huella vino en el QR (TOFU pinning en onReceivedSslError); cert distinto = bloqueo con aviso, jamás proceed ciego
-- [ ] **APK-04**: La app usa el mismo origen del bridge (`server.url`) — sin bundle local, sin aflojar allowlist de Host/Origin ni CORS
-- [ ] **APK-05**: Owner puede confirmar propuestas B/C desde la app (paridad funcional con la web, gate CONFIRMAR incluido)
-- [ ] **APK-06**: Ante server caído o IP cambiada, la app muestra error accionable y permite re-pairing
+- [x] **APK-01**: Owner instala un APK en Android que abre wyss como app nativa
+- [x] **APK-02**: Pairing por QR: la web/CLI muestra un QR con URL del bridge + fingerprint del cert; la app lo escanea y queda pareada sin tipear nada
+- [x] **APK-03**: La app confía SOLO en el cert cuya huella vino en el QR (TOFU pinning en onReceivedSslError); cert distinto = bloqueo con aviso, jamás proceed ciego
+- [x] **APK-04**: La app usa el mismo origen del bridge (`server.url`) — sin bundle local, sin aflojar allowlist de Host/Origin ni CORS
+- [x] **APK-05**: Owner puede confirmar propuestas B/C desde la app (paridad funcional con la web, gate CONFIRMAR incluido)
+- [x] **APK-06**: Ante server caído o IP cambiada, la app muestra error accionable y permite re-pairing
 
 ## Future Requirements (diferidas — decisión owner 2026-07-10)
 
@@ -100,9 +100,9 @@ Mapeado por el roadmapper 2026-07-10 · 25/25 requirements v1.0 cubiertos (sin o
 | WEB-02 | Phase 14 — Web PC Polish | Complete |
 | WEB-03 | Phase 14 — Web PC Polish | Complete |
 | WEB-04 | Phase 14 — Web PC Polish | Complete |
-| APK-01 | Phase 15 — Mobile APK | Pending |
-| APK-02 | Phase 15 — Mobile APK | Pending |
-| APK-03 | Phase 15 — Mobile APK | Pending |
-| APK-04 | Phase 15 — Mobile APK | Pending |
-| APK-05 | Phase 15 — Mobile APK | Pending |
-| APK-06 | Phase 15 — Mobile APK | Pending |
+| APK-01 | Phase 15 — Mobile APK | Complete |
+| APK-02 | Phase 15 — Mobile APK | Complete |
+| APK-03 | Phase 15 — Mobile APK | Complete |
+| APK-04 | Phase 15 — Mobile APK | Complete |
+| APK-05 | Phase 15 — Mobile APK | Complete |
+| APK-06 | Phase 15 — Mobile APK | Complete |
