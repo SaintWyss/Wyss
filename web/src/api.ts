@@ -149,6 +149,14 @@ export interface OkResult {
   ok: boolean
 }
 
+/** Payload de pairing para el QR: mismo trust que la URL-con-token del panel CLI. */
+export interface PairPayload {
+  v: 1
+  url: string
+  fp: string
+  token: string
+}
+
 /** Error con causa + acción, shape estable del bridge. */
 export class WyssApiError extends Error {
   accion: string
@@ -206,6 +214,7 @@ export const api = {
       method: 'DELETE',
     }),
   digestToday: () => apiFetch<DigestToday>('/api/digest/today'),
+  pair: () => apiFetch<PairPayload>('/api/pair'),
   memoryList: () => apiFetch<{ facts: MemoryFact[] }>('/api/memory'),
   editMemory: (id: string, value: string) =>
     apiFetch<OkResult>(`/api/memory/${encodeURIComponent(id)}`, {

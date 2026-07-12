@@ -8,6 +8,7 @@ import { Auditoria } from './surfaces/Auditoria'
 import { Rutinas } from './surfaces/Rutinas'
 import { Digest } from './surfaces/Digest'
 import { Memoria } from './surfaces/Memoria'
+import { Parear } from './surfaces/Parear'
 
 type Surface =
   | 'chat'
@@ -18,6 +19,7 @@ type Surface =
   | 'memoria'
   | 'pellegrini'
   | 'auditoria'
+  | 'parear'
 
 // Los agentes van con su nombre propio (Pellegrini = finanzas; Belgrano vendrá después).
 const SURFACES: { id: Surface; label: string; rol?: string }[] = [
@@ -29,6 +31,7 @@ const SURFACES: { id: Surface; label: string; rol?: string }[] = [
   { id: 'memoria', label: 'Memoria' },
   { id: 'pellegrini', label: 'Pellegrini', rol: 'finanzas' },
   { id: 'auditoria', label: 'Auditoría' },
+  { id: 'parear', label: 'Parear' },
 ]
 
 // Sidebar desktop: los 8 destinos agrupados por intención (UI-SPEC fase 14).
@@ -37,6 +40,7 @@ const GRUPOS: { titulo: string; items: Surface[] }[] = [
   { titulo: 'Automatizar', items: ['rutinas', 'digest'] },
   { titulo: 'Saber', items: ['buscar', 'memoria'] },
   { titulo: 'Cuentas', items: ['pellegrini', 'auditoria'] },
+  { titulo: 'Dispositivos', items: ['parear'] },
 ]
 
 /** Lanza la app de escritorio Borjes vía el bridge (ruta fija, sin argumentos). */
@@ -281,6 +285,7 @@ export default function App() {
           {surface === 'memoria' && <Memoria />}
           {surface === 'pellegrini' && <Finanzas />}
           {surface === 'auditoria' && <Auditoria />}
+          {surface === 'parear' && <Parear />}
         </main>
 
         <nav
