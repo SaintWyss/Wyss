@@ -1,5 +1,7 @@
 # Wyss v0.1.0 — Release Notes
 
+> **Documento histórico.** Describe el cierre de v0.1.0 del 10 de julio de 2026. El código actual incorporó después rutinas, Notion, memoria, digest, intake, web PC y APK Android. Ver [`../RELEASE_STATUS.md`](../RELEASE_STATUS.md) para el estado vigente.
+
 **Fecha:** 2026-07-10
 **Estado:** primer release estable. Loop completo ask→plan→política→confirmar→ejecutar→auditar verificado E2E, y bridge móvil aprobado en **smoke físico real** (teléfono Android, Chrome, LAN, HTTPS).
 
@@ -36,7 +38,7 @@ El re-audit de escritorio no alcanzó: el teléfono real destapó bugs que curl 
 
 539 tests (unit/integración/seguridad/CLI/web) · mypy strict 0 · ruff 0 · import-linter 2/2 contratos · CI verde en cada commit · smoke físico: pairing + PWA + lectura A con salida + delete C con gate CONFIRMAR, desde teléfono real.
 
-## Límites conocidos
+## Límites conocidos en el momento de v0.1.0
 
 - RPC `audit` del daemon devuelve `[]` (stub); `wyss audit` CLI lee la DB directo.
 - Sin service worker/offline (cert self-signed lo bloquea; mkcert en el device lo destraba).
