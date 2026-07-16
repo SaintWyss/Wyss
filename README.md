@@ -2,125 +2,266 @@
 
 > El empleado que siempre necesitaste y nunca pudiste contratar.
 
-Sistema de asistencia operativa multi-agente, humano primero.
+Asistente operativo humano-primero con política A–D, ejecución verificable, auditoría, conocimiento local, agentes especializados, web y cliente Android.
 
 **Autor:** Santiago Wyss  
-**Estado:** v0.1.0 — loop ask→plan→política→confirmar→ejecutar→auditar verificado E2E con LLM real y smoke físico del bridge móvil aprobado (ver `docs/releases/WYSS_v0.1.0.md`)  
-**Versión:** 0.1.0
+**Estado funcional:** alcance del milestone v1.0 implementado en el código  
+**Versión del paquete:** `0.1.0` — pendiente de unificación antes de una release v1.0 formal
 
-**Uso diario:** ver `docs/OPERATOR.md` (arranque, teléfono, troubleshooting).
+- [Estado real y evidencia](docs/RELEASE_STATUS.md)
+- [Guía del operador](docs/OPERATOR.md)
+- [Índice documental](docs/README.md)
 
----
+## Qué es
 
-## Qué es Wyss
+Wyss recibe una instrucción, construye un plan, lo evalúa mediante una política determinista, solicita confirmación cuando corresponde, ejecuta mediante adapters y audita el resultado.
 
-Wyss es una plataforma de asistencia operativa personal y empresarial basada en arquitectura multi-agente. Centraliza el conocimiento del owner, automatiza tareas operativas y coordina agentes especializados — todo con jerarquía estricta, política cognitiva y auditoría obligatoria.
-
-No es un chatbot. No es un wrapper de IA. Es un operador con criterio.
-
-## Arquitectura
-
-```
+```text
 OWNER
-  └─► NÚCLEO (Orquestador · Planificador · Política Cognitiva)
-        ├─► AGENTES ESPECIALIZADOS (instancias del modelo base)
-        ├─► CAPA DE CONOCIMIENTO (BC indexadas · Retrieval Engine)
-        ├─► GATEWAY DE MODELOS (contexto mínimo · control de costos)
-        └─► CAPA DE EJECUCIÓN (adaptadores desacoplados)
+  └─► ORQUESTADOR
+        ├─► PLAN
+        ├─► POLÍTICA A–D
+        ├─► CONFIRMACIÓN B/C
+        ├─► EXECUTION ADAPTERS
+        └─► VERIFICACIÓN + AUDITORÍA
 ```
+
+Los modelos ayudan a interpretar y proponer. No asignan el nivel de riesgo ni pueden evitar el gate del owner.
+
+## Estado actual
+
+| Área | Estado |
+|---|---|
+| Loop ask → plan → política → confirmación → ejecución → auditoría | Implementado y verificado E2E |
+| Política A–D y denylist built-in no removible | Implementadas y testeadas |
+| FileSystem, Shell y Git adapters | Implementados, con segunda muralla y verificación |
+| Undo | Implementado para `file.*`; shell/git pendientes |
+| Auditoría | Funciona por CLI; RPC `audit` continúa como stub |
+| Indexación FTS5 + vectores + RRF | Implementada |
+| Gateway de modelos, presupuesto y minimización | Implementados |
+| Orquestador deterministic | Implementado y default de la plantilla |
+| Orquestador LLM | Implementado; smoke manual con Qwen vía LiteLLM local |
+| Agentes configurables y Pellegrini | Implementados |
+| Bridge web/PWA LAN | Implementado y smokeado en teléfono real |
+| Routine Scheduler | Implementado |
+| Notion Adapter | Implementado |
+| Owner Memory | Implementada |
+| Daily Assistant | Implementado |
+| Intake n8n | Implementado, opt-in y con bearer dedicado |
+| Web PC | Implementada |
+| APK Android | Implementado y pairing QR aprobado en dispositivo real |
+| Modo Equipo | Fuera del alcance actual |
+
+`v0.1.0` sigue siendo una release histórica válida. Después se implementaron las fases 9–15. El metadata del paquete todavía no fue elevado, por lo que la formulación correcta es **alcance v1.0 implementado**, no release v1.0 publicada.
 
 ## Niveles de acción
 
 | Nivel | Tipo | Comportamiento |
-|-------|------|----------------|
+|---|---|---|
 | A | Lectura / diagnóstico | Ejecución directa |
-| B | Modificación normal | Confirmación simple del owner |
-| C | Alto impacto | Confirmación fuerte del owner |
+| B | Modificación normal | Confirmación simple |
+| C | Alto impacto | Exige escribir `CONFIRMAR` |
 | D | Destructivo / inválido | Rechazo absoluto |
 
-## Qué funciona hoy / qué falta
+La política se reevalúa al confirmar. Un plan que escala a D no se ejecuta aunque la propuesta original hubiera sido confirmable.
 
-| Capacidad | Estado |
-|---|---|
-| Índice + búsqueda híbrida (FTS5 + vectores, fusión RRF) — `wyss index` / `wyss search` | **Funciona** (fases 3-4) |
-| Política A-D + auditoría + undo journal + allowlists de ejecución | **Funciona y testeado** (fases 1, 6) |
-| Daemon con bandeja de confirmaciones B/C — `wyss start` / `ask` / `confirm` | **Funciona** (fase 5) |
-| Agentes config-driven + ledger de finanzas (Pellegrini) — `wyss fin` | **Funciona** (fases 7-8) |
-| Deshacer lo aplicado — `wyss undo` (dry-run + confirmación por política, sin bypass) | **Funciona** (PR-09) |
-| Lecturas del operador — `file.read/list/stat`, `git status/log/diff` (salidas capadas, secretos bloqueados) | **Funciona** (PR-11) |
-| UI web + bridge móvil — `wyss web --lan --tls` (HTTPS self-signed, cookie 30 días, PWA instalable, voz) | **Funciona, smoke físico aprobado** (PR-10/14/15) |
-| Conversación con LLM real (`[orchestrator] mode = "llm"`) | **Cableado, opt-in** — pendiente verificación manual con proveedor real |
-| Multi-agente + rutinas (fase 9) · Modo Equipo (fase 10) | **No empezadas** |
+## Inicio rápido
 
-El roadmap vigente (10 fases por build order técnico) vive en `.planning/ROADMAP.md`.
-La auditoría C-Level 2026-07-02, la arquitectura objetivo y los planes de reparación viven en
-`docs/audit/`, `docs/architecture/` y `docs/plans/`.
+Requisitos:
 
-## Estructura del repositorio
-
-```
-wyss/
-├── docs/                  Documentación: fundacional (00-18, histórica) + audit/ + architecture/ + plans/
-├── src/
-│   ├── core/              Núcleo hexagonal puro (stdlib only, mypy strict)
-│   │   ├── domain/        Entidades frozen (Task, Plan, Action, RiskLevel, AuditEvent, Transaccion…)
-│   │   ├── ports/         Los 17 contratos (16 typing.Protocol + AgentBase ABC) — D-11
-│   │   ├── policy/        CognitivePolicyEngine puro + denylist built-in no removible
-│   │   └── orchestrator/  Modelo puro de intención (IntentCategory / IntentClassification)
-│   ├── orchestrator/      Daemon asyncio (Unix socket JSON-RPC), dispatcher fail-closed,
-│   │                      PendingStore B/C, LLMOrchestrator (adapter del port vía gateway)
-│   ├── agents/            ConfiguredAgent config-driven, registry, permisos, memoria, Pellegrini
-│   ├── knowledge/         Pipeline de ingesta (extractors/ plugin), índice FTS5+Chroma, retrieval RRF
-│   ├── gateway/           Router por tiers, Context Minimizer, Cost Tracker, providers/ (anthropic,
-│   │                      litellm, ollama), traces
-│   ├── execution/         Adaptadores FileSystem/Shell/Git + PlanExecutor + UndoJournal
-│   ├── audit/             Audit Logger (SQLite append-only, DB separada)
-│   ├── ledger/            Dominio de finanzas: Transaccion + SqliteLedgerStore (agregaciones SQL)
-│   └── bootstrap/         Composition root (DI manual) + CLI Typer + frontera Pydantic→dominio
-├── tests/                 Pruebas espejando src/ por capa
-├── config/                Configuración TOML (sin secretos) + .env.example
-└── scripts/               Reservado (systemd unit y utilidades llegan con el release candidate)
-```
-
-Notas de capas:
-
-- **`core/domain/`** — entidades de dominio como `frozen` dataclasses, stdlib only. Todo lo demás las importa; ellas no importan nada del sistema.
-- **`core/ports/`** — los 17 contratos hexagonales (16 Protocols + la ABC `AgentBase`). Se definen y commitean antes que cualquier implementación (D-11); los módulos vecinos importan de aquí, nunca de las impls.
-- **`core/policy/`** — el `CognitivePolicyEngine` puro (`Plan -> PolicyDecision`). La denylist de nivel D vive aquí en código como invariante `Final`; la config solo puede AGREGAR reglas, jamás quitarlas.
-- **`bootstrap/`** — composition root con DI manual (D-10) y la única frontera donde vive Pydantic: valida `config.toml` al boot (fail-fast) y entrega frozen dataclasses al núcleo. Pydantic nunca entra a `core/`.
-- Ojo con el nombre repetido: `core/orchestrator/` es el modelo **puro** de intención; `orchestrator/` (top-level) es la capa del **daemon**. Son capas distintas del hexágono.
-
-### Verificación
-
-El proyecto se instala con `uv` (gestor de deps + venv) y usa paquetes top-level genéricos
-(`core`, `audit`, `bootstrap`…) bajo un venv dedicado — tradeoff aceptado en D-01 a cambio
-de imports flat (`from core.ports import ...`). La cadena de verificación completa, que todo
-plan posterior debe dejar verde, es:
+- Python 3.12+;
+- `uv`;
+- `libmagic` en Linux;
+- Node.js/npm para trabajar sobre la SPA;
+- Android SDK/Gradle para compilar el cliente móvil.
 
 ```bash
-uv sync                                 # instala deps + proyecto editable
-uv run pytest && uv run mypy && uv run ruff check src tests && uv run lint-imports
+uv sync
+cp config/config.example.toml config/config.toml
+cp config/.env.example config/.env
+chmod 600 config/.env
 ```
 
-`mypy` corre en modo strict sobre `src` y `tests`; `import-linter` (`lint-imports`) verifica
-los contratos hexagonales (núcleo puro stdlib-only, capas independientes entre sí).
-Esta cadena corre automáticamente en CI (GitHub Actions) en cada push a `main` y en cada PR.
+Arrancar daemon:
 
-## Principios
+```bash
+uv run wyss start
+```
 
-1. **Jerarquía estricta:** owner → orquestador → agentes → herramientas.
-2. **Juicio antes que ejecución:** toda acción pasa por la política cognitiva.
-3. **Contexto mínimo hacia afuera:** los modelos externos reciben solo lo necesario.
-4. **Auditoría transversal:** nada relevante ocurre sin registro.
-5. **Núcleo replicable:** la lógica es genérica; la personalización vive en configuración.
+En otra terminal:
 
-## Herencia de Jarvis
+```bash
+uv run wyss ask "leé /tmp/ejemplo.txt"
+uv run wyss audit
+```
 
-Wyss absorbe de Jarvis PC v0.1:
-- Política Cognitiva (evaluación de finalidad, impacto, reversibilidad, riesgo).
-- Niveles de acción A–D con confirmación y rechazo absoluto.
-- Contexto mínimo hacia modelos externos.
-- Auditoría obligatoria y adaptadores desacoplados.
+Interfaz local o móvil:
+
+```bash
+uv run wyss web
+uv run wyss web --lan --tls
+```
+
+## Uso diario
+
+```bash
+uv run wyss ask "leé tal archivo"
+uv run wyss ask "mové tal archivo"
+uv run wyss confirm <pending_id>
+uv run wyss undo <task_id> --dry-run
+uv run wyss digest
+uv run wyss routine list
+uv run wyss memory list
+uv run wyss fin ver
+```
+
+La referencia completa está en [`docs/OPERATOR.md`](docs/OPERATOR.md).
+
+## LLM real
+
+La plantilla usa modo determinista:
+
+```toml
+[orchestrator]
+mode = "deterministic"
+```
+
+Para usar el gateway:
+
+```toml
+[orchestrator]
+mode = "llm"
+tier = "economico"
+```
+
+El modo LLM fue probado manualmente en el entorno del owner con Qwen a través de LiteLLM local. Esta evidencia no garantiza cualquier provider o modelo; cada combinación requiere smoke propio.
+
+## Capacidades v1
+
+### Rutinas
+
+```bash
+uv run wyss routine list
+uv run wyss routine pause <id>
+uv run wyss routine resume <id>
+uv run wyss routine rm <id>
+```
+
+Las rutinas reutilizan la misma política y bandeja. No existe un segundo camino de ejecución.
+
+### Memoria
+
+```bash
+uv run wyss ask "recordá que prefiero respuestas breves"
+uv run wyss memory list
+uv run wyss memory edit <fact_id> "nuevo valor"
+uv run wyss memory rm <fact_id>
+```
+
+La memoria diferencia hechos del owner y contenido externo para reducir prompt injection.
+
+### Digest
+
+```bash
+uv run wyss digest
+```
+
+Puede programarse con `[digest]` y combina pendientes, Pellegrini, rutinas y memoria sin ejecutar escrituras.
+
+### Notion
+
+El adapter soporta lectura de páginas, consulta de databases y escrituras gateadas. Requiere `NOTION_TOKEN` y compartir los recursos con la integración.
+
+### Intake
+
+`/api/intake` se habilita explícitamente mediante `[intake]`. Usa un bearer separado del pairing y eleva toda propuesta externa a un mínimo B.
+
+### Android
+
+El proyecto nativo vive en `mobile/`. El checkpoint final registró instalación, pairing QR y carga del bridge con pinning TOFU en un teléfono real.
+
+## Arquitectura
+
+```text
+src/
+├── core/          dominio, ports, política e invariantes
+├── orchestrator/  daemon, dispatcher, pending, rutinas y digest
+├── agents/        agentes configurables
+├── knowledge/     ingesta, FTS5, vectores y retrieval
+├── gateway/       providers, minimizer, costos y traces
+├── execution/     filesystem, shell, git, executor y undo
+├── audit/         auditoría SQLite append-only
+├── ledger/        finanzas deterministas
+├── memory/        memoria durable del owner
+├── notion/        adapter Notion
+└── bootstrap/     config, DI, CLI y bridge web
+
+web/               SPA React
+mobile/            cliente Android Capacitor
+```
+
+Reglas de capas:
+
+- `core` es stdlib-only;
+- las capas importan de `core`, no entre sí;
+- `bootstrap` es el composition root;
+- Pydantic muere en la frontera de configuración;
+- el LLM propone, la política decide;
+- nivel D no tiene bypass.
+
+## Configuración
+
+- TOML no sensible: `config/config.toml`;
+- secretos: `config/.env`;
+- plantilla: `config/config.example.toml`;
+- referencia: [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
+La configuración falla ante claves desconocidas o tipos incorrectos. Las reglas TOML solo agregan restricciones; nunca eliminan la denylist built-in.
+
+## Verificación
+
+Python y arquitectura:
+
+```bash
+uv run pytest -q
+uv run mypy
+uv run ruff check src tests
+uv run lint-imports
+```
+
+SPA:
+
+```bash
+cd web
+npm ci
+npm run test
+npm run lint
+npm run build
+```
+
+Android:
+
+```bash
+cd mobile/android
+./gradlew testDebugUnitTest
+./gradlew assembleDebug
+```
+
+El workflow raíz automatiza actualmente la cadena Python. Web y Android deben ejecutarse según el alcance del cambio. Ver [`docs/TESTING.md`](docs/TESTING.md).
+
+## Límites conocidos
+
+- package metadata todavía en `0.1.0`;
+- audit JSON-RPC stub;
+- undo limitado a archivos;
+- dependencias externas para LLM y Notion;
+- TLS local y pairing basados en confianza TOFU;
+- NTFS/FUSE puede ignorar permisos POSIX o impedir WAL;
+- la matriz completa web/Android no está incorporada al CI raíz.
+
+## Documentación
+
+La fuente canónica es [`docs/README.md`](docs/README.md). `.planning/` conserva requisitos, decisiones y evidencia histórica, pero no tiene precedencia sobre código, pruebas o `docs/RELEASE_STATUS.md`.
 
 ---
 
