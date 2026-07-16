@@ -3,73 +3,80 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Producto final — app móvil + asistente diario
 status: milestone_complete
-last_updated: 2026-07-12T01:55:13.752Z
-last_activity: 2026-07-11 -- Phase 15 execution started
+last_updated: 2026-07-16T00:00:00-03:00
+last_activity: 2026-07-11 -- Phase 15 checkpoint E2E device approved
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 32
-  completed_plans: 71
-  percent: 86
-stopped_at: Milestone complete (Phase 15 was final phase)
+  completed_plans: 32
+  percent: 100
+stopped_at: Milestone complete after Phase 15 device checkpoint
 ---
 
 # Wyss — State
 
+> Este archivo resume el milestone de planificación. El estado operativo canónico vive en `docs/RELEASE_STATUS.md` y tiene precedencia ante cualquier checklist histórico contradictorio.
+
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-10)
+See: `.planning/PROJECT.md` (updated 2026-07-10).
 
-**Core value:** Encontrar cualquier cosa en 2 TB en segundos + delegar tareas a agentes con control total y auditoría de todo.
-**Current focus:** Milestone complete
+**Core value:** Encontrar cualquier cosa en 2 TB en segundos, delegar tareas a agentes con control total y auditar todo.
+
+**Current focus:** milestone funcional cerrado; pendiente formalizar versionado y release distribuible.
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-07-12
+- Phase: 15 — Mobile APK
+- Plan: 15-06
+- Status: complete
+- Last activity: 2026-07-11
+- Evidence: `.planning/phases/15-mobile-apk/15-06-SUMMARY.md`
 
-## v1.0 Roadmap (Phases 9-15)
+## v1.0 Roadmap — Phases 9–15
 
-Orden por dependencia (research/SUMMARY.md, confidence HIGH). Regla inviolable: nada B/C se auto-ejecuta.
+Orden por dependencia. Regla inviolable: nada B/C se autoejecuta.
 
-| Phase | Goal | Requirements | Research flag |
-|-------|------|--------------|---------------|
-| 9. Routine Scheduler | Rutinas programadas → bandeja por política (cierra MULTI-02) | SCHED-01..05 | catch-up + timezone (planning/test) |
-| 10. Notion Adapter | Leer/escribir Notion como acciones gateadas | NOTION-01..04 | MEDIUM — base_levels + 429 |
-| 11. Owner Memory | Memoria persistente, editable, trust-tiered | MEM-01..04 | MEDIUM — trust-tier markers |
-| 12. Daily Assistant | Digest diario proactivo (solo lectura) | DAILY-01..03 | none |
-| 13. Intake n8n | Webhook externo → propuesta → bandeja (bearer token) | INTAKE-01..03 | none |
-| 14. Web PC Polish | Glow-up desktop + superficies rutinas/digest/memoria | WEB-01..04 | none (UI phase) |
-| 15. Mobile APK | Capacitor + pairing QR + cert pinning TOFU | APK-01..06 | HIGH — spike cert + QR schema |
+| Phase | Goal | Estado | Evidencia |
+|---|---|---|---|
+| 9. Routine Scheduler | Rutinas programadas → gate de política | Complete | `src/orchestrator/scheduler.py`, summaries de fase |
+| 10. Notion Adapter | Leer/escribir Notion como acciones gateadas | Complete | `src/notion/`, summaries de fase |
+| 11. Owner Memory | Memoria persistente y trust-tiered | Complete | `src/memory/`, summaries de fase |
+| 12. Daily Assistant | Digest diario proactivo, solo lectura | Complete | `src/orchestrator/digest.py`, summaries de fase |
+| 13. Intake n8n | Webhook externo → propuesta con floor B | Complete | daemon/web, summaries de fase |
+| 14. Web PC Polish | Superficies de rutinas, digest y memoria | Complete | `web/`, summaries de fase |
+| 15. Mobile APK | Capacitor, QR y pinning TOFU | Complete | `mobile/`, checkpoint físico aprobado |
 
-**Coverage:** 25/25 requirements mapeados a exactamente una fase. Sin orphans.
+**Coverage:** 25/25 requirements mapeados a una fase del milestone.
 
 ## Decisions Log
 
 | Date | Decision | Context |
-|------|----------|---------|
-| 2026-07-10 | **Roadmap v1.0:** 7 fases (9-15) vertical slices por dependencia; sin segundo camino de ejecución (nuevo productor de Plan reusa dispatch, o Tool adapter gateado) | research/SUMMARY.md HIGH |
-| 2026-07-10 | Memory (Phase 11) DEBE preceder a Intake n8n (Phase 13) | Trust-tiering previene laundering de prompt-injection (Pitfall #3) |
-| 2026-07-10 | Viejas fases 9 (Multi-agente/Rutinas) y 10 (Modo Equipo) del roadmap v0.1 nunca construidas → superadas | Rutinas se absorben en nueva Phase 9 (sin multi-agente pleno); Modo Equipo fuera de scope v1.0 |
-| 2026-07-10 | APK como fase final propia (no merge) | Research flag HIGH: requiere spike de cert-pinning + schema QR antes de construir |
+|---|---|---|
+| 2026-07-10 | Roadmap v1.0 con siete fases verticales y sin segundo camino de ejecución | Todo productor de Plan reutiliza dispatch o un Tool adapter gateado |
+| 2026-07-10 | Memory debe preceder a Intake | Trust-tiering reduce laundering de prompt injection |
+| 2026-07-10 | Viejas fases Multi-agente/Rutinas y Modo Equipo quedan superadas | Rutinas se absorbieron en Phase 9; Modo Equipo queda post-v1.0 |
+| 2026-07-10 | APK como fase final propia | Requería spike de pinning y schema QR |
+| 2026-07-11 | Phase 15 cerrada por checkpoint del owner | Instalación, QR, TOFU y carga del bridge aprobados en teléfono real |
 
-_Decisiones v0.1 (Fases 1-8): ver `phases/*/`-DECISIONS.md y git history._
+_Decisiones v0.1: ver `phases/*-DECISIONS.md` y git history._
 
 ## Blockers
 
-(None) — nota: plan 05-05 (HermesOrchestrator) quedó BLOQUEADO en v0.1 (sin imagen Hermes publicada); no bloquea v1.0.
+Ningún blocker para el alcance funcional del milestone.
+
+Pendientes para una release v1.0 formal:
+
+- unificar versionado del package, web y mobile;
+- ejecutar matriz completa Python/web/Android desde un commit exacto;
+- generar artefactos reproducibles y firmados;
+- completar changelog, upgrade y rollback;
+- resolver o declarar stubs operativos como audit RPC.
 
 ## Notes
 
-- Repo en NTFS (`/mnt/hdd/Data/10_Workspace/projects/wyss`). Roadmapper escribió archivos; el orquestador commitea.
-- Research flags a resolver en planning: base_levels de notion.* (P10), formato trust-tier (P11), catch-up post-downtime (P9), schema QR payload (P15, research previo).
-- Modo LLM activo (qwen vía LiteLLM local); v0.1.0 taggeado 2026-07-10, bridge móvil smoke-aprobado en teléfono real.
-
-## Accumulated Context
-
-### Roadmap Evolution
-
-- 2026-07-10: Milestone v1.0 arranca. Roadmap reestructurado a formato milestone-grouped: v0.1 (fases 1-8) colapsado en `<details>`, v1.0 agrega fases 9-15. Numeración continua (no reinicia).
-- Viejas fases 9-10 (Multi-agente/Rutinas, Modo Equipo) removidas del plan activo: rutinas absorbidas en Phase 9; Modo Equipo diferido post-v1.0.
+- Modo LLM validado en el entorno del owner con Qwen vía LiteLLM local.
+- El modo deterministic sigue siendo el default de la plantilla.
+- `pyproject.toml` todavía declara `0.1.0`; milestone completo no equivale a release pública v1.0.
+- `.planning/ROADMAP.md` conserva detalle histórico y puede contener checkboxes desactualizados. Usar este State y `docs/RELEASE_STATUS.md` para estado vigente.
