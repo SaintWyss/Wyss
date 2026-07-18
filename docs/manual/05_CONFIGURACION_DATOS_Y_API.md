@@ -117,6 +117,8 @@ El daemon acepta métodos como:
 
 - `ask`;
 - `confirm`;
+- `home.intent` — intención versionada de un cliente con `message_id` y `request_id`;
+- `home.plan.answer` — primera respuesta válida, re-evaluada y serializada por plan;
 - `status`;
 - `audit` — consulta acotada por `since`, `task_id`, `event_type` y `limit` (1–200);
 - `routine.add/list/pause/resume/delete`;
@@ -124,8 +126,19 @@ El daemon acepta métodos como:
 - `digest.today`;
 - `intake.propose`.
 
-La CLI y el bridge traducen sus acciones a estos métodos por Unix socket. Yo omito el `payload` de
-auditoría por defecto; sólo lo incluyo cuando el caller local envía `include_payload: true`.
+La CLI usa `data/wyss.sock` `0600`; Home Edge usa exclusivamente `data/wyss-home.sock` `0660`. Yo
+configuro `WYSS_HOME_EDGE_USER` con una cuenta de sistema distinta,
+`WYSS_HOME_EDGE_GROUP` con el grupo compartido y `WYSS_HOME_SOCKET_PATH` con una ruta absoluta fuera
+del data dir privado (por ejemplo `/run/wyss-home/authority.sock`). El servicio prepara su directorio
+padre como `0750 owner:grupo`; Wyss verifica permisos, membresía, grupo y peer mediante
+`SO_PEERCRED`. Sin esa
+configuración no expongo el socket Home. Este canal sólo
+admite `home.intent`, `home.plan.answer` y `status`, y no confía en `source` enviado por el caller.
+Yo persisto claims Home en `data/client_requests.db` con archivos
+DB/WAL/SHM `0600`, cuota y mantenimiento acotado: un replay idéntico recibe la primera respuesta,
+una key reutilizada con otro payload falla por conflicto y un efecto ambiguo después de un crash no
+se reintenta automáticamente. Yo resuelvo confirmaciones con compare-and-swap de revisión y TTL.
+Yo omito el `payload` de auditoría por defecto; sólo el socket owner puede pedirlo explícitamente.
 
 ## API web
 

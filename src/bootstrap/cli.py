@@ -1,8 +1,10 @@
 """CLI de Wyss y composition root del pipeline de ingesta."""
 
 import asyncio
+import grp
 import json
 import os
+import pwd
 import secrets
 import sqlite3
 import subprocess
@@ -23,6 +25,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
+from adapters.sqlite_idempotency import SqliteIdempotencyStore
 from audit.sqlite_logger import SqliteAuditLogger
 from bootstrap.config import WyssSettings as BootstrapWyssSettings
 from bootstrap.config import load_settings
@@ -43,7 +46,7 @@ from core.domain.knowledge import (
 )
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
 from core.domain.policy import PolicyDecision
-from core.domain.risk import Outcome, RiskLevel
+from core.domain.risk import Outcome, RiskLevel, outcome_for
 from core.domain.security import Subject
 from core.orchestrator.intent import IntentCategory, IntentClassification
 from core.policy import CognitivePolicyEngine
@@ -512,8 +515,12 @@ async def _run_start_daemon(
     ledger_store: SqliteLedgerStore,
     scheduler: RoutineScheduler,
 ) -> None:
-    runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
+    idempotency = SqliteIdempotencyStore(_client_requests_db_path(settings))
+    home_identity = _home_edge_identity()
+    home_socket_path = _home_socket_path() if home_identity is not None else None
+    journal: UndoJournal | None = None
     try:
+        runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
         if settings.orchestrator.mode == "deterministic":
             await run_daemon(
                 _socket_path(settings),
@@ -522,6 +529,10 @@ async def _run_start_daemon(
                 pending_store=pending_store,
                 audit=audit,
                 audit_query=audit,
+                idempotency=idempotency,
+                home_socket_path=home_socket_path,
+                home_peer_uid=home_identity[0] if home_identity is not None else None,
+                home_peer_gid=home_identity[1] if home_identity is not None else None,
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -552,6 +563,10 @@ async def _run_start_daemon(
                 pending_store=pending_store,
                 audit=audit,
                 audit_query=audit,
+                idempotency=idempotency,
+                home_socket_path=home_socket_path,
+                home_peer_uid=home_identity[0] if home_identity is not None else None,
+                home_peer_gid=home_identity[1] if home_identity is not None else None,
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -563,7 +578,9 @@ async def _run_start_daemon(
                 digest_dir=settings.data_dir / "digests",
             )
     finally:
-        journal.close()
+        if journal is not None:
+            journal.close()
+        idempotency.close()
 
 
 @app.command()
@@ -671,6 +688,23 @@ def confirm(
                 {"pending_id": pending_id, "response": response},
             )
         )
+        required_risk = result.get("required_risk")
+        if result.get("accepted") is False and required_risk in {"B", "C"}:
+            fresh_level = RiskLevel[str(required_risk)]
+            fresh_decision = PolicyDecision(
+                task_id=proposal.task_id,
+                risk_level=fresh_level,
+                outcome=outcome_for(fresh_level),
+            )
+            if prompt_confirmation(fresh_decision, console):
+                fresh_response = "CONFIRMAR" if fresh_level is RiskLevel.C else "s"
+                result = asyncio.run(
+                    _json_rpc_call(
+                        _socket_path(settings),
+                        "confirm",
+                        {"pending_id": pending_id, "response": fresh_response},
+                    )
+                )
         _render_confirm_result(result)
     except typer.Exit:
         # typer.Exit hereda de RuntimeError: sin este re-raise lo tragaría el except genérico.
@@ -1870,8 +1904,45 @@ def _socket_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "wyss.sock"
 
 
+def _home_socket_path() -> Path:
+    raw = os.environ.get("WYSS_HOME_SOCKET_PATH", "").strip()
+    if not raw:
+        raise ConfigError("WYSS_HOME_SOCKET_PATH requerido al habilitar Home Edge")
+    path = Path(raw)
+    if not path.is_absolute():
+        raise ConfigError("WYSS_HOME_SOCKET_PATH debe ser absoluto")
+    return path
+
+
+def _home_edge_identity() -> tuple[int, int] | None:
+    """Resuelve la cuenta dedicada configurada; sin cuenta no expone socket Home."""
+    account = os.environ.get("WYSS_HOME_EDGE_USER", "").strip()
+    group = os.environ.get("WYSS_HOME_EDGE_GROUP", "").strip()
+    if not account and not group:
+        return None
+    if not account or not group:
+        raise ConfigError("WYSS_HOME_EDGE_USER y WYSS_HOME_EDGE_GROUP deben configurarse juntos")
+    try:
+        entry = pwd.getpwnam(account)
+    except KeyError as exc:
+        raise ConfigError(f"WYSS_HOME_EDGE_USER no existe: {account}") from exc
+    if entry.pw_uid == os.getuid():
+        raise ConfigError("WYSS_HOME_EDGE_USER debe tener un UID distinto al owner de Wyss")
+    try:
+        group_entry = grp.getgrnam(group)
+    except KeyError as exc:
+        raise ConfigError(f"WYSS_HOME_EDGE_GROUP no existe: {group}") from exc
+    if entry.pw_gid != group_entry.gr_gid and account not in group_entry.gr_mem:
+        raise ConfigError(f"{account} no pertenece a WYSS_HOME_EDGE_GROUP={group}")
+    return entry.pw_uid, group_entry.gr_gid
+
+
 def _pending_db_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "pending.db"
+
+
+def _client_requests_db_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "client_requests.db"
 
 
 def _routine_db_path(settings: WyssSettings) -> Path:

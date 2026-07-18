@@ -1,13 +1,17 @@
 """Daemon JSON-RPC y dispatcher fail-closed."""
 
 import asyncio
+import grp
 import json
+import os
+import pwd
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+from adapters.sqlite_idempotency import SqliteIdempotencyStore
 from core.domain import ActorType, AuditEvent, AuditEventType, AuditQuery, Outcome, RiskLevel
 from core.domain.ledger import Transaccion
 from core.domain.memory import MemoryFact
@@ -155,6 +159,15 @@ def fake_ledger() -> LedgerPort:
     return _FakeLedger()
 
 
+@pytest.fixture
+def idempotency(tmp_path: Path) -> Iterator[SqliteIdempotencyStore]:
+    store = SqliteIdempotencyStore(tmp_path / "client_requests.db")
+    try:
+        yield store
+    finally:
+        store.close()
+
+
 async def _handle_rpc(
     daemon: DaemonServer, method: str, params: dict[str, object]
 ) -> dict[str, Any]:
@@ -168,6 +181,19 @@ async def _handle_rpc(
     response = json.loads(bytes(writer.data))
     assert response["id"] == 7
     return cast(dict[str, Any], response)
+
+
+async def _handle_home_rpc(
+    daemon: DaemonServer, method: str, params: dict[str, object]
+) -> dict[str, Any]:
+    reader = asyncio.StreamReader()
+    reader.feed_data(
+        json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 8}).encode() + b"\n"
+    )
+    reader.feed_eof()
+    writer = _MemoryWriter()
+    await daemon.handle_home(reader, cast(Any, writer))
+    return cast(dict[str, Any], json.loads(bytes(writer.data)))
 
 
 async def test_stale_socket_cleanup(
@@ -219,6 +245,216 @@ async def test_stale_socket_cleanup(
     assert not socket_path.exists()
 
 
+async def test_start_daemon_binds_private_dedicated_home_socket(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    owner_socket = tmp_path / "wyss.sock"
+    home_socket = tmp_path / "wyss-home.sock"
+    tmp_path.chmod(0o750)
+
+    async def fake_start_unix_server(handler: object, path: str) -> _FakeAsyncioServer:
+        del handler
+        Path(path).write_text("socket", encoding="utf-8")
+        return _FakeAsyncioServer()
+
+    monkeypatch.setattr(asyncio, "start_unix_server", fake_start_unix_server)
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    running = await start_daemon(
+        owner_socket,
+        home_socket_path=home_socket,
+        home_peer_uid=os.getuid() + 1,
+        home_peer_gid=os.getgid(),
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=scheduler,
+        runner=_SpyRunner(),
+        idempotency=idempotency,
+        reaper_interval_s=3600,
+    )
+    try:
+        assert owner_socket.stat().st_mode & 0o777 == 0o600
+        assert home_socket.stat().st_mode & 0o777 == 0o660
+        assert running.home_server is not None
+    finally:
+        await running.aclose()
+
+    assert not owner_socket.exists()
+    assert not home_socket.exists()
+
+
+async def test_home_socket_refuses_same_owner_uid(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    with pytest.raises(RuntimeError, match="UID distinto"):
+        await start_daemon(
+            tmp_path / "owner.sock",
+            home_socket_path=tmp_path / "home.sock",
+            home_peer_uid=os.getuid(),
+            home_peer_gid=os.getgid(),
+            engine=engine,
+            orchestrator=fake_orchestrator,
+            pending_store=pending_store,
+            audit=fake_audit,
+            routine_store=routine_store,
+            memory_store=memory_store,
+            ledger=fake_ledger,
+            scheduler=scheduler,
+        )
+
+
+async def test_dedicated_home_socket_real_ipc_rejects_admin_method(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    owner_socket = tmp_path / "wyss-real.sock"
+    home_socket = tmp_path / "wyss-home-real.sock"
+    tmp_path.chmod(0o750)
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    running = await start_daemon(
+        owner_socket,
+        home_socket_path=home_socket,
+        home_peer_uid=os.getuid() + 1,
+        home_peer_gid=os.getgid(),
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=scheduler,
+        runner=_SpyRunner(),
+        idempotency=idempotency,
+        reaper_interval_s=3600,
+    )
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(home_socket))
+        writer.write(
+            json.dumps(
+                {"jsonrpc": "2.0", "method": "audit", "params": {}, "id": "home-real"}
+            ).encode()
+            + b"\n"
+        )
+        await writer.drain()
+        response = json.loads(await reader.readline())
+        writer.close()
+        await writer.wait_closed()
+
+        assert response["error"]["code"] == -32001
+        assert response["error"]["message"] == "Home peer no autorizado"
+        assert response["id"] is None
+    finally:
+        await running.aclose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("WYSS_EDGE_SMOKE_USER"),
+    reason="requiere identidad local Edge preparada explícitamente",
+)
+async def test_authorized_edge_uid_can_only_open_home_socket(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    edge_user = os.environ["WYSS_EDGE_SMOKE_USER"]
+    shared_group = os.environ["WYSS_EDGE_SMOKE_GROUP"]
+    runtime_dir = Path(os.environ["WYSS_EDGE_SMOKE_RUNTIME"])
+    edge_uid = pwd.getpwnam(edge_user).pw_uid
+    shared_gid = grp.getgrnam(shared_group).gr_gid
+    owner_socket = tmp_path / "owner-private.sock"
+    home_socket = runtime_dir / f"authority-test-{os.getpid()}.sock"
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    running = await start_daemon(
+        owner_socket,
+        home_socket_path=home_socket,
+        home_peer_uid=edge_uid,
+        home_peer_gid=shared_gid,
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=scheduler,
+        runner=_SpyRunner(),
+        idempotency=idempotency,
+        reaper_interval_s=3600,
+    )
+    client = """
+import json, socket, sys
+home, owner = sys.argv[1:3]
+s = socket.socket(socket.AF_UNIX)
+s.connect(home)
+s.sendall(b'{"jsonrpc":"2.0","method":"status","params":{},"id":"edge"}\\n')
+response = json.loads(s.recv(8192))
+s.close()
+owner_errno = None
+try:
+    o = socket.socket(socket.AF_UNIX)
+    o.connect(owner)
+except OSError as exc:
+    owner_errno = exc.errno
+print(json.dumps({"response": response, "owner_errno": owner_errno}))
+"""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "sudo",
+            "-n",
+            "-u",
+            edge_user,
+            "/usr/bin/python3",
+            "-c",
+            client,
+            str(home_socket),
+            str(owner_socket),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+        assert process.returncode == 0, stderr.decode(errors="replace")
+        evidence = json.loads(stdout)
+        assert evidence["response"]["result"]["daemon_version"] == "05-04"
+        assert evidence["owner_errno"] == 13
+    finally:
+        await running.aclose()
+
+
 async def test_ask_round_trip(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
@@ -249,6 +485,345 @@ async def test_ask_round_trip(
         AuditEventType.PLAN_CREATED,
         AuditEventType.POLICY_DECISION,
     }
+
+
+async def test_home_intent_is_idempotent_and_b_confirmation_resolves_once(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+        runner=_SpyRunner(),
+    )
+    intent: dict[str, object] = {
+        "message_id": "msg-intent-1",
+        "request_id": "request-1",
+        "source": "panel:living",
+        "text": "mover archivo",
+        "input": "text",
+    }
+
+    first = await _handle_rpc(daemon, "home.intent", intent)
+    replay = await _handle_rpc(daemon, "home.intent", intent)
+
+    assert first["result"] == replay["result"]
+    proposed = first["result"]
+    assert proposed["outcome"] == "pending"
+    assert proposed["risk"] == "B"
+    assert proposed["summary"] == "mover archivo"
+    assert proposed["steps"] == [
+        {"description": "file.move", "target": "/tmp/source.txt", "parameters": {}}
+    ]
+    assert proposed["revision"] == 1
+    assert len(pending_store.load_pending()) == 1
+
+    answer = {
+        "message_id": "msg-answer-1",
+        "plan_id": proposed["pending_id"],
+        "decision": "approve",
+        "confirmation": "s",
+        "expected_revision": 1,
+        "source": "panel:living",
+    }
+    revision_conflict = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {**answer, "message_id": "msg-answer-stale", "expected_revision": 2},
+    )
+    assert revision_conflict["result"]["outcome"] == "conflict"
+    assert revision_conflict["result"]["revision"] == 1
+
+    resolved = await _handle_rpc(daemon, "home.plan.answer", answer)
+    resolved_replay = await _handle_rpc(daemon, "home.plan.answer", answer)
+
+    assert resolved["result"] == resolved_replay["result"]
+    assert resolved["result"]["outcome"] == "resolved"
+    assert resolved["result"]["policy_reevaluated"] is True
+    assert resolved["result"]["revision"] == 2
+    confirmed = pending_store.load(str(proposed["pending_id"]))
+    assert confirmed is not None
+    assert confirmed.status == "confirmed"
+
+    stale = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {**answer, "message_id": "msg-answer-2", "source": "android:owner"},
+    )
+    assert stale["result"]["outcome"] == "already_resolved"
+    assert stale["result"]["revision"] == 2
+
+
+async def test_home_socket_is_method_scoped_and_derives_edge_identity(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+        runner=_SpyRunner(),
+        home_rate_limit_per_second=4,
+    )
+
+    forbidden = await _handle_home_rpc(daemon, "audit", {"include_payload": True})
+    assert forbidden["error"]["code"] == -32601
+
+    nested: dict[str, object] = {}
+    cursor = nested
+    for _ in range(17):
+        child: dict[str, object] = {}
+        cursor["child"] = child
+        cursor = child
+    too_deep = await _handle_home_rpc(daemon, "status", nested)
+    assert too_deep["error"]["code"] == -32602
+
+    closed_error = await _handle_home_rpc(
+        daemon,
+        "home.intent",
+        {"message_id": "invalid-without-required-fields"},
+    )
+    assert closed_error["error"]["message"] == "Home request failed"
+
+    accepted = await _handle_home_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "scoped-1",
+            "request_id": "request-scoped-1",
+            "source": "forged-admin",
+            "text": "mover archivo",
+            "input": "text",
+        },
+    )
+    assert "error" not in accepted
+    received = next(
+        event for event in fake_audit.events if event.event_type is AuditEventType.COMMAND_RECEIVED
+    )
+    assert received.actor_id == "home-edge"
+
+    limited = await _handle_home_rpc(daemon, "status", {})
+    assert limited["error"]["code"] == -32029
+
+
+async def test_first_concurrent_home_answer_wins_once(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    runner = _SpyRunner()
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+        runner=runner,
+    )
+    proposed = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "race-intent",
+            "request_id": "race-request",
+            "source": "panel:living",
+            "text": "mover archivo",
+            "input": "text",
+        },
+    )
+    plan_id = str(proposed["result"]["pending_id"])
+    base = {
+        "plan_id": plan_id,
+        "decision": "approve",
+        "confirmation": "s",
+        "expected_revision": 1,
+    }
+
+    panel, android = await asyncio.gather(
+        _handle_rpc(
+            daemon,
+            "home.plan.answer",
+            {**base, "message_id": "race-panel", "source": "panel:living"},
+        ),
+        _handle_rpc(
+            daemon,
+            "home.plan.answer",
+            {**base, "message_id": "race-android", "source": "android:owner"},
+        ),
+    )
+
+    outcomes = {panel["result"]["outcome"], android["result"]["outcome"]}
+    assert outcomes == {"resolved", "already_resolved"}
+    assert runner.calls == 1
+
+
+async def test_home_c_requires_literal_and_d_never_becomes_pending(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+        runner=_SpyRunner(),
+    )
+    c_intent = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "msg-c",
+            "request_id": "request-c",
+            "source": "android:owner",
+            "text": "borrar archivo",
+            "input": "text",
+        },
+    )
+    plan_id = str(c_intent["result"]["pending_id"])
+    weak = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {
+            "message_id": "msg-c-weak",
+            "plan_id": plan_id,
+            "decision": "approve",
+            "confirmation": "s",
+            "expected_revision": 1,
+            "source": "android:owner",
+        },
+    )
+    assert weak["result"]["outcome"] == "confirmation_required"
+    still_pending = pending_store.load(plan_id)
+    assert still_pending is not None
+    assert still_pending.status == "pending"
+
+    strong = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {
+            "message_id": "msg-c-strong",
+            "plan_id": plan_id,
+            "decision": "approve",
+            "confirmation": "CONFIRMAR",
+            "expected_revision": 1,
+            "source": "panel:living",
+        },
+    )
+    assert strong["result"]["outcome"] == "resolved"
+
+    denied = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "msg-d",
+            "request_id": "request-d",
+            "source": "panel:living",
+            "text": "formatear disco",
+            "input": "text",
+        },
+    )
+    assert denied["result"]["outcome"] == "rejected"
+    assert "pending_id" not in denied["result"]
+
+
+async def test_home_rejection_resolves_without_execution(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+    )
+    proposed = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "msg-reject-intent",
+            "request_id": "request-reject",
+            "source": "panel:living",
+            "text": "mover archivo",
+            "input": "text",
+        },
+    )
+    plan_id = str(proposed["result"]["pending_id"])
+
+    rejected = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {
+            "message_id": "msg-reject-answer",
+            "plan_id": plan_id,
+            "decision": "reject",
+            "confirmation": "",
+            "expected_revision": 1,
+            "source": "panel:living",
+        },
+    )
+
+    assert rejected["result"]["outcome"] == "resolved"
+    assert rejected["result"]["accepted"] is False
+    assert rejected["result"]["policy_reevaluated"] is True
+    stored_rejection = pending_store.load(plan_id)
+    assert stored_rejection is not None
+    assert stored_rejection.status == "rejected"
 
 
 async def test_audit_rpc_queries_port_with_closed_filters(

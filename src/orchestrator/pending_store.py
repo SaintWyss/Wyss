@@ -1,6 +1,7 @@
 """SQLite store para propuestas pendientes de confirmacion (ORCH-06 / D-54..D-56)."""
 
 import json
+import os
 import sqlite3
 import uuid
 from collections.abc import Mapping
@@ -15,7 +16,7 @@ from core.domain.policy import PolicyDecision
 
 PENDING_PRAGMAS: tuple[str, ...] = (
     "PRAGMA journal_mode=WAL",
-    "PRAGMA synchronous=NORMAL",
+    "PRAGMA synchronous=FULL",
     "PRAGMA busy_timeout=5000",
 )
 
@@ -30,7 +31,8 @@ CREATE TABLE IF NOT EXISTS pending_proposals (
   created_at   TEXT NOT NULL,
   expires_at   TEXT NOT NULL,
   resolved_at  TEXT,
-  resolved_by  TEXT
+  resolved_by  TEXT,
+  revision     INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1)
 )
 """
 
@@ -59,6 +61,7 @@ class PendingProposal:
     expires_at: str
     resolved_at: str | None
     resolved_by: str | None
+    revision: int
 
 
 class PendingStore:
@@ -67,6 +70,9 @@ class PendingStore:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(db_path, os.O_CREAT, 0o600)
+        os.close(fd)
+        os.chmod(db_path, 0o600)
         self._conn = sqlite3.connect(db_path)
         self._conn.row_factory = sqlite3.Row
         journal_mode: str | None = None
@@ -82,6 +88,7 @@ class PendingStore:
                 "sobre este filesystem."
             )
         self._apply_schema()
+        self._secure_files()
 
     def save(self, plan: Plan, decision: PolicyDecision, ttl_seconds: int) -> str:
         """Persiste una propuesta pendiente y devuelve su pending_id."""
@@ -100,6 +107,7 @@ class PendingStore:
             ),
         )
         self._conn.commit()
+        self._secure_files()
         return pending_id
 
     def load(self, pending_id: str) -> PendingProposal | None:
@@ -131,11 +139,13 @@ class PendingStore:
         resolved_at = datetime.now(UTC).isoformat()
         self._conn.executemany(
             "UPDATE pending_proposals "
-            "SET status='expired', resolved_at=?, resolved_by='ttl_reaper' "
-            "WHERE id=? AND status='pending'",
-            [(resolved_at, proposal.id) for proposal in proposals],
+            "SET status='expired', resolved_at=?, resolved_by='ttl_reaper', "
+            "revision=revision+1 "
+            "WHERE id=? AND status='pending' AND expires_at<?",
+            [(resolved_at, proposal.id, resolved_at) for proposal in proposals],
         )
         self._conn.commit()
+        self._secure_files()
         expired: list[PendingProposal] = []
         for item in proposals:
             loaded = self.load(item.id)
@@ -143,16 +153,64 @@ class PendingStore:
                 expired.append(loaded)
         return expired
 
-    def resolve(self, pending_id: str, resolved_by: str) -> PendingProposal | None:
-        """Confirma una propuesta solo si sigue pending; rechaza estados stale."""
+    def resolve(
+        self,
+        pending_id: str,
+        resolved_by: str,
+        *,
+        status: str = "confirmed",
+        expected_revision: int | None = None,
+    ) -> PendingProposal | None:
+        """Resuelve por CAS una propuesta vigente e incrementa su revisión."""
+        if status not in {"confirmed", "rejected"}:
+            raise ValueError("status de resolución inválido")
+        if expected_revision is not None and expected_revision < 1:
+            raise ValueError("expected_revision debe ser positiva")
         resolved_at = datetime.now(UTC).isoformat()
-        cur = self._conn.execute(
-            "UPDATE pending_proposals "
-            "SET status='confirmed', resolved_at=?, resolved_by=? "
-            "WHERE id=? AND status='pending'",
-            (resolved_at, resolved_by, pending_id),
-        )
-        self._conn.commit()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            sql = (
+                "UPDATE pending_proposals "
+                "SET status=?, resolved_at=?, resolved_by=?, revision=revision+1 "
+                "WHERE id=? AND status='pending' AND expires_at>=?"
+            )
+            values: tuple[object, ...] = (
+                status,
+                resolved_at,
+                resolved_by,
+                pending_id,
+                resolved_at,
+            )
+            if expected_revision is not None:
+                sql += " AND revision=?"
+                values += (expected_revision,)
+            cur = self._conn.execute(sql, values)
+            self._conn.execute("COMMIT")
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        self._secure_files()
+        if cur.rowcount != 1:
+            return None
+        return self.load(pending_id)
+
+    def expire(self, pending_id: str, *, expected_revision: int) -> PendingProposal | None:
+        """Terminaliza por CAS un pending vencido y devuelve su revisión nueva."""
+        now = datetime.now(UTC).isoformat()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            cur = self._conn.execute(
+                "UPDATE pending_proposals "
+                "SET status='expired', resolved_at=?, resolved_by='ttl_reaper', "
+                "revision=revision+1 "
+                "WHERE id=? AND status='pending' AND expires_at<? AND revision=?",
+                (now, pending_id, now, expected_revision),
+            )
+            self._conn.execute("COMMIT")
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        self._secure_files()
         if cur.rowcount != 1:
             return None
         return self.load(pending_id)
@@ -174,8 +232,24 @@ class PendingStore:
 
     def _apply_schema(self) -> None:
         self._conn.execute(CREATE_TABLE)
+        columns = {
+            str(row[1]) for row in self._conn.execute("PRAGMA table_info(pending_proposals)")
+        }
+        if "revision" not in columns:
+            self._conn.execute(
+                "ALTER TABLE pending_proposals ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"
+            )
         self._conn.execute(CREATE_INDEX)
         self._conn.commit()
+
+    def _secure_files(self) -> None:
+        for path in (
+            self._db_path,
+            Path(f"{self._db_path}-wal"),
+            Path(f"{self._db_path}-shm"),
+        ):
+            if path.exists():
+                os.chmod(path, 0o600)
 
 
 def _row_to_proposal(row: sqlite3.Row | None) -> PendingProposal | None:
@@ -196,6 +270,7 @@ def _proposal_from_row(row: sqlite3.Row) -> PendingProposal:
         expires_at=str(row["expires_at"]),
         resolved_at=row["resolved_at"],
         resolved_by=row["resolved_by"],
+        revision=int(row["revision"]),
     )
 
 

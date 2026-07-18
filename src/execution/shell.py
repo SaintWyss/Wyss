@@ -60,6 +60,10 @@ class ShellAdapter:
             self._allowed_binaries = self._load_allowlist(Path(config_path))
         else:
             self._allowed_binaries = set()  # fail-closed: nada permitido por defecto
+        self._resolved_binaries: dict[str, str | None] = {
+            binary: (str(Path(found).resolve()) if (found := shutil.which(binary)) else None)
+            for binary in self._allowed_binaries
+        }
 
     @staticmethod
     def _load_allowlist(config_path: Path) -> set[str]:
@@ -163,12 +167,19 @@ class ShellAdapter:
         Raises asyncio.TimeoutError si el proceso supera `timeout_s`; el proceso
         es matado y drenado para evitar zombies (T-06-ALLOW-2).
         """
-        resolved = shutil.which(binary)
+        resolved = self._resolved_binaries.get(binary)
         if resolved is None:
             raise FileNotFoundError(f"binario no encontrado en PATH: '{binary}'")
 
+        effective_action = Action(
+            type=action.type,
+            target=resolved,
+            parameters={**action.parameters, "requested_binary": binary, "argv": list(args)},
+            on_error=action.on_error,
+            retry_params=action.retry_params,
+        )
         authorization = self._guard.authorize(
-            action,
+            effective_action,
             adapter=self.name,
             max_risk=self.max_risk,
         )

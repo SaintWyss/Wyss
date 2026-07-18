@@ -161,6 +161,16 @@ deben convertirse en autoridades alternativas.
 
 **Detalle:** [ADR-001 — límite de autoridad Home](../architecture/ADR-001-home-authority-boundary.md).
 
+### D-18 — Capacidad RPC dedicada para Home Edge
+
+**Yo elegí:** separar `wyss-home.sock` de `wyss.sock`, aplicar una allowlist cerrada de métodos y
+resolver confirmaciones con revisión y TTL dentro del mismo compare-and-swap.
+
+**Porque:** un permiso de archivo autentica al usuario Unix, pero no debe conceder por transitividad
+las operaciones owner/administrativas al canal legítimo de Home Edge.
+
+**Detalle:** [ADR-003 — capacidad RPC Home](../architecture/ADR-003-home-rpc-capability-boundary.md).
+
 ## Alternativas descartadas
 
 | Alternativa | Ventaja | Por qué la descarté |

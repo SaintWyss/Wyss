@@ -18,7 +18,7 @@ import pytest
 from core.domain.audit import AuditEventType
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
-from tests.execution.conftest import FakeAudit, make_engine, make_guard
+from tests.execution.conftest import FakeAudit, RecordingGuard, make_engine, make_guard
 
 if TYPE_CHECKING:
     from execution.shell import ShellAdapter
@@ -97,6 +97,24 @@ async def test_allowed_binary_executes() -> None:
     assert result.success is True
     assert result.payload["returncode"] == 0
     assert "hello wyss" in str(result.payload["stdout"])
+
+
+@pytest.mark.asyncio
+async def test_guard_receives_pinned_absolute_binary_and_exact_argv() -> None:
+    from execution.shell import ShellAdapter
+
+    audit = FakeAudit()
+    guard = RecordingGuard()
+    adapter = ShellAdapter(audit, guard, allowed_binaries={"echo"})
+
+    result = await adapter.execute(_make_action("echo", "hello"))
+
+    assert result.success is True
+    effective = guard.actions[-1]
+    assert Path(effective.target).is_absolute()
+    assert Path(effective.target).name == "echo"
+    assert effective.parameters["requested_binary"] == "echo"
+    assert effective.parameters["argv"] == ["hello"]
 
 
 @pytest.mark.asyncio

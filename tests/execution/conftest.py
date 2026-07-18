@@ -20,10 +20,9 @@ from pathlib import Path
 
 import pytest
 
-from core.domain import AuditEvent, Span
+from core.domain import Action, AuditEvent, ExecutionAuthorization, RiskLevel, Span
 from core.domain.plan import Plan
 from core.domain.policy import AggregateThresholds, PolicyDecision, PolicyRules
-from core.domain.risk import RiskLevel
 from core.policy import BUILTIN_DENY, CognitivePolicyEngine
 from core.ports.execution import ExecutionGuardPort, PolicyEvaluatorPort
 from execution.journal import UndoJournal
@@ -84,6 +83,24 @@ class FakeAudit:
             event=event,
             started_at=datetime.now(UTC),
         )
+
+
+class RecordingGuard:
+    """Guard fake que registra el DTO efectivo entregado por cada adapter."""
+
+    def __init__(self) -> None:
+        self.actions: list[Action] = []
+
+    def authorize(
+        self,
+        action: Action,
+        *,
+        adapter: str,
+        max_risk: RiskLevel,
+    ) -> ExecutionAuthorization:
+        del adapter, max_risk
+        self.actions.append(action)
+        return ExecutionAuthorization(True, RiskLevel.C, "")
 
 
 def make_guard(engine: PolicyEvaluatorPort, audit: FakeAudit) -> ExecutionGuardPort:

@@ -67,7 +67,7 @@ class GitAdapter:
     ) -> None:
         self._audit = audit
         self._guard = guard
-        self._repo_path = Path(repo_path)
+        self._repo_path = Path(repo_path).resolve()
         self._timeout_s = timeout_s
         self._git_binary: str | None = None  # resuelto lazy en primer uso
 
@@ -224,8 +224,20 @@ class GitAdapter:
         Raises asyncio.TimeoutError si supera `timeout_s`; el proceso es matado y
         drenado para evitar zombies (T-06-ALLOW-2).
         """
+        effective_action = Action(
+            type=action.type,
+            target=action.target,
+            parameters={
+                **action.parameters,
+                "argv": [subcommand, *args],
+                "cwd": str(self._repo_path),
+                "resolved_binary": resolved_git,
+            },
+            on_error=action.on_error,
+            retry_params=action.retry_params,
+        )
         authorization = self._guard.authorize(
-            action,
+            effective_action,
             adapter=self.name,
             max_risk=self.max_risk,
         )

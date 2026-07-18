@@ -5,8 +5,22 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
+
+
+class ClaimStatus(StrEnum):
+    NEW = "new"
+    REPLAY = "replay"
+    CONFLICT = "conflict"
+    IN_PROGRESS = "in_progress"
+
+
+@dataclass(frozen=True, slots=True)
+class IdempotencyClaim:
+    status: ClaimStatus
+    response: Mapping[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
