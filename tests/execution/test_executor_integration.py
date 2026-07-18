@@ -150,9 +150,7 @@ async def test_successful_plan_marks_entries_applied(
 
     assert result.success, f"plan debía completar: {result.detail}"
     assert f1.exists() and f2.exists()
-    rows = journal._conn.execute(
-        "SELECT status FROM undo_entries"
-    ).fetchall()
+    rows = journal._conn.execute("SELECT status FROM undo_entries").fetchall()
     assert len(rows) == 2, "se esperaban 2 entradas de journal"
     assert all(r["status"] == "applied" for r in rows), (
         "las entradas deberían quedar 'applied' tras el éxito"

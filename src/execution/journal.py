@@ -171,9 +171,7 @@ class UndoJournal:
 
     def load(self, entry_id: str) -> UndoEntry | None:
         """Carga una entrada por id, o None si no existe."""
-        row = self._conn.execute(
-            "SELECT * FROM undo_entries WHERE id=?", (entry_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM undo_entries WHERE id=?", (entry_id,)).fetchone()
         if row is None:
             return None
         return _row_to_entry(row)
@@ -249,7 +247,7 @@ class UndoJournal:
             trash_origin: str | None = None
             for line in trashinfo_content.splitlines():
                 if line.startswith("Path="):
-                    trash_origin = line[len("Path="):]
+                    trash_origin = line[len("Path=") :]
                     break
             if trash_origin is None:
                 return False

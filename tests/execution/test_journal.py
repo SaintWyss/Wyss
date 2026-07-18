@@ -333,7 +333,7 @@ def test_restore_already_rolled_back_returns_false(tmp_path: Path) -> None:
             destination=str(dest),
             inverse_op=inverse_op,
         )
-        first = journal.restore(entry_id)   # should succeed
+        first = journal.restore(entry_id)  # should succeed
         second = journal.restore(entry_id)  # should return False (already rolled back)
     finally:
         journal.close()

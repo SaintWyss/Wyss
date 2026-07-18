@@ -62,9 +62,7 @@ async def test_d87_task_reports_via_dispatcher(
     )
     store = PendingStore(tmp_path / "pending.db")
     try:
-        resultado = await dispatch(
-            plan, decision, pending_store=store, audit=fake_audit
-        )
+        resultado = await dispatch(plan, decision, pending_store=store, audit=fake_audit)
     finally:
         store.close()
 

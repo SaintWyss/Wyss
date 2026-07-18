@@ -79,14 +79,10 @@ class LLMOrchestrator:
 
         return _parse_classification(response.text)
 
-    async def draft_plan(
-        self, instruction: str, intent: IntentClassification
-    ) -> Plan:
+    async def draft_plan(self, instruction: str, intent: IntentClassification) -> Plan:
         task_id = f"ask-{uuid4().hex[:12]}"
         memory_block = (
-            _format_memory_safe(self._memory.recall(None))
-            if self._memory is not None
-            else ""
+            _format_memory_safe(self._memory.recall(None)) if self._memory is not None else ""
         )
         request = AgentModelRequest(
             agent_id=self._agent_id,
@@ -337,4 +333,4 @@ def _non_empty_str(value: object) -> bool:
 
 
 def _is_number(value: object) -> bool:
-    return (isinstance(value, int | float) and not isinstance(value, bool))
+    return isinstance(value, int | float) and not isinstance(value, bool)

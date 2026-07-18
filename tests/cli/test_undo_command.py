@@ -84,9 +84,7 @@ def test_undo_confirmar_ejecuta(tmp_path: Path) -> None:
     created.write_text("x")
     _journal_with_new_file(tmp_path, "t-go", created)
 
-    result = runner.invoke(
-        app, ["undo", "t-go", "--config", str(cfg)], input="CONFIRMAR\n"
-    )
+    result = runner.invoke(app, ["undo", "t-go", "--config", str(cfg)], input="CONFIRMAR\n")
 
     assert result.exit_code == 0, result.output
     assert not created.exists()

@@ -53,9 +53,7 @@ def test_malformed_toml(write_config: Callable[[str], Path]) -> None:
 
 def test_extra_key_top_level_rejected(write_config: Callable[[str], Path]) -> None:
     """Una clave extra desconocida a nivel raíz falla (extra=forbid) nombrando el campo."""
-    path = write_config(
-        'data_dir = "data"\naudit_db = "data/audit.db"\nclave_desconocida = "x"\n'
-    )
+    path = write_config('data_dir = "data"\naudit_db = "data/audit.db"\nclave_desconocida = "x"\n')
     with pytest.raises(ConfigError, match="clave_desconocida"):
         load_settings(path)
 
@@ -72,20 +70,14 @@ def test_extra_key_in_policy_rejected(write_config: Callable[[str], Path]) -> No
 
 def test_digest_hour_range_rejected(write_config: Callable[[str], Path]) -> None:
     """[digest].hour fuera de rango falla con loc digest.hour."""
-    path = write_config(
-        'data_dir = "data"\naudit_db = "data/audit.db"\n'
-        "[digest]\nhour = 25\n"
-    )
+    path = write_config('data_dir = "data"\naudit_db = "data/audit.db"\n[digest]\nhour = 25\n')
     with pytest.raises(ConfigError, match=r"digest\.hour"):
         load_settings(path)
 
 
 def test_digest_extra_key_rejected(write_config: Callable[[str], Path]) -> None:
     """Un typo bajo [digest] aborta el boot por extra=forbid."""
-    path = write_config(
-        'data_dir = "data"\naudit_db = "data/audit.db"\n'
-        "[digest]\nenbaled = true\n"
-    )
+    path = write_config('data_dir = "data"\naudit_db = "data/audit.db"\n[digest]\nenbaled = true\n')
     with pytest.raises(ConfigError, match=r"digest\.enbaled"):
         load_settings(path)
 
@@ -105,10 +97,7 @@ def test_intake_config_explicit_values(write_config: Callable[[str], Path]) -> N
 
 def test_intake_extra_key_rejected(write_config: Callable[[str], Path]) -> None:
     """Un typo bajo [intake] aborta el boot por extra=forbid."""
-    path = write_config(
-        'data_dir = "data"\naudit_db = "data/audit.db"\n'
-        "[intake]\nenbaled = true\n"
-    )
+    path = write_config('data_dir = "data"\naudit_db = "data/audit.db"\n[intake]\nenbaled = true\n')
     with pytest.raises(ConfigError, match=r"intake\.enbaled"):
         load_settings(path)
 
@@ -120,8 +109,7 @@ def test_intake_max_per_minute_range_rejected(
 ) -> None:
     """[intake].max_per_minute respeta ge=1/le=600."""
     path = write_config(
-        'data_dir = "data"\naudit_db = "data/audit.db"\n'
-        f"[intake]\nmax_per_minute = {value}\n"
+        f'data_dir = "data"\naudit_db = "data/audit.db"\n[intake]\nmax_per_minute = {value}\n'
     )
     with pytest.raises(ConfigError, match=r"intake\.max_per_minute"):
         load_settings(path)
@@ -130,8 +118,7 @@ def test_intake_max_per_minute_range_rejected(
 def test_invalid_type(write_config: Callable[[str], Path]) -> None:
     """Un tipo incorrecto (string donde va int) falla con mensaje legible que nombra el campo."""
     path = write_config(
-        'data_dir = "data"\naudit_db = "data/audit.db"\n'
-        '[policy]\nfile_count_b = "diez"\n'
+        'data_dir = "data"\naudit_db = "data/audit.db"\n[policy]\nfile_count_b = "diez"\n'
     )
     with pytest.raises(ConfigError, match="file_count_b"):
         load_settings(path)

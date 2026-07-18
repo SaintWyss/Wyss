@@ -19,6 +19,8 @@ uv run lint-imports
 ```
 
 Esta cadena está automatizada en `.github/workflows/ci.yml` para pull requests y pushes a `main`.
+El gate incluye además `uv run ruff format --check src tests` y usa el lock sin resolver versiones
+nuevas mediante `uv sync --locked`.
 
 ### Qué protege
 
@@ -54,17 +56,23 @@ npm run build
 
 La suite web cubre componentes y flujos de la SPA. El build valida TypeScript y genera el bundle consumido por el bridge y el cliente móvil.
 
-El workflow raíz no ejecuta actualmente esta cadena. Por lo tanto, un CI Python verde no demuestra que la SPA compile o que sus tests pasen.
+El workflow raíz ejecuta esta cadena en un job bloqueante e independiente. Un cambio de SPA no se
+puede integrar si fallan tests, lint o build.
 
 ## Android
 
 Desde el proyecto Android generado bajo `mobile/android`:
 
 ```bash
-cd mobile/android
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
+cd mobile
+npm ci
+npx cap sync android
+ANDROID_HOME="$HOME/Android/Sdk" bash android/gradlew -p android testDebugUnitTest assembleDebug
 ```
+
+El workflow raíz repite la preparación de Capacitor y el build Android en un job bloqueante con
+Node 24 y Java 21. En hosts locales sin `ANDROID_HOME` o Android SDK disponible, la cadena falla
+de forma explícita en lugar de omitir el APK.
 
 Validaciones automatizadas relevantes:
 
@@ -186,8 +194,8 @@ Todo PR debe ejecutar, según su alcance:
 | Cambio | Gate obligatorio |
 |---|---|
 | Python/core/daemon | pytest + mypy + Ruff + import-linter |
-| Web/SPA | test + lint + build |
-| Android | unit tests + assembleDebug |
+| Web/SPA | test + lint + build, bloqueantes en CI |
+| Android | sync Capacitor + unit tests + assembleDebug, bloqueantes en CI |
 | Configuración | tests de bootstrap + boot con plantilla |
 | Seguridad/política | dangerous prompts + re-evaluación + segunda muralla |
 | Operación móvil | smoke físico cuando afecte pairing, TLS, QR o WebView |

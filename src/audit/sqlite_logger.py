@@ -78,9 +78,7 @@ class SqliteAuditLogger:
         )
         self._conn.commit()
 
-    def span(
-        self, task_id: str, actor: str, event: str
-    ) -> AbstractContextManager[Span]:
+    def span(self, task_id: str, actor: str, event: str) -> AbstractContextManager[Span]:
         """Context manager que audita inicio, fin (con duración ms) y excepción."""
         return self._span_impl(task_id, actor, event)
 

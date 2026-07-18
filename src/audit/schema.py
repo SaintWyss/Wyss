@@ -32,8 +32,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
 
 CREATE_INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_audit_task ON audit_events(task_id)",
-    "CREATE INDEX IF NOT EXISTS idx_audit_type_time "
-    "ON audit_events(event_type, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_type_time ON audit_events(event_type, created_at)",
 )
 
 # Append-only estructural: ni siquiera un bug puede reescribir o borrar historia.

@@ -208,9 +208,7 @@ def test_move_records_journal_before_mutation(
     assert row["action_type"] == "file.move"
 
 
-def test_move_verify_fails_if_src_still_exists(
-    adapter: FileSystemAdapter, tmp_path: Path
-) -> None:
+def test_move_verify_fails_if_src_still_exists(adapter: FileSystemAdapter, tmp_path: Path) -> None:
     """verify() falla si la verificación es con result.success=False."""
     src = tmp_path / "src.txt"
     src.write_text("x", encoding="utf-8")
@@ -328,9 +326,7 @@ def test_delete_no_unlink_in_source(adapter: FileSystemAdapter, tmp_path: Path) 
                 and isinstance(func.value, ast.Name)
                 and func.value.id == "os"
             ):
-                pytest.fail(
-                    "FileSystemAdapter usa os.unlink — debe usar send2trash (D-64)"
-                )
+                pytest.fail("FileSystemAdapter usa os.unlink — debe usar send2trash (D-64)")
 
 
 # ---------------------------------------------------------------------------

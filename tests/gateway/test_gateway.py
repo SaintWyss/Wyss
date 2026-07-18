@@ -39,12 +39,8 @@ from tests.ports.fakes import FakeAuditPort
 
 def _tiers() -> dict[str, TierConfig]:
     return {
-        "economico": TierConfig(
-            provider="litellm", model_alias="gemini-default", max_tokens=512
-        ),
-        "fuerte": TierConfig(
-            provider="anthropic", model_alias="claude-opus", max_tokens=1024
-        ),
+        "economico": TierConfig(provider="litellm", model_alias="gemini-default", max_tokens=512),
+        "fuerte": TierConfig(provider="anthropic", model_alias="claude-opus", max_tokens=1024),
     }
 
 
@@ -106,9 +102,7 @@ async def test_happy_path_returns_response_with_local_cost(
     assert any(e.event_type is AuditEventType.COST_RECORDED for e in audit.events)
 
 
-async def test_secret_blocks_before_any_egress(
-    traces_db_path: Path, audit: FakeAuditPort
-) -> None:
+async def test_secret_blocks_before_any_egress(traces_db_path: Path, audit: FakeAuditPort) -> None:
     """scan() corre ANTES del provider: SecretDetected → provider invocado 0 veces (D-20)."""
     provider = FakeModelProvider()
     secret = "sk-ant-aaaaaaaaaaaaaaaaaaaaaaaa"
@@ -145,18 +139,12 @@ async def test_secret_audit_never_contains_value(
         assert e.payload.get("pattern") == "anthropic_key"
 
 
-async def test_budget_exceeded_blocks_pre_call(
-    traces_db_path: Path, audit: FakeAuditPort
-) -> None:
+async def test_budget_exceeded_blocks_pre_call(traces_db_path: Path, audit: FakeAuditPort) -> None:
     """authorize() veta ANTES del provider: BudgetExceeded → provider invocado 0 veces (D-18)."""
     provider = FakeModelProvider(
-        response=ModelResponse(
-            text="x", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1
-        )
+        response=ModelResponse(text="x", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1)
     )
-    gw = _build_gateway(
-        db_path=traces_db_path, audit=audit, provider=provider, global_budget=0.0
-    )
+    gw = _build_gateway(db_path=traces_db_path, audit=audit, provider=provider, global_budget=0.0)
     req = AgentModelRequest(agent_id="a", task_id="t-4", prompt="hola", tier="economico")
 
     with pytest.raises(BudgetExceeded):
@@ -171,9 +159,7 @@ async def test_provider_receives_tier_model_and_max_tokens(
 ) -> None:
     """El ModelRequest usa model_alias + max_tokens del TierConfig, no del caller (D-16)."""
     provider = FakeModelProvider(
-        response=ModelResponse(
-            text="ok", tokens_in=1, tokens_out=1, cost_usd=0.0, latency_ms=1
-        )
+        response=ModelResponse(text="ok", tokens_in=1, tokens_out=1, cost_usd=0.0, latency_ms=1)
     )
     gw = _build_gateway(db_path=traces_db_path, audit=audit, provider=provider)
     req = AgentModelRequest(agent_id="a", task_id="t-5", prompt="hola", tier="fuerte")
@@ -192,9 +178,7 @@ async def test_unknown_tier_propagates_without_fallback(
     """tier inexistente → UnknownTier propagado, sin fallback; se audita TASK_FAILED (D-17)."""
     provider = FakeModelProvider()
     gw = _build_gateway(db_path=traces_db_path, audit=audit, provider=provider)
-    req = AgentModelRequest(
-        agent_id="a", task_id="t-6", prompt="hola", tier="inexistente"
-    )
+    req = AgentModelRequest(agent_id="a", task_id="t-6", prompt="hola", tier="inexistente")
 
     with pytest.raises(UnknownTier):
         await gw.ask(req)
@@ -217,9 +201,7 @@ class _SlowProvider:
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.calls.append(request)
         await self._gate.wait()
-        return ModelResponse(
-            text="ok", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1
-        )
+        return ModelResponse(text="ok", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1)
 
 
 async def test_concurrent_asks_cannot_exceed_budget(
@@ -282,9 +264,7 @@ async def test_missing_provider_raises_domain_error_audited(
 
 def _ok_provider() -> FakeModelProvider:
     return FakeModelProvider(
-        response=ModelResponse(
-            text="ok", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1
-        )
+        response=ModelResponse(text="ok", tokens_in=10, tokens_out=10, cost_usd=0.0, latency_ms=1)
     )
 
 

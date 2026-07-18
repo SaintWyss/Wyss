@@ -142,10 +142,7 @@ def test_injection_attempt_results_in_blocked_plan(
     )
 
     # 4. Verificar que ConfiguredAgent auditó el rechazo de segunda muralla
-    assert any(
-        event.event_type == AuditEventType.POLICY_DECISION
-        for event in fake_audit.events
-    )
+    assert any(event.event_type == AuditEventType.POLICY_DECISION for event in fake_audit.events)
     assert "mass-delete" in decision.matched_rules or len(decision.matched_rules) > 0, (
         f"El plan debe matchear la denylist; matched_rules: {decision.matched_rules}"
     )
@@ -155,15 +152,11 @@ def test_injection_doc_fixture_exists() -> None:
     """Verifica que el fixture documental con instrucciones inyectadas existe y es válido."""
     fixture_path = Path(__file__).parent / "golden" / "injection_doc.md"
 
-    assert fixture_path.exists(), (
-        f"El fixture documental debe existir en {fixture_path}"
-    )
+    assert fixture_path.exists(), f"El fixture documental debe existir en {fixture_path}"
 
     content = fixture_path.read_text(encoding="utf-8")
     assert "rm -rf" in content.lower() or "rm -rf" in content, (
         "El fixture debe contener una instrucción inyectada con rm -rf"
     )
     # Verificar que también tiene contenido legítimo (no es solo inyección)
-    assert len(content) > 200, (
-        "El fixture debe tener suficiente contenido de texto legítimo"
-    )
+    assert len(content) > 200, "El fixture debe tener suficiente contenido de texto legítimo"

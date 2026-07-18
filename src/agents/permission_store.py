@@ -46,9 +46,7 @@ class SQLitePermissionStore:
                 kb_id=str(kb_id),
                 granted_at=datetime.fromisoformat(str(granted_at)),
                 revoked_at=(
-                    datetime.fromisoformat(str(revoked_at))
-                    if revoked_at is not None
-                    else None
+                    datetime.fromisoformat(str(revoked_at)) if revoked_at is not None else None
                 ),
             )
             for permission_id, subject_id, kb_id, granted_at, revoked_at in rows
@@ -66,11 +64,7 @@ class SQLitePermissionStore:
                 permission.subject_id,
                 permission.kb_id,
                 permission.granted_at.isoformat(),
-                (
-                    permission.revoked_at.isoformat()
-                    if permission.revoked_at is not None
-                    else None
-                ),
+                (permission.revoked_at.isoformat() if permission.revoked_at is not None else None),
             ),
         )
         self._conn.commit()

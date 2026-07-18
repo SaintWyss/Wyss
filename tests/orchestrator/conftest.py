@@ -60,9 +60,7 @@ class FakeAudit:
     def log(self, event: AuditEvent) -> None:
         self.events.append(event)
 
-    def span(
-        self, task_id: str, actor: str, event: str
-    ) -> AbstractContextManager[Span]:
+    def span(self, task_id: str, actor: str, event: str) -> AbstractContextManager[Span]:
         return self._span_impl(task_id, actor, event)
 
     @contextmanager

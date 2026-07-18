@@ -87,9 +87,7 @@ class MemoryStore:
         self._conn.commit()
         return fact_id
 
-    def recall(
-        self, category: str | None = None, limit: int = 50
-    ) -> list[MemoryFact]:
+    def recall(self, category: str | None = None, limit: int = 50) -> list[MemoryFact]:
         """Recuerda hechos recientes, opcionalmente filtrados por categoria."""
         if category is None:
             rows = self._conn.execute(
@@ -98,17 +96,14 @@ class MemoryStore:
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT * FROM memory_facts "
-                "WHERE category=? ORDER BY updated_at DESC LIMIT ?",
+                "SELECT * FROM memory_facts WHERE category=? ORDER BY updated_at DESC LIMIT ?",
                 (category, limit),
             ).fetchall()
         return [_fact_from_row(row) for row in rows]
 
     def list_all(self) -> list[MemoryFact]:
         """Devuelve todos los hechos ordenados por actualizacion descendente."""
-        rows = self._conn.execute(
-            "SELECT * FROM memory_facts ORDER BY updated_at DESC"
-        ).fetchall()
+        rows = self._conn.execute("SELECT * FROM memory_facts ORDER BY updated_at DESC").fetchall()
         return [_fact_from_row(row) for row in rows]
 
     def edit(self, fact_id: str, value: str) -> bool:

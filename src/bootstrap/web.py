@@ -152,7 +152,10 @@ def build_web_app(
         if not _is_allowed_host(host, allowed_hosts):
             _LOG.warning(
                 "403 host no permitido: Host=%r (permitidos: %s) en %s %s",
-                host, sorted(allowed_hosts), request.method, request.url.path,
+                host,
+                sorted(allowed_hosts),
+                request.method,
+                request.url.path,
             )
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
@@ -172,8 +175,12 @@ def build_web_app(
             _LOG.warning(
                 "403 origen no permitido: Origin=%r Sec-Fetch-Site=%r "
                 "(esquema esperado %s, hosts: %s) en %s %s",
-                origin, sec_fetch_site, allowed_scheme, sorted(allowed_hosts),
-                request.method, request.url.path,
+                origin,
+                sec_fetch_site,
+                allowed_scheme,
+                sorted(allowed_hosts),
+                request.method,
+                request.url.path,
             )
             return _error_response(
                 status.HTTP_403_FORBIDDEN,
@@ -200,7 +207,8 @@ def build_web_app(
                 _LOG.warning(
                     "401 sin token válido en %s %s (¿cookie perdida o server "
                     "reiniciado con token nuevo?)",
-                    request.method, request.url.path,
+                    request.method,
+                    request.url.path,
                 )
             return auth_response
 
@@ -430,9 +438,7 @@ def build_web_app(
         store: PendingStore | None = None
         try:
             store = PendingStore(db_path)
-            return {
-                "pending": [_pending_to_json(proposal) for proposal in store.load_pending()]
-            }
+            return {"pending": [_pending_to_json(proposal) for proposal in store.load_pending()]}
         finally:
             if store is not None:
                 store.close()

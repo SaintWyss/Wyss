@@ -123,9 +123,7 @@ async def test_litellm_envia_authorization_bearer(
         http_client, base_url="http://localhost:4000/", master_key="sk-master-123"
     )
 
-    await provider.complete(
-        ModelRequest(prompt="ping", model_alias="gemini-default", max_tokens=8)
-    )
+    await provider.complete(ModelRequest(prompt="ping", model_alias="gemini-default", max_tokens=8))
 
     assert route.calls.last.request.headers["authorization"] == "Bearer sk-master-123"
 
@@ -152,9 +150,7 @@ async def test_fake_model_provider_intercambiable(
 ) -> None:
     """(5) FakeModelProvider implementa la misma firma (.name + complete async), intercambiable."""
     fake = FakeModelProvider(
-        response=ModelResponse(
-            text="fake", tokens_in=1, tokens_out=1, cost_usd=0.0, latency_ms=0
-        )
+        response=ModelResponse(text="fake", tokens_in=1, tokens_out=1, cost_usd=0.0, latency_ms=0)
     )
 
     result = await fake.complete(request_economico)
@@ -190,8 +186,6 @@ async def test_litellm_base_url_con_v1_no_duplica_path(
         http_client, base_url="http://localhost:4000/v1", master_key="sk-master"
     )
 
-    await provider.complete(
-        ModelRequest(prompt="ping", model_alias="gemini-default", max_tokens=8)
-    )
+    await provider.complete(ModelRequest(prompt="ping", model_alias="gemini-default", max_tokens=8))
 
     assert route.calls.last.request.url.path == "/v1/chat/completions"

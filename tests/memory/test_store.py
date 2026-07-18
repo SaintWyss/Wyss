@@ -14,24 +14,15 @@ def _read_conn(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
-def test_wal_active_and_schema_created(
-    memory_store: MemoryStore, tmp_path: Path
-) -> None:
+def test_wal_active_and_schema_created(memory_store: MemoryStore, tmp_path: Path) -> None:
     conn = _read_conn(tmp_path / "memory.db")
     try:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         tables = {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        indexes = {
-            row[1] for row in conn.execute("PRAGMA index_list('memory_facts')")
-        }
-        columns = {
-            row[1]: row[4] for row in conn.execute("PRAGMA table_info('memory_facts')")
-        }
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list('memory_facts')")}
+        columns = {row[1]: row[4] for row in conn.execute("PRAGMA table_info('memory_facts')")}
     finally:
         conn.close()
 

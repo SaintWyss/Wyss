@@ -49,15 +49,11 @@ def test_schema_idempotent(index_db_path: Path) -> None:
         apply_index_schema(conn)
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         indexes = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='index'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
         }
     finally:
         conn.close()

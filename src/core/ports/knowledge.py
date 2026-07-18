@@ -42,9 +42,7 @@ class FullTextIndex(Protocol):
 
     def upsert(self, entries: Sequence[IndexEntry]) -> None: ...
 
-    def search(
-        self, query: str, kb_ids: frozenset[str], limit: int
-    ) -> Sequence[Hit]: ...
+    def search(self, query: str, kb_ids: frozenset[str], limit: int) -> Sequence[Hit]: ...
 
 
 class VectorIndex(Protocol):
@@ -52,9 +50,7 @@ class VectorIndex(Protocol):
 
     def upsert(self, entries: Sequence[tuple[IndexEntry, Vector]]) -> None: ...
 
-    def search(
-        self, vector: Vector, kb_ids: frozenset[str], limit: int
-    ) -> Sequence[Hit]: ...
+    def search(self, vector: Vector, kb_ids: frozenset[str], limit: int) -> Sequence[Hit]: ...
 
 
 class Retrieval(Protocol):

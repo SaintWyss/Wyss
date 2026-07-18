@@ -47,13 +47,9 @@ def test_write_supervised_creates_file(tmp_path: Path) -> None:
     memory.write_supervised(content_to_write)
 
     memory_path = tmp_path / "agents" / "test-agent" / "MEMORY.md"
-    assert memory_path.exists(), (
-        f"write_supervised() debe crear {memory_path}"
-    )
+    assert memory_path.exists(), f"write_supervised() debe crear {memory_path}"
     written = memory_path.read_text(encoding="utf-8")
-    assert written == content_to_write, (
-        f"El contenido escrito no coincide: {written!r}"
-    )
+    assert written == content_to_write, f"El contenido escrito no coincide: {written!r}"
 
     # Verificar que load() ahora retorna el contenido escrito
     loaded = memory.load()

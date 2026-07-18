@@ -47,9 +47,7 @@ class AnthropicProvider:
         resp.raise_for_status()  # transientes los maneja el retry del gateway (D-25), no acá
         data = resp.json()
         # El dict de la API muere acá: traducimos a dominio y descartamos el resto.
-        text = "".join(
-            block["text"] for block in data["content"] if block.get("type") == "text"
-        )
+        text = "".join(block["text"] for block in data["content"] if block.get("type") == "text")
         usage = data["usage"]
         return ModelResponse(
             text=text,

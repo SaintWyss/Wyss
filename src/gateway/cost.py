@@ -62,9 +62,7 @@ class CostTracker:
         self._inflight_agent: dict[str, float] = {}
         self._conn = open_gateway_db(db_path)
 
-    def estimate_cost(
-        self, model_alias: str, est_tokens_in: int, est_tokens_out: int
-    ) -> float:
+    def estimate_cost(self, model_alias: str, est_tokens_in: int, est_tokens_out: int) -> float:
         """Costo local estimado: (in+out)/1000 * precio del alias (D-24).
 
         `KeyError` si el alias no tiene precio en config — fail-fast, config incompleta.
@@ -72,9 +70,7 @@ class CostTracker:
         price = self._prices[model_alias]
         return (est_tokens_in + est_tokens_out) / 1000 * price
 
-    def authorize(
-        self, agent_id: str, model_alias: str, est_in: int, est_out: int
-    ) -> None:
+    def authorize(self, agent_id: str, model_alias: str, est_in: int, est_out: int) -> None:
         """Veta con `BudgetExceeded` si gasto + en-vuelo + estimado excede global o cap.
 
         Se llama ANTES de `provider.complete()` (Pitfall 2). Cada retry (D-25) re-llama esto.
@@ -90,9 +86,7 @@ class CostTracker:
             if self.month_spend_agent(agent_id) + inflight_agent + est > cap:
                 raise BudgetExceeded(f"presupuesto del agente {agent_id} agotado")
 
-    def reserve(
-        self, agent_id: str, model_alias: str, est_in: int, est_out: int
-    ) -> float:
+    def reserve(self, agent_id: str, model_alias: str, est_in: int, est_out: int) -> float:
         """Reserva el estimado como gasto EN VUELO hasta `release()` (WR-06).
 
         El gateway reserva tras pasar `authorize()` y libera al terminar el intento
@@ -164,8 +158,7 @@ class CostTracker:
     def month_spend(self) -> float:
         """Gasto local acumulado en el mes calendario actual (ventana sobre created_at)."""
         (total,) = self._conn.execute(
-            "SELECT COALESCE(SUM(cost_usd_local), 0.0) FROM spend_ledger "
-            "WHERE created_at >= ?",
+            "SELECT COALESCE(SUM(cost_usd_local), 0.0) FROM spend_ledger WHERE created_at >= ?",
             (self._month_start_iso(),),
         ).fetchone()
         return float(total)
@@ -183,9 +176,7 @@ class CostTracker:
     def _month_start_iso() -> str:
         """ISO del primer instante del mes calendario actual en UTC."""
         now = datetime.now(UTC)
-        return now.replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
-        ).isoformat()
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
     def close(self) -> None:
         """Cierra la conexión subyacente."""

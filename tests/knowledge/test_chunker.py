@@ -26,12 +26,11 @@ def test_empty_or_whitespace_text_returns_no_chunks(
 ) -> None:
     chunker = TokenChunker(chunk_size_tokens=512, chunk_overlap_tokens=51)
 
-    assert chunker.chunk(
-        ExtractedContent(source=make_source_file(), text="", metadata={})
-    ) == ()
-    assert chunker.chunk(
-        ExtractedContent(source=make_source_file(), text="  \n\t  ", metadata={})
-    ) == ()
+    assert chunker.chunk(ExtractedContent(source=make_source_file(), text="", metadata={})) == ()
+    assert (
+        chunker.chunk(ExtractedContent(source=make_source_file(), text="  \n\t  ", metadata={}))
+        == ()
+    )
 
 
 def test_short_text_produces_single_deterministic_chunk(

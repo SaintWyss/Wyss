@@ -73,9 +73,7 @@ def test_agents_become_definitions(tmp_path: Path) -> None:
     path = _write_toml(tmp_path, _VALID_AGENT_TOML)
     settings = load_settings(path)
 
-    assert hasattr(settings, "agents"), (
-        "WyssSettings debe tener el campo 'agents'"
-    )
+    assert hasattr(settings, "agents"), "WyssSettings debe tener el campo 'agents'"
     assert len(settings.agents) == 1, (
         f"Debe haber 1 agente en settings.agents; got: {settings.agents}"
     )

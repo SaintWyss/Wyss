@@ -60,9 +60,7 @@ def build_gateway(
     router = ModelRouter(dict(settings.tiers))
     minimizer = ContextMinimizer(
         env_values=frozenset(settings.env_values),
-        config_patterns=tuple(
-            (name, re.compile(rx)) for name, rx in settings.config_patterns
-        ),
+        config_patterns=tuple((name, re.compile(rx)) for name, rx in settings.config_patterns),
     )
     traces = TraceStore(db_path)
     # D-22: la retención NO es config muerta — la purga corre en cada boot (WR-02). Hasta que
@@ -81,9 +79,7 @@ def build_gateway(
             base_url=os.environ.get("LITELLM_BASE_URL", _LITELLM_DEFAULT_BASE_URL),
             master_key=os.environ.get("LITELLM_MASTER_KEY", ""),
         ),
-        "anthropic": AnthropicProvider(
-            client, api_key=os.environ.get("ANTHROPIC_API_KEY", "")
-        ),
+        "anthropic": AnthropicProvider(client, api_key=os.environ.get("ANTHROPIC_API_KEY", "")),
     }
     return ModelGateway(
         router=router,

@@ -102,9 +102,7 @@ class DaemonServer:
             "digest.today": self._digest_today,
         }
 
-    async def handle(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
+    async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Atiende una request JSON-RPC por línea."""
         try:
             raw = await reader.readline()
@@ -156,10 +154,7 @@ class DaemonServer:
             }
 
         intent = await self._orchestrator.classify_intent(instruction)
-        if (
-            intent.category == IntentCategory.AMBIGUOUS_REQUEST
-            or intent.clarification_needed
-        ):
+        if intent.category == IntentCategory.AMBIGUOUS_REQUEST or intent.clarification_needed:
             return {
                 "outcome": "clarification_needed",
                 "message": "Necesito una instrucción más específica.",
@@ -209,10 +204,7 @@ class DaemonServer:
             }
 
         intent = await self._orchestrator.classify_intent(instruction)
-        if (
-            intent.category == IntentCategory.AMBIGUOUS_REQUEST
-            or intent.clarification_needed
-        ):
+        if intent.category == IntentCategory.AMBIGUOUS_REQUEST or intent.clarification_needed:
             return {
                 "outcome": "clarification_needed",
                 "message": "Necesito una instrucción más específica.",
@@ -258,10 +250,7 @@ class DaemonServer:
         # nivel NUEVO, no la del nivel guardado.
         plan = _plan_from_json(proposal.plan_json)
         fresh_decision = self._engine.evaluate(plan)
-        if (
-            fresh_decision.outcome == Outcome.REJECT
-            or fresh_decision.risk_level >= RiskLevel.D
-        ):
+        if fresh_decision.outcome == Outcome.REJECT or fresh_decision.risk_level >= RiskLevel.D:
             await dispatch(
                 plan,
                 fresh_decision,

@@ -105,16 +105,12 @@ class RoutineStore:
 
     def get(self, routine_id: str) -> Routine | None:
         """Carga una rutina por id, o None si no existe."""
-        row = self._conn.execute(
-            "SELECT * FROM routines WHERE id=?", (routine_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM routines WHERE id=?", (routine_id,)).fetchone()
         return _row_to_routine(row)
 
     def list_all(self) -> list[Routine]:
         """Devuelve todas las rutinas ordenadas por creacion."""
-        rows = self._conn.execute(
-            "SELECT * FROM routines ORDER BY created_at, id"
-        ).fetchall()
+        rows = self._conn.execute("SELECT * FROM routines ORDER BY created_at, id").fetchall()
         return [_routine_from_row(row) for row in rows]
 
     def list_active(self) -> list[Routine]:
@@ -126,17 +122,13 @@ class RoutineStore:
 
     def pause(self, routine_id: str) -> bool:
         """Pausa una rutina existente."""
-        cur = self._conn.execute(
-            "UPDATE routines SET status='paused' WHERE id=?", (routine_id,)
-        )
+        cur = self._conn.execute("UPDATE routines SET status='paused' WHERE id=?", (routine_id,))
         self._conn.commit()
         return cur.rowcount == 1
 
     def resume(self, routine_id: str) -> bool:
         """Reanuda una rutina existente."""
-        cur = self._conn.execute(
-            "UPDATE routines SET status='active' WHERE id=?", (routine_id,)
-        )
+        cur = self._conn.execute("UPDATE routines SET status='active' WHERE id=?", (routine_id,))
         self._conn.commit()
         return cur.rowcount == 1
 

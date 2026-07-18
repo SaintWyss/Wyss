@@ -87,9 +87,7 @@ def test_authorize_provider_never_invoked_on_exceed(traces_db_path: Path) -> Non
 
 def test_authorize_per_agent_cap(traces_db_path: Path) -> None:
     """(3) límite por-agente: gasto del agente + estimado > cap -> BudgetExceeded con su nombre."""
-    ct = _tracker(
-        traces_db_path, global_budget=1000.0, agent_budgets={"belgrano": 5.0}
-    )
+    ct = _tracker(traces_db_path, global_budget=1000.0, agent_budgets={"belgrano": 5.0})
     try:
         ct.record("belgrano", "deepseek-default", 2000, 2000)  # 4.0 para belgrano
         with pytest.raises(BudgetExceeded, match="belgrano"):
@@ -100,9 +98,7 @@ def test_authorize_per_agent_cap(traces_db_path: Path) -> None:
 
 def test_authorize_without_cap_only_global(traces_db_path: Path) -> None:
     """(3b) sin cap por-agente solo aplica el global (D-18)."""
-    ct = _tracker(
-        traces_db_path, global_budget=1000.0, agent_budgets={"otro": 1.0}
-    )
+    ct = _tracker(traces_db_path, global_budget=1000.0, agent_budgets={"otro": 1.0})
     try:
         # belgrano no tiene cap; bajo el global no debe vetar
         ct.authorize("belgrano", "gemini-default", 1000, 500)  # no raise
@@ -179,9 +175,7 @@ def test_inflight_reservation_blocks_concurrent_authorize(traces_db_path: Path) 
 
 def test_inflight_reservation_counts_against_agent_cap(traces_db_path: Path) -> None:
     """(6b) WR-06: la reserva en vuelo del agente cuenta contra SU cap, no contra otros."""
-    ct = _tracker(
-        traces_db_path, global_budget=1000.0, agent_budgets={"belgrano": 5.0}
-    )
+    ct = _tracker(traces_db_path, global_budget=1000.0, agent_budgets={"belgrano": 5.0})
     try:
         reserved = ct.reserve("belgrano", "gemini-default", 1000, 500)  # 3.0 en vuelo
         with pytest.raises(BudgetExceeded, match="belgrano"):

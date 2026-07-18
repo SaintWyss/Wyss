@@ -17,9 +17,7 @@ from core.domain.gateway import ModelRequest, ModelResponse
 class LiteLLMProvider:
     """Adapter del proxy LiteLLM (OpenAI-compatible, httpx directo). Implementa ModelProvider."""
 
-    def __init__(
-        self, client: httpx.AsyncClient, base_url: str, master_key: str
-    ) -> None:
+    def __init__(self, client: httpx.AsyncClient, base_url: str, master_key: str) -> None:
         self._client = client
         # El adapter es dueño del path: acepta base URL con o sin `/v1` (ambas
         # convenciones circulan — OpenAI SDK usa base con /v1) y evita `/v1/v1`.

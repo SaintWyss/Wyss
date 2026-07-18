@@ -34,8 +34,7 @@ def settings(tmp_path: Path) -> WyssSettings:
     config = tmp_path / "config.toml"
     data_dir = tmp_path / "data"
     config.write_text(
-        f'data_dir = "{data_dir.as_posix()}"\n'
-        f'audit_db = "{(data_dir / "audit.db").as_posix()}"\n',
+        f'data_dir = "{data_dir.as_posix()}"\naudit_db = "{(data_dir / "audit.db").as_posix()}"\n',
         encoding="utf-8",
     )
     return load_settings(config)
@@ -195,9 +194,7 @@ async def test_origin_null_without_sec_fetch_rejected(
     assert response.status_code == 403
 
 
-async def test_origin_null_cross_site_rejected(
-    client: httpx.AsyncClient, _fake_rpc: None
-) -> None:
+async def test_origin_null_cross_site_rejected(client: httpx.AsyncClient, _fake_rpc: None) -> None:
     """Origin null desde otro sitio (Sec-Fetch-Site: cross-site) → 403."""
     response = await client.post(
         "/api/ask",
@@ -262,9 +259,7 @@ async def test_tls_cookie_is_secure(tls_client: httpx.AsyncClient) -> None:
 
 async def test_tls_origin_scheme(tls_client: httpx.AsyncClient) -> None:
     """Con TLS el Origin permitido es https://<host>; http:// deja de aceptarse."""
-    accepted = await tls_client.get(
-        "/api/status", headers={**_AUTH, "Origin": "https://127.0.0.1"}
-    )
+    accepted = await tls_client.get("/api/status", headers={**_AUTH, "Origin": "https://127.0.0.1"})
     assert accepted.status_code == 200
 
     downgraded = await tls_client.get(
@@ -847,9 +842,7 @@ async def test_intake_rate_limit(
         assert (
             await client.post("/api/intake", json={"instruction": "dos"}, headers=headers)
         ).status_code == 200
-        limited = await client.post(
-            "/api/intake", json={"instruction": "tres"}, headers=headers
-        )
+        limited = await client.post("/api/intake", json={"instruction": "tres"}, headers=headers)
 
     assert limited.status_code == 429
     assert _json(limited)["error"] == "rate limit excedido"
@@ -924,9 +917,7 @@ async def test_daemon_endpoint(
     assert down.status_code == 200
     assert _json(down) == {"alive": False}
 
-    async def fake_rpc(
-        _socket: Path, method: str, _params: dict[str, object]
-    ) -> dict[str, Any]:
+    async def fake_rpc(_socket: Path, method: str, _params: dict[str, object]) -> dict[str, Any]:
         assert method == "status"
         return {"uptime": 1}
 
@@ -996,30 +987,22 @@ async def test_lan_host_permitido_con_cookie(lan_client: httpx.AsyncClient) -> N
 async def test_lan_no_autenticado_401(lan_client: httpx.AsyncClient) -> None:
     """LAN habilitada NO implica ejecución sin auth: sin cookie/token → 401 en todo path."""
     assert (await lan_client.get("/api/status")).status_code == 401
-    assert (
-        await lan_client.post("/api/ask", json={"instruction": "hola"})
-    ).status_code == 401
+    assert (await lan_client.post("/api/ask", json={"instruction": "hola"})).status_code == 401
 
 
 async def test_lan_host_ajeno_403(lan_client: httpx.AsyncClient) -> None:
     """La allowlist es exacta: otro host (DNS rebinding) sigue en 403 aun autenticado."""
-    response = await lan_client.get(
-        "/api/status", headers={"Host": "evil.com", **_AUTH}
-    )
+    response = await lan_client.get("/api/status", headers={"Host": "evil.com", **_AUTH})
     assert response.status_code == 403
     assert _json(response)["error"] == "host no permitido"
 
 
 async def test_lan_origin_permitido_y_ajeno(lan_client: httpx.AsyncClient) -> None:
     """Origin del propio host LAN pasa; un Origin ajeno se corta en 403."""
-    ok = await lan_client.get(
-        "/api/status", headers={"Origin": f"http://{_LAN_IP}:7777", **_AUTH}
-    )
+    ok = await lan_client.get("/api/status", headers={"Origin": f"http://{_LAN_IP}:7777", **_AUTH})
     assert ok.status_code == 200
 
-    rejected = await lan_client.get(
-        "/api/status", headers={"Origin": "http://evil.com", **_AUTH}
-    )
+    rejected = await lan_client.get("/api/status", headers={"Origin": "http://evil.com", **_AUTH})
     assert rejected.status_code == 403
     assert _json(rejected)["error"] == "origen no permitido"
 
@@ -1050,9 +1033,7 @@ async def test_origin_localhost_collision_still_rejected(settings: WyssSettings)
 
 async def test_default_sigue_solo_localhost(client: httpx.AsyncClient) -> None:
     """Sin lan_hosts (default), el host LAN NO está permitido: LAN es opt-in."""
-    response = await client.get(
-        "/api/status", headers={"Host": f"{_LAN_IP}:7777", **_AUTH}
-    )
+    response = await client.get("/api/status", headers={"Host": f"{_LAN_IP}:7777", **_AUTH})
     assert response.status_code == 403
 
 
@@ -1061,6 +1042,7 @@ async def test_intake_rpc_error_es_legible(
 ) -> None:
     """Smoke fase 13: un error JSON-RPC del daemon (plan LLM inválido) salía
     como 500 con traceback — debe ser 502 legible."""
+
     async def fake_rpc(
         _socket_path: Path, _method: str, _params: dict[str, object]
     ) -> dict[str, Any]:

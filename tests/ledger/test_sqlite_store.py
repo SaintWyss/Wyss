@@ -57,18 +57,14 @@ def test_query_by_category_matches_ground_truth(
     assert dict(resultado) == GASTOS_POR_CATEGORIA_ESPERADOS
 
 
-def test_balance_matches_ground_truth(
-    tmp_path: Path, transacciones_ricas: list[TxSpec]
-) -> None:
+def test_balance_matches_ground_truth(tmp_path: Path, transacciones_ricas: list[TxSpec]) -> None:
     """D1: (ingresos_total, gastos_total) cuadran exacto con el cálculo manual."""
     store = _build_store(tmp_path / "ledger.db", transacciones_ricas)
     ingresos, gastos = store.balance(DESDE, HASTA)
     assert (ingresos, gastos) == pytest.approx(BALANCE_ESPERADO)
 
 
-def test_surplus_matches_ground_truth(
-    tmp_path: Path, transacciones_ricas: list[TxSpec]
-) -> None:
+def test_surplus_matches_ground_truth(tmp_path: Path, transacciones_ricas: list[TxSpec]) -> None:
     """D1: surplus = ingresos - gastos cuadra exacto con el cálculo manual."""
     store = _build_store(tmp_path / "ledger.db", transacciones_ricas)
     assert store.surplus(DESDE, HASTA) == pytest.approx(SURPLUS_ESPERADO)
@@ -82,9 +78,7 @@ def test_coverage_days_counts_distinct_dates(
     assert store.coverage_days(DESDE, HASTA) == COVERAGE_DAYS_ESPERADO
 
 
-def test_window_excludes_out_of_range(
-    tmp_path: Path, transacciones_ricas: list[TxSpec]
-) -> None:
+def test_window_excludes_out_of_range(tmp_path: Path, transacciones_ricas: list[TxSpec]) -> None:
     """D2: una transacción fuera de DESDE..HASTA NO debe filtrarse a ninguna agregación.
 
     El set rico incluye un gasto 2026-04-28 ($999) y un ingreso 2026-06-01 ($999): si el
@@ -100,9 +94,7 @@ def test_window_excludes_out_of_range(
     assert store.query_by_category(DESDE, HASTA)["delivery"] == pytest.approx(600.00)
 
 
-def test_coverage_days_sparse_dataset(
-    tmp_path: Path, transacciones_escasas: list[TxSpec]
-) -> None:
+def test_coverage_days_sparse_dataset(tmp_path: Path, transacciones_escasas: list[TxSpec]) -> None:
     """D3 (calibración): dataset escaso reporta exactamente 5 fechas distintas."""
     store = _build_store(tmp_path / "ledger.db", transacciones_escasas)
     assert store.coverage_days(DESDE, HASTA) == COVERAGE_DAYS_ESCASO_ESPERADO

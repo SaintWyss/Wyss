@@ -99,9 +99,7 @@ def _strip_env_comment(value: str) -> str:
         if char == '"' and not in_single:
             in_double = not in_double
             continue
-        if char == "#" and not in_single and not in_double and (
-            i == 0 or value[i - 1].isspace()
-        ):
+        if char == "#" and not in_single and not in_double and (i == 0 or value[i - 1].isspace()):
             return value[:i].rstrip()
     return value.strip()
 
@@ -348,9 +346,7 @@ def _gateway_env_values() -> tuple[str, ...]:
     Solo los VALORES (para el bloqueo por substring del minimizer); los nombres viven en
     `_GATEWAY_ENV_KEYS`. Un valor ausente se omite — no se inventa ni se loguea (V2/V7).
     """
-    return tuple(
-        value for key in _GATEWAY_ENV_KEYS if (value := os.environ.get(key))
-    )
+    return tuple(value for key in _GATEWAY_ENV_KEYS if (value := os.environ.get(key)))
 
 
 def _derive_agent_budgets(
@@ -537,12 +533,8 @@ def load_settings(path: Path) -> WyssSettings:
     try:
         model = WyssConfigModel.model_validate(raw)
     except ValidationError as e:
-        lines = [
-            f"  {'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in e.errors()
-        ]
-        raise ConfigError(
-            f"configuración inválida en {path}:\n" + "\n".join(lines)
-        ) from e
+        lines = [f"  {'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in e.errors()]
+        raise ConfigError(f"configuración inválida en {path}:\n" + "\n".join(lines)) from e
 
     return _to_settings(model)
 

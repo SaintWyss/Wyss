@@ -53,9 +53,7 @@ def _settings(
 ) -> GatewaySettings:
     return GatewaySettings(
         tiers={
-            "economico": TierConfig(
-                provider="litellm", model_alias="gemini-default", max_tokens=64
-            )
+            "economico": TierConfig(provider="litellm", model_alias="gemini-default", max_tokens=64)
         },
         prices={"gemini-default": 0.001},
         global_budget=global_budget,
@@ -76,9 +74,7 @@ async def test_format_secret_never_egresses(
     # respx con assert_all_called=False: si se hace CUALQUIER request, el test lo detecta
     # porque no hay ruta registrada (respx levantaría). No registramos ninguna ruta → 0 egress.
     async with httpx.AsyncClient() as client:
-        gw = build_gateway(
-            _settings(), client=client, audit=audit, data_dir=str(tmp_path)
-        )
+        gw = build_gateway(_settings(), client=client, audit=audit, data_dir=str(tmp_path))
         req = AgentModelRequest(
             agent_id="a", task_id="t", prompt=f"esto filtra {secret}", tier="economico"
         )
@@ -154,9 +150,7 @@ async def test_env_file_value_is_collected_and_blocked_from_egress(
 
     assert secret in settings.gateway.env_values
     async with httpx.AsyncClient() as client:
-        gw = build_gateway(
-            settings.gateway, client=client, audit=audit, data_dir=str(tmp_path)
-        )
+        gw = build_gateway(settings.gateway, client=client, audit=audit, data_dir=str(tmp_path))
         req = AgentModelRequest(
             agent_id="a", task_id="t", prompt=f"la clave es {secret}", tier="economico"
         )
@@ -204,9 +198,7 @@ async def test_documented_env_key_value_never_egresses(
     settings = load_settings(config_path)
     assert secret in settings.gateway.env_values  # bootstrap SÍ carga la clave (CR-01)
     async with httpx.AsyncClient() as client:
-        gw = build_gateway(
-            settings.gateway, client=client, audit=audit, data_dir=str(tmp_path)
-        )
+        gw = build_gateway(settings.gateway, client=client, audit=audit, data_dir=str(tmp_path))
         req = AgentModelRequest(
             agent_id="a", task_id="t", prompt=f"la clave es {secret}", tier="economico"
         )
@@ -252,9 +244,7 @@ async def test_build_gateway_applies_timeout_from_settings(
     """
     settings = GatewaySettings(
         tiers={
-            "economico": TierConfig(
-                provider="litellm", model_alias="gemini-default", max_tokens=64
-            )
+            "economico": TierConfig(provider="litellm", model_alias="gemini-default", max_tokens=64)
         },
         prices={"gemini-default": 0.001},
         global_budget=10.0,
@@ -266,9 +256,7 @@ async def test_build_gateway_applies_timeout_from_settings(
         assert client.timeout == httpx.Timeout(42.5)
 
 
-async def test_build_gateway_purges_expired_traces(
-    tmp_path: Path, audit: FakeAuditPort
-) -> None:
+async def test_build_gateway_purges_expired_traces(tmp_path: Path, audit: FakeAuditPort) -> None:
     """WR-02: build_gateway purga al boot los traces más viejos que trace_retention_days.
 
     trace_retention_days (D-22) no es config muerta: el default (90d) borra el trace de
@@ -335,9 +323,7 @@ def _gateway_with_fake(
     )
 
 
-async def test_happy_path_leaves_queryable_trace(
-    tmp_path: Path, audit: FakeAuditPort
-) -> None:
+async def test_happy_path_leaves_queryable_trace(tmp_path: Path, audit: FakeAuditPort) -> None:
     """Happy path → fila consultable por task_id con todos los campos D-22 y costo local > 0."""
     db_path = tmp_path / "traces.db"
     provider = FakeModelProvider(
@@ -373,9 +359,7 @@ async def test_happy_path_leaves_queryable_trace(
     assert row["prompt"] == "resumime esto por favor"
 
 
-async def test_provider_interchangeability(
-    tmp_path: Path, audit: FakeAuditPort
-) -> None:
+async def test_provider_interchangeability(tmp_path: Path, audit: FakeAuditPort) -> None:
     """GATE-01: cambiar el provider fake por otro no cambia el flujo del ModelGateway."""
     db_path = tmp_path / "traces.db"
     other = FakeModelProvider(
@@ -385,9 +369,7 @@ async def test_provider_interchangeability(
         name="otro",
     )
     gw = _gateway_with_fake(db_path, audit, other)
-    req = AgentModelRequest(
-        agent_id="a", task_id="task-y", prompt="hola", tier="economico"
-    )
+    req = AgentModelRequest(agent_id="a", task_id="task-y", prompt="hola", tier="economico")
 
     resp = await gw.ask(req)
 
@@ -395,9 +377,7 @@ async def test_provider_interchangeability(
     assert len(TraceStore(db_path).query_by_task("task-y")) == 1
 
 
-async def test_traces_db_has_restrictive_permissions(
-    tmp_path: Path, audit: FakeAuditPort
-) -> None:
+async def test_traces_db_has_restrictive_permissions(tmp_path: Path, audit: FakeAuditPort) -> None:
     """traces.db (prompts completos) se crea con permisos 0600 (T-02-trace-file-perms)."""
     db_path = tmp_path / "traces.db"
     TraceStore(db_path).close()

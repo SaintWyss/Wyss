@@ -31,9 +31,7 @@ def test_memory_list_renderiza_tabla_legible(
 ) -> None:
     cfg = _write_config(tmp_path)
 
-    async def fake_rpc(
-        socket_path: Path, method: str, params: dict[str, object]
-    ) -> dict[str, Any]:
+    async def fake_rpc(socket_path: Path, method: str, params: dict[str, object]) -> dict[str, Any]:
         del socket_path, params
         assert method == "memory.list"
         return {
@@ -64,9 +62,7 @@ def test_memory_list_renderiza_tabla_legible(
 def test_memory_list_empty_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _write_config(tmp_path)
 
-    async def fake_rpc(
-        socket_path: Path, method: str, params: dict[str, object]
-    ) -> dict[str, Any]:
+    async def fake_rpc(socket_path: Path, method: str, params: dict[str, object]) -> dict[str, Any]:
         del socket_path, method, params
         return {"facts": []}
 
@@ -85,9 +81,7 @@ def test_memory_edit_y_rm_invocan_rpc_correcto(
     cfg = _write_config(tmp_path)
     calls: list[tuple[str, dict[str, object]]] = []
 
-    async def fake_rpc(
-        socket_path: Path, method: str, params: dict[str, object]
-    ) -> dict[str, Any]:
+    async def fake_rpc(socket_path: Path, method: str, params: dict[str, object]) -> dict[str, Any]:
         del socket_path
         calls.append((method, params))
         return {"ok": True}

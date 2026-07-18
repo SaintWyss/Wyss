@@ -20,9 +20,7 @@ class FakeAudit:
     def log(self, event: AuditEvent) -> None:
         self.events.append(event)
 
-    def span(
-        self, task_id: str, actor: str, event: str
-    ) -> AbstractContextManager[Span]:
+    def span(self, task_id: str, actor: str, event: str) -> AbstractContextManager[Span]:
         return nullcontext(
             Span(task_id=task_id, actor=actor, event=event, started_at=datetime.now(UTC))
         )
@@ -50,9 +48,7 @@ def test_wal_active(pending_store: PendingStore, tmp_path: Path) -> None:
     conn = _read_conn(tmp_path / "pending.db")
     try:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
-        indexes = {
-            row[1] for row in conn.execute("PRAGMA index_list('pending_proposals')")
-        }
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list('pending_proposals')")}
     finally:
         conn.close()
 
