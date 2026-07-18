@@ -313,7 +313,7 @@ Usar `pkill` solo después de verificar el proceso con `pgrep -af wyss`.
 
 ## 18. Límites conocidos
 
-- package metadata aún declara `0.1.0` aunque el alcance v1 esté implementado;
+- `1.0.0.dev0` identifica desarrollo v1 y no autoriza una publicación final;
 - undo limitado a archivos;
 - deterministic es el default;
 - infraestructura LLM y Notion es externa;
