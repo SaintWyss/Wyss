@@ -19,7 +19,7 @@ import pytest
 from core.domain.audit import AuditEventType
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
-from tests.execution.conftest import FakeAudit, make_engine, make_guard
+from tests.execution.conftest import FakeAudit, RecordingGuard, make_engine, make_guard
 
 if TYPE_CHECKING:
     from execution.git import GitAdapter
@@ -130,6 +130,23 @@ async def test_allowed_status_runs(git_repo: Path) -> None:
     assert result.payload["returncode"] == 0
     # git status siempre produce algo en stdout
     assert isinstance(result.payload.get("stdout"), str)
+
+
+@pytest.mark.asyncio
+async def test_guard_receives_resolved_repo_and_exact_git_argv(git_repo: Path) -> None:
+    from execution.git import GitAdapter
+
+    audit = FakeAudit()
+    guard = RecordingGuard()
+    adapter = GitAdapter(audit, git_repo, guard, allowed_subcommands={"status"})
+
+    result = await adapter.execute(_make_action("status", "--short"))
+
+    assert result.success is True
+    effective = guard.actions[-1]
+    assert effective.parameters["cwd"] == str(git_repo.resolve())
+    assert effective.parameters["argv"] == ["status", "--short"]
+    assert Path(str(effective.parameters["resolved_binary"])).is_absolute()
 
 
 @pytest.mark.asyncio

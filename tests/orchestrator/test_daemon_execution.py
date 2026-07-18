@@ -7,6 +7,7 @@ de auditoría. Sin runner inyectado el shape histórico se preserva (compat).
 
 import asyncio
 import json
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -443,3 +444,58 @@ async def test_confirm_reevaluates_and_rejects_now_dangerous(
     second = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"})
     assert second["accepted"] is False
     assert second["reason"] == "pending no encontrado"
+
+
+async def test_d_reevaluation_reports_expired_if_ttl_wins_cas(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    fake_audit: FakeAudit,
+    journal: UndoJournal,
+) -> None:
+    from core.domain.policy import PolicyDecision
+    from core.domain.risk import Outcome, RiskLevel
+
+    plan = Plan(
+        task_id="rc-d-ttl",
+        summary="borrar passwd",
+        steps=(Action("file.delete", "/etc/passwd"),),
+        rationale="test",
+    )
+    pending_id = pending_store.save(
+        plan,
+        PolicyDecision("rc-d-ttl", RiskLevel.C, Outcome.CONFIRM_STRONG),
+        ttl_seconds=600,
+    )
+    original_resolve = pending_store.resolve
+
+    def cross_ttl(*args: Any, **kwargs: Any) -> object:
+        with sqlite3.connect(tmp_path / "pending.db") as conn:
+            conn.execute(
+                "UPDATE pending_proposals SET expires_at=? WHERE id=?",
+                ("2000-01-01T00:00:00+00:00", pending_id),
+            )
+        return original_resolve(*args, **kwargs)
+
+    monkeypatch.setattr(pending_store, "resolve", cross_ttl)
+    daemon = _daemon(
+        engine,
+        plan,
+        pending_store,
+        fake_audit,
+        _runner(engine, fake_audit, journal, tmp_path),
+    )
+
+    result = await _rpc(
+        daemon,
+        "confirm",
+        {"pending_id": pending_id, "response": "CONFIRMAR"},
+    )
+
+    assert result["accepted"] is False
+    assert result["reason"] == "propuesta expirada"
+    expired = pending_store.load(pending_id)
+    assert expired is not None
+    assert expired.status == "expired"
+    assert expired.revision == 2

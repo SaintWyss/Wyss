@@ -116,3 +116,21 @@ def test_completed_quota_never_evicts_replays_inside_24_hours(tmp_path: Path) ->
         assert replay.response == {"outcome": "resolved"}
     finally:
         store.close()
+
+
+def test_response_size_limit_leaves_claim_ambiguous(tmp_path: Path) -> None:
+    store = SqliteIdempotencyStore(
+        tmp_path / "client_requests.db",
+        max_response_bytes=32,
+    )
+    try:
+        assert store.claim("edge:large", "fingerprint").status is ClaimStatus.NEW
+        try:
+            store.complete("edge:large", {"message": "x" * 100})
+        except ValueError as exc:
+            assert "límite de bytes" in str(exc)
+        else:
+            raise AssertionError("una respuesta grande debía rechazarse")
+        assert store.claim("edge:large", "fingerprint").status is ClaimStatus.IN_PROGRESS
+    finally:
+        store.close()

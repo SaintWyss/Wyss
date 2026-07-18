@@ -1,8 +1,10 @@
 """Daemon JSON-RPC y dispatcher fail-closed."""
 
 import asyncio
+import grp
 import json
 import os
+import pwd
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -370,6 +372,85 @@ async def test_dedicated_home_socket_real_ipc_rejects_admin_method(
         assert response["error"]["code"] == -32001
         assert response["error"]["message"] == "Home peer no autorizado"
         assert response["id"] is None
+    finally:
+        await running.aclose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("WYSS_EDGE_SMOKE_USER"),
+    reason="requiere identidad local Edge preparada explícitamente",
+)
+async def test_authorized_edge_uid_can_only_open_home_socket(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    edge_user = os.environ["WYSS_EDGE_SMOKE_USER"]
+    shared_group = os.environ["WYSS_EDGE_SMOKE_GROUP"]
+    runtime_dir = Path(os.environ["WYSS_EDGE_SMOKE_RUNTIME"])
+    edge_uid = pwd.getpwnam(edge_user).pw_uid
+    shared_gid = grp.getgrnam(shared_group).gr_gid
+    owner_socket = tmp_path / "owner-private.sock"
+    home_socket = runtime_dir / f"authority-test-{os.getpid()}.sock"
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    running = await start_daemon(
+        owner_socket,
+        home_socket_path=home_socket,
+        home_peer_uid=edge_uid,
+        home_peer_gid=shared_gid,
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=scheduler,
+        runner=_SpyRunner(),
+        idempotency=idempotency,
+        reaper_interval_s=3600,
+    )
+    client = """
+import json, socket, sys
+home, owner = sys.argv[1:3]
+s = socket.socket(socket.AF_UNIX)
+s.connect(home)
+s.sendall(b'{"jsonrpc":"2.0","method":"status","params":{},"id":"edge"}\\n')
+response = json.loads(s.recv(8192))
+s.close()
+owner_errno = None
+try:
+    o = socket.socket(socket.AF_UNIX)
+    o.connect(owner)
+except OSError as exc:
+    owner_errno = exc.errno
+print(json.dumps({"response": response, "owner_errno": owner_errno}))
+"""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "sudo",
+            "-n",
+            "-u",
+            edge_user,
+            "/usr/bin/python3",
+            "-c",
+            client,
+            str(home_socket),
+            str(owner_socket),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+        assert process.returncode == 0, stderr.decode(errors="replace")
+        evidence = json.loads(stdout)
+        assert evidence["response"]["result"]["daemon_version"] == "05-04"
+        assert evidence["owner_errno"] == 13
     finally:
         await running.aclose()
 

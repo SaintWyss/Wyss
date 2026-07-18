@@ -67,7 +67,7 @@ BUILTIN_DENY: Final[tuple[DenyRule, ...]] = (
         id="disk-format",
         description="shell.run con comando destructivo de disco (mkfs/fdisk/parted/dd if=).",
         action_type="shell.run",
-        target_patterns=("mkfs*", "*fdisk*", "*parted*", "*dd if=*"),
+        target_patterns=("mkfs*", "*/mkfs*", "*fdisk*", "*parted*", "*dd if=*"),
     ),
     DenyRule(
         id="shell-fetch-pipe-exec",
@@ -79,7 +79,16 @@ BUILTIN_DENY: Final[tuple[DenyRule, ...]] = (
         id="shell-privilege-escalation",
         description="shell.run que escala privilegios (sudo/su/doas/pkexec).",
         action_type="shell.run",
-        target_patterns=("sudo", "su", "doas", "pkexec"),
+        target_patterns=(
+            "sudo",
+            "*/sudo",
+            "su",
+            "*/su",
+            "doas",
+            "*/doas",
+            "pkexec",
+            "*/pkexec",
+        ),
     ),
     DenyRule(
         id="shell-rm-bypass",
@@ -88,7 +97,7 @@ BUILTIN_DENY: Final[tuple[DenyRule, ...]] = (
             "(papelera + journal), nunca por shell irreversible."
         ),
         action_type="shell.run",
-        target_patterns=("rm", "rmdir", "shred"),
+        target_patterns=("rm", "*/rm", "rmdir", "*/rmdir", "shred", "*/shred"),
     ),
     DenyRule(
         id="shell-recursive-delete",

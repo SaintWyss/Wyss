@@ -164,7 +164,7 @@ class DaemonServer:
             else:
                 try:
                     request = json.loads(raw)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, RecursionError):
                     response = _error_response(None, -32700, "Parse error")
                 else:
                     response = await self._dispatch(request, home_only=home_only)
@@ -576,6 +576,27 @@ class DaemonServer:
                 status="rejected",
                 expected_revision=proposal.revision,
             )
+            if resolved is None:
+                current = self._pending_store.load(pending_id)
+                if current is not None and current.status == "pending":
+                    current = self._pending_store.expire(
+                        pending_id,
+                        expected_revision=current.revision,
+                    ) or self._pending_store.load(pending_id)
+                if current is None or current.status != "rejected":
+                    reason = (
+                        "propuesta expirada"
+                        if current is not None and current.status == "expired"
+                        else "pending stale"
+                    )
+                    return {
+                        "accepted": False,
+                        "execution_id": None,
+                        "reason": reason,
+                        "revision": current.revision if current is not None else None,
+                        "policy_reevaluated": True,
+                    }
+                resolved = current
             await dispatch(
                 plan,
                 fresh_decision,
@@ -1090,6 +1111,8 @@ def _validate_home_runtime_dir(path: Path, shared_gid: int) -> None:
     mode = stat.st_mode & 0o777
     if stat.st_gid != shared_gid:
         raise RuntimeError("runtime dir Home no pertenece al grupo compartido configurado")
+    if stat.st_uid != os.getuid():
+        raise RuntimeError("runtime dir Home no pertenece al owner de Wyss")
     if shared_gid not in {*os.getgroups(), os.getegid()}:
         raise RuntimeError("el proceso Wyss no pertenece al grupo compartido Home")
     if mode != 0o750:

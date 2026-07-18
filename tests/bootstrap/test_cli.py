@@ -13,7 +13,11 @@ import bootstrap.cli as cli
 from bootstrap.cli import app
 from bootstrap.config import load_settings
 from core.domain.errors import ConfigError
+from core.domain.plan import Action, Plan
+from core.domain.policy import PolicyDecision
+from core.domain.risk import Outcome, RiskLevel
 from core.policy import CognitivePolicyEngine
+from orchestrator.pending_store import PendingStore
 
 runner = CliRunner()
 
@@ -174,6 +178,55 @@ def test_home_edge_identity_rejects_missing_group_membership(
 
     with pytest.raises(ConfigError, match="no pertenece"):
         cli._home_edge_identity()
+
+
+def test_confirm_reprompts_when_policy_escalates_b_to_c(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _write_config(tmp_path)
+    store = PendingStore(tmp_path / "data" / "pending.db")
+    try:
+        pending_id = store.save(
+            Plan(
+                task_id="cli-escalation",
+                summary="escalada",
+                steps=(Action("file.write", str(tmp_path / "note.txt"), {"content": "x"}),),
+                rationale="test",
+            ),
+            PolicyDecision("cli-escalation", RiskLevel.B, Outcome.CONFIRM_SIMPLE),
+            ttl_seconds=600,
+        )
+    finally:
+        store.close()
+
+    prompts: list[RiskLevel] = []
+    calls: list[dict[str, object]] = []
+
+    def accept(decision: PolicyDecision, console: object) -> bool:
+        del console
+        prompts.append(decision.risk_level)
+        return True
+
+    async def fake_rpc(path: Path, method: str, params: dict[str, object]) -> dict[str, Any]:
+        del path, method
+        calls.append(params)
+        if len(calls) == 1:
+            return {
+                "accepted": False,
+                "required_risk": "C",
+                "reason": "el riesgo re-evaluado subió a C",
+            }
+        return {"accepted": True, "execution_id": "exec-test", "success": True}
+
+    monkeypatch.setattr(cli, "prompt_confirmation", accept)
+    monkeypatch.setattr(cli, "_json_rpc_call", fake_rpc)
+
+    result = runner.invoke(app, ["confirm", pending_id, "--config", str(cfg)])
+
+    assert result.exit_code == 0
+    assert prompts == [RiskLevel.B, RiskLevel.C]
+    assert [call["response"] for call in calls] == ["s", "CONFIRMAR"]
 
 
 def test_digest_command_calls_rpc_and_renders(

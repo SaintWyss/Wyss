@@ -42,8 +42,9 @@ class SqliteIdempotencyStore:
         max_rows: int = 10_000,
         max_completed_rows: int = 5_000,
         maintenance_interval: int = 100,
+        max_response_bytes: int = 16 * 1024,
     ) -> None:
-        if min(max_rows, max_completed_rows, maintenance_interval) < 1:
+        if min(max_rows, max_completed_rows, maintenance_interval, max_response_bytes) < 1:
             raise ValueError("límites de idempotencia deben ser positivos")
         if max_completed_rows > max_rows:
             raise ValueError("max_completed_rows no puede superar max_rows")
@@ -51,6 +52,7 @@ class SqliteIdempotencyStore:
         self._max_rows = max_rows
         self._max_completed_rows = max_completed_rows
         self._maintenance_interval = maintenance_interval
+        self._max_response_bytes = max_response_bytes
         self._claims_since_maintenance = 0
         db_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(db_path, os.O_CREAT, 0o600)
@@ -120,6 +122,8 @@ class SqliteIdempotencyStore:
 
     def complete(self, key: str, response: Mapping[str, JsonValue]) -> None:
         encoded = json.dumps(dict(response), ensure_ascii=False, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > self._max_response_bytes:
+            raise ValueError("respuesta idempotente supera el límite de bytes")
         cursor = self._conn.execute(
             "UPDATE client_requests SET status='completed', response_json=?, updated_at=? "
             "WHERE request_key=? AND status='in_progress'",

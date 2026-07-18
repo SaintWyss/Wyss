@@ -16,7 +16,7 @@ from core.domain.policy import PolicyDecision
 
 PENDING_PRAGMAS: tuple[str, ...] = (
     "PRAGMA journal_mode=WAL",
-    "PRAGMA synchronous=NORMAL",
+    "PRAGMA synchronous=FULL",
     "PRAGMA busy_timeout=5000",
 )
 
@@ -185,6 +185,27 @@ class PendingStore:
                 sql += " AND revision=?"
                 values += (expected_revision,)
             cur = self._conn.execute(sql, values)
+            self._conn.execute("COMMIT")
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        self._secure_files()
+        if cur.rowcount != 1:
+            return None
+        return self.load(pending_id)
+
+    def expire(self, pending_id: str, *, expected_revision: int) -> PendingProposal | None:
+        """Terminaliza por CAS un pending vencido y devuelve su revisión nueva."""
+        now = datetime.now(UTC).isoformat()
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            cur = self._conn.execute(
+                "UPDATE pending_proposals "
+                "SET status='expired', resolved_at=?, resolved_by='ttl_reaper', "
+                "revision=revision+1 "
+                "WHERE id=? AND status='pending' AND expires_at<? AND revision=?",
+                (now, pending_id, now, expected_revision),
+            )
             self._conn.execute("COMMIT")
         except BaseException:
             self._conn.execute("ROLLBACK")

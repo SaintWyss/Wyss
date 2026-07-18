@@ -209,6 +209,18 @@ def test_expected_revision_is_compared_atomically(pending_store: PendingStore) -
     assert current.revision == 1
 
 
+def test_expire_is_revisioned_compare_and_swap(pending_store: PendingStore) -> None:
+    pending_id = pending_store.save(_plan(), _decision(), ttl_seconds=-1)
+
+    stale = pending_store.expire(pending_id, expected_revision=2)
+    expired = pending_store.expire(pending_id, expected_revision=1)
+
+    assert stale is None
+    assert expired is not None
+    assert expired.status == "expired"
+    assert expired.revision == 2
+
+
 def test_explicit_rejection_resolves_without_confirming(pending_store: PendingStore) -> None:
     pending_id = pending_store.save(_plan(), _decision(), ttl_seconds=60)
 
