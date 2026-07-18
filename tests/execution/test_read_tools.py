@@ -17,13 +17,13 @@ from execution.filesystem import _LIST_CAP_ENTRIES, _READ_CAP_BYTES, FileSystemA
 from execution.git import GitAdapter
 from execution.journal import UndoJournal
 from execution.shell import ShellAdapter
-from tests.execution.conftest import FakeAudit
+from tests.execution.conftest import FakeAudit, make_guard
 
 
 def _adapter(
     engine: CognitivePolicyEngine, audit: FakeAudit, journal: UndoJournal
 ) -> FileSystemAdapter:
-    return FileSystemAdapter(engine=engine, audit=audit, journal=journal)
+    return FileSystemAdapter(guard=make_guard(engine, audit), audit=audit, journal=journal)
 
 
 def test_read_returns_content(
@@ -152,8 +152,8 @@ def test_executor_surfaces_read_outputs(
     audit = FakeAudit()
     executor = PlanExecutor(
         filesystem=_adapter(engine, audit, journal),
-        shell=ShellAdapter(cast(Any, audit)),
-        git=GitAdapter(cast(Any, audit), tmp_path),
+        shell=ShellAdapter(cast(Any, audit), make_guard(engine, audit)),
+        git=GitAdapter(cast(Any, audit), tmp_path, make_guard(engine, audit)),
         journal=journal,
         audit=audit,
     )

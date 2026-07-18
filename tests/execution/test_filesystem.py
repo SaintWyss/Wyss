@@ -21,7 +21,7 @@ from core.domain.plan import Action
 from core.policy.engine import CognitivePolicyEngine
 from execution.filesystem import FileSystemAdapter, _sha256
 from execution.journal import UndoJournal
-from tests.execution.conftest import FakeAudit
+from tests.execution.conftest import FakeAudit, make_guard
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -48,7 +48,9 @@ def adapter(
     fake_audit: FakeAudit,
     journal: UndoJournal,
 ) -> FileSystemAdapter:
-    return FileSystemAdapter(engine=engine, audit=fake_audit, journal=journal)
+    return FileSystemAdapter(
+        guard=make_guard(engine, fake_audit), audit=fake_audit, journal=journal
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +402,9 @@ def test_send2trash_on_ntfs_mount(
             work_dir / "journal.db",
             backup_base_dir=work_dir / "backups",
         )
-        ntfs_adapter = FileSystemAdapter(engine=engine, audit=fake_audit, journal=ntfs_journal)
+        ntfs_adapter = FileSystemAdapter(
+            guard=make_guard(engine, fake_audit), audit=fake_audit, journal=ntfs_journal
+        )
 
         action = Action(
             type="file.delete",

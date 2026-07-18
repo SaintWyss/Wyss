@@ -26,6 +26,7 @@ from core.domain.execution import ToolResult, Verification
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
 from core.ports.audit import AuditPort
+from core.ports.execution import ExecutionGuardPort
 
 
 class ShellAdapter:
@@ -43,12 +44,14 @@ class ShellAdapter:
     def __init__(
         self,
         audit: AuditPort,
+        guard: ExecutionGuardPort,
         *,
         allowed_binaries: set[str] | None = None,
         config_path: str | Path | None = None,
         timeout_s: float = 30.0,
     ) -> None:
         self._audit = audit
+        self._guard = guard
         self._timeout_s = timeout_s
 
         if allowed_binaries is not None:
@@ -75,7 +78,7 @@ class ShellAdapter:
 
     @property
     def max_risk(self) -> RiskLevel:
-        return RiskLevel.B  # side-effects de shell; deletes/writes van por FileSystemAdapter
+        return RiskLevel.C  # shell.run requiere confirmación fuerte; D siempre se rechaza
 
     def describe(self, action: Action) -> str:
         raw_args = cast(Sequence[object], action.parameters.get("args", []))
@@ -112,13 +115,19 @@ class ShellAdapter:
         # --- argv exec (shell=False, D-66) ---
         try:
             returncode, stdout, stderr = await self._exec_allowed(
-                binary=binary, args=args, timeout_s=self._timeout_s
+                action=action, binary=binary, args=args, timeout_s=self._timeout_s
             )
         except FileNotFoundError as exc:
             return ToolResult(
                 success=False,
                 detail=str(exc),
                 payload={"returncode": -1, "stdout": "", "stderr": str(exc)},
+            )
+        except PermissionError as exc:
+            return ToolResult(
+                success=False,
+                detail=f"blocked: second wall — {exc}",
+                payload={"blocked": "second_wall", "reason": str(exc)},
             )
         except TimeoutError:
             return ToolResult(
@@ -145,7 +154,7 @@ class ShellAdapter:
     # ------------------------------------------------------------------
 
     async def _exec_allowed(
-        self, binary: str, args: list[str], timeout_s: float
+        self, action: Action, binary: str, args: list[str], timeout_s: float
     ) -> tuple[int, str, str]:
         """Resuelve y ejecuta `binary` vía argv. NUNCA usa shell=True (D-66).
 
@@ -157,6 +166,14 @@ class ShellAdapter:
         resolved = shutil.which(binary)
         if resolved is None:
             raise FileNotFoundError(f"binario no encontrado en PATH: '{binary}'")
+
+        authorization = self._guard.authorize(
+            action,
+            adapter=self.name,
+            max_risk=self.max_risk,
+        )
+        if not authorization.allowed:
+            raise PermissionError(authorization.reason)
 
         proc = await asyncio.create_subprocess_exec(
             resolved,

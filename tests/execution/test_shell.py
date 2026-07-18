@@ -18,7 +18,7 @@ import pytest
 from core.domain.audit import AuditEventType
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
-from tests.execution.conftest import FakeAudit
+from tests.execution.conftest import FakeAudit, make_engine, make_guard
 
 if TYPE_CHECKING:
     from execution.shell import ShellAdapter
@@ -43,7 +43,12 @@ def _make_adapter(audit: FakeAudit, allowed: set[str] | None = None) -> "ShellAd
 
     if allowed is None:
         allowed = {"echo", "true", "false"}
-    return ShellAdapter(audit=audit, allowed_binaries=allowed, timeout_s=5.0)
+    return ShellAdapter(
+        audit=audit,
+        guard=make_guard(make_engine(), audit),
+        allowed_binaries=allowed,
+        timeout_s=5.0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +97,19 @@ async def test_allowed_binary_executes() -> None:
     assert result.success is True
     assert result.payload["returncode"] == 0
     assert "hello wyss" in str(result.payload["stdout"])
+
+
+@pytest.mark.asyncio
+async def test_second_wall_rejects_d_even_when_binary_is_allowlisted() -> None:
+    """La allowlist no puede convertir una acción D en ejecutable."""
+    audit = FakeAudit()
+    adapter = _make_adapter(audit, allowed={"rm"})
+
+    result = await adapter.execute(_make_action("rm", "-rf", "/tmp/never"))
+
+    assert result.success is False
+    assert result.payload["blocked"] == "second_wall"
+    assert any(event.payload.get("blocked") == "second_wall" for event in audit.events)
 
 
 # ---------------------------------------------------------------------------
@@ -194,12 +212,12 @@ def test_shell_adapter_never_uses_shell_equals_true() -> None:
 
 
 def test_shell_adapter_protocol_properties() -> None:
-    """ShellAdapter debe exponer name='shell' y max_risk=RiskLevel.B."""
+    """ShellAdapter admite C confirmado y bloquea siempre D."""
     audit = FakeAudit()
     adapter = _make_adapter(audit)
 
     assert adapter.name == "shell"
-    assert adapter.max_risk == RiskLevel.B
+    assert adapter.max_risk == RiskLevel.C
 
 
 # ---------------------------------------------------------------------------

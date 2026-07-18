@@ -12,7 +12,7 @@ import pytest
 
 from core.domain.plan import Action, ErrorPolicy
 from core.policy.engine import CognitivePolicyEngine
-from tests.execution.conftest import FakeAudit, RecordingEngine
+from tests.execution.conftest import FakeAudit, RecordingEngine, make_guard
 
 if TYPE_CHECKING:
     from execution.filesystem import FileSystemAdapter
@@ -27,7 +27,7 @@ def _make_adapter(
     from execution.journal import UndoJournal
 
     journal = UndoJournal(tmp_path / "journal.db", backup_base_dir=tmp_path / "backups")
-    return FileSystemAdapter(engine=engine, audit=audit, journal=journal)
+    return FileSystemAdapter(guard=make_guard(engine, audit), audit=audit, journal=journal)
 
 
 def test_symlink_resolved_before_eval(tmp_path: Path) -> None:
