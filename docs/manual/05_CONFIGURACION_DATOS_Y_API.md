@@ -117,6 +117,8 @@ El daemon acepta métodos como:
 
 - `ask`;
 - `confirm`;
+- `home.intent` — intención versionada de un cliente con `message_id` y `request_id`;
+- `home.plan.answer` — primera respuesta válida, re-evaluada y serializada por plan;
 - `status`;
 - `audit` — consulta acotada por `since`, `task_id`, `event_type` y `limit` (1–200);
 - `routine.add/list/pause/resume/delete`;
@@ -124,8 +126,11 @@ El daemon acepta métodos como:
 - `digest.today`;
 - `intake.propose`.
 
-La CLI y el bridge traducen sus acciones a estos métodos por Unix socket. Yo omito el `payload` de
-auditoría por defecto; sólo lo incluyo cuando el caller local envía `include_payload: true`.
+La CLI y Home Edge traducen sus acciones a estos métodos por el socket Unix `0600`. Yo persisto
+claims Home en `data/client_requests.db`: un replay idéntico recibe la primera respuesta, una key
+reutilizada con otro payload falla por conflicto y un efecto ambiguo después de un crash no se
+reintenta automáticamente. Yo omito el `payload` de auditoría por defecto; sólo lo incluyo cuando
+el caller local envía `include_payload: true`.
 
 ## API web
 

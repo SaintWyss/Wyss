@@ -1,6 +1,7 @@
 """Daemon asyncio sobre Unix socket JSON-RPC para el orquestador."""
 
 import asyncio
+import hashlib
 import json
 import os
 from collections.abc import Awaitable, Callable, Mapping
@@ -8,10 +9,20 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
-from core.domain import ActorType, AuditEvent, AuditEventType, AuditQuery, Outcome, RiskLevel
+from core.domain import (
+    ActorType,
+    AuditEvent,
+    AuditEventType,
+    AuditQuery,
+    ClaimStatus,
+    IdempotencyClaim,
+    Outcome,
+    RiskLevel,
+)
+from core.domain.home import JsonValue
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
 from core.domain.policy import PolicyDecision
@@ -20,6 +31,7 @@ from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
 from core.ports.audit import AuditPort, AuditQueryPort
 from core.ports.execution import PlanRunner
+from core.ports.home import IdempotencyPort
 from core.ports.ledger import LedgerPort
 from core.ports.memory import MemoryAdmin
 from core.ports.orchestrator import OrchestratorPort
@@ -76,6 +88,7 @@ class DaemonServer:
         scheduler: RoutineScheduler,
         runner: PlanRunner | None = None,
         audit_query: AuditQueryPort | None = None,
+        idempotency: IdempotencyPort | None = None,
     ) -> None:
         self._engine = engine
         self._orchestrator = orchestrator
@@ -87,10 +100,13 @@ class DaemonServer:
         self._scheduler = scheduler
         self._runner = runner
         self._audit_query = audit_query
+        self._idempotency = idempotency
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
             "intake.propose": self._intake_propose,
             "confirm": self._confirm,
+            "home.intent": self._home_intent,
+            "home.plan.answer": self._home_plan_answer,
             "status": self._status,
             "audit": self._audit_events,
             "routine.add": self._routine_add,
@@ -140,10 +156,13 @@ class DaemonServer:
         instruction = str(params.get("instruction", "")).strip()
         if not instruction:
             raise ValueError("instruction requerido")
+        return await self._process_instruction(instruction, actor_id="owner")
+
+    async def _process_instruction(self, instruction: str, *, actor_id: str) -> JsonDict:
         self._audit.log(
             AuditEvent.new(
                 actor_type=ActorType.OWNER,
-                actor_id="owner",
+                actor_id=actor_id,
                 event_type=AuditEventType.COMMAND_RECEIVED,
                 message=instruction,
             )
@@ -184,7 +203,180 @@ class DaemonServer:
         if dispatched.get("outcome") == "queued" and self._runner is not None:
             executed = await self._execute_plan(plan)
             return {"outcome": "executed", **executed}
+        if dispatched.get("outcome") == "pending":
+            dispatched.update(
+                {
+                    "risk": decision.risk_level.name,
+                    "summary": plan.summary,
+                    "steps": [
+                        {"description": action.type, "target": action.target}
+                        for action in plan.steps
+                    ],
+                    "expires_in_ms": min(ttl_for_risk(decision.risk_level) * 1000, 300_000),
+                }
+            )
         return dispatched
+
+    async def _home_intent(self, params: Mapping[str, Any]) -> JsonDict:
+        self._require_home_keys(
+            params,
+            {"message_id", "request_id", "source", "text", "input"},
+        )
+        message_id = _bounded_string(params.get("message_id"), name="message_id", maximum=128)
+        request_id = _bounded_string(params.get("request_id"), name="request_id", maximum=128)
+        source = _bounded_string(params.get("source"), name="source", maximum=128)
+        text = _bounded_string(params.get("text"), name="text", maximum=1000)
+        input_kind = _bounded_string(params.get("input"), name="input", maximum=16)
+        if input_kind not in {"text", "voice"}:
+            raise ValueError("input debe ser text o voice")
+        fingerprint = _fingerprint(
+            {
+                "request_id": request_id,
+                "source": source,
+                "text": text,
+                "input": input_kind,
+            }
+        )
+        claim = self._claim_idempotency(f"home.intent:{source}:{message_id}", fingerprint)
+        if claim.status is ClaimStatus.REPLAY:
+            assert claim.response is not None
+            return dict(claim.response)
+        if claim.status is ClaimStatus.CONFLICT:
+            return {"outcome": "conflict", "request_id": request_id}
+        if claim.status is ClaimStatus.IN_PROGRESS:
+            return {"outcome": "in_progress", "request_id": request_id}
+
+        try:
+            result = await self._process_instruction(text, actor_id=source)
+        except Exception:
+            result = {
+                "outcome": "failed",
+                "status": "failed",
+                "message": "Wyss no pudo procesar la intención.",
+            }
+        result.update({"request_id": request_id, "source": "wyss:authority"})
+        self._complete_idempotency(f"home.intent:{source}:{message_id}", result)
+        return result
+
+    async def _home_plan_answer(self, params: Mapping[str, Any]) -> JsonDict:
+        self._require_home_keys(
+            params,
+            {
+                "message_id",
+                "plan_id",
+                "decision",
+                "confirmation",
+                "expected_revision",
+                "source",
+            },
+        )
+        message_id = _bounded_string(params.get("message_id"), name="message_id", maximum=128)
+        plan_id = _bounded_string(params.get("plan_id"), name="plan_id", maximum=128)
+        decision = _bounded_string(params.get("decision"), name="decision", maximum=16)
+        confirmation = _optional_string(params.get("confirmation"), name="confirmation", maximum=32)
+        source = _bounded_string(params.get("source"), name="source", maximum=128)
+        expected_revision = _bounded_int(
+            params.get("expected_revision"),
+            name="expected_revision",
+            minimum=1,
+            maximum=2_147_483_647,
+        )
+        if decision not in {"approve", "reject"}:
+            raise ValueError("decision debe ser approve o reject")
+        fingerprint = _fingerprint(
+            {
+                "plan_id": plan_id,
+                "decision": decision,
+                "confirmation": confirmation,
+                "expected_revision": expected_revision,
+                "source": source,
+            }
+        )
+        key = f"home.plan.answer:{source}:{message_id}"
+        claim = self._claim_idempotency(key, fingerprint)
+        if claim.status is ClaimStatus.REPLAY:
+            assert claim.response is not None
+            return dict(claim.response)
+        if claim.status is ClaimStatus.CONFLICT:
+            return {"outcome": "conflict", "plan_id": plan_id}
+        if claim.status is ClaimStatus.IN_PROGRESS:
+            return {"outcome": "in_progress", "plan_id": plan_id}
+
+        if expected_revision != 1:
+            result: JsonDict = {
+                "outcome": "conflict",
+                "plan_id": plan_id,
+                "policy_reevaluated": False,
+            }
+        elif decision == "reject":
+            result = await self._reject_pending(plan_id, actor_id=source)
+        else:
+            confirmed = await self._confirm_pending(plan_id, confirmation, actor_id=source)
+            result = _home_confirmation_result(plan_id, confirmed)
+        self._complete_idempotency(key, result)
+        return result
+
+    async def _reject_pending(self, pending_id: str, *, actor_id: str) -> JsonDict:
+        proposal = self._pending_store.load(pending_id)
+        if proposal is None or proposal.status != "pending":
+            return {
+                "outcome": "already_resolved",
+                "plan_id": pending_id,
+                "policy_reevaluated": False,
+            }
+        if _is_expired(proposal.expires_at):
+            return {
+                "outcome": "expired",
+                "plan_id": pending_id,
+                "policy_reevaluated": False,
+            }
+        plan = _plan_from_json(proposal.plan_json)
+        fresh_decision = self._engine.evaluate(plan)
+        resolved = self._pending_store.resolve(pending_id, actor_id, status="rejected")
+        if resolved is None:
+            return {
+                "outcome": "already_resolved",
+                "plan_id": pending_id,
+                "policy_reevaluated": True,
+            }
+        self._audit.log(
+            AuditEvent.new(
+                task_id=proposal.task_id,
+                actor_type=ActorType.OWNER,
+                actor_id=actor_id,
+                event_type=AuditEventType.CONFIRMATION_ANSWERED,
+                message="plan rechazado por owner",
+                payload={
+                    "pending_id": pending_id,
+                    "accepted": False,
+                    "risk_level": fresh_decision.risk_level.name,
+                    "source": actor_id,
+                },
+            )
+        )
+        return {
+            "outcome": "resolved",
+            "plan_id": pending_id,
+            "accepted": False,
+            "status": "verified",
+            "message": "Plan rechazado.",
+            "policy_reevaluated": True,
+        }
+
+    @staticmethod
+    def _require_home_keys(params: Mapping[str, Any], allowed: set[str]) -> None:
+        extras = set(params) - allowed
+        if extras:
+            raise ValueError(f"campos no permitidos: {', '.join(sorted(extras))}")
+
+    def _claim_idempotency(self, key: str, fingerprint: str) -> IdempotencyClaim:
+        if self._idempotency is None:
+            raise RuntimeError("idempotencia Home no configurada")
+        return self._idempotency.claim(key, fingerprint)
+
+    def _complete_idempotency(self, key: str, response: Mapping[str, Any]) -> None:
+        assert self._idempotency is not None
+        self._idempotency.complete(key, _json_mapping(response))
 
     async def _intake_propose(self, params: Mapping[str, Any]) -> JsonDict:
         instruction = str(params.get("instruction", "")).strip()
@@ -237,14 +429,27 @@ class DaemonServer:
         response = str(params.get("response", "")).strip()
         if not pending_id:
             raise ValueError("pending_id requerido")
+        return await self._confirm_pending(pending_id, response, actor_id="owner")
+
+    async def _confirm_pending(self, pending_id: str, response: str, *, actor_id: str) -> JsonDict:
         proposal = self._pending_store.load(pending_id)
         if proposal is None or proposal.status != "pending":
-            return {"accepted": False, "execution_id": None, "reason": "pending no encontrado"}
+            return {
+                "accepted": False,
+                "execution_id": None,
+                "reason": "pending no encontrado",
+                "policy_reevaluated": False,
+            }
         # Defensa en profundidad: el ttl_reaper corre cada N s, así que una propuesta
         # puede estar vencida por tiempo pero seguir status='pending' hasta la próxima
         # barrida. No la ejecutamos: el TTL es un límite duro, no una sugerencia.
         if _is_expired(proposal.expires_at):
-            return {"accepted": False, "execution_id": None, "reason": "propuesta expirada"}
+            return {
+                "accepted": False,
+                "execution_id": None,
+                "reason": "propuesta expirada",
+                "policy_reevaluated": False,
+            }
 
         # Re-evaluación ANTES de validar la palabra: el pending store no es la
         # autoridad, la política sí. Si el plan es D ahora, ni la palabra correcta
@@ -263,6 +468,7 @@ class DaemonServer:
                 "accepted": False,
                 "execution_id": None,
                 "reason": "plan rechazado por política al confirmar",
+                "policy_reevaluated": True,
             }
 
         stored_level = RiskLevel[proposal.risk_level]
@@ -272,13 +478,14 @@ class DaemonServer:
             AuditEvent.new(
                 task_id=proposal.task_id,
                 actor_type=ActorType.OWNER,
-                actor_id="owner",
+                actor_id=actor_id,
                 event_type=AuditEventType.CONFIRMATION_ANSWERED,
                 message="confirmación respondida",
                 payload={
                     "pending_id": pending_id,
                     "accepted": accepted,
                     "risk_level": effective_level.name,
+                    "source": actor_id,
                 },
             )
         )
@@ -291,17 +498,27 @@ class DaemonServer:
                         f"el riesgo re-evaluado subió a {effective_level.name}: "
                         "se requiere la confirmación de ese nivel"
                     ),
+                    "policy_reevaluated": True,
                 }
-            return {"accepted": False, "execution_id": None}
+            return {"accepted": False, "execution_id": None, "policy_reevaluated": True}
 
-        resolved = self._pending_store.resolve(pending_id, "owner")
+        resolved = self._pending_store.resolve(pending_id, actor_id)
         if resolved is None:
-            return {"accepted": False, "execution_id": None, "reason": "pending stale"}
+            return {
+                "accepted": False,
+                "execution_id": None,
+                "reason": "pending stale",
+                "policy_reevaluated": True,
+            }
         if self._runner is None:
             execution_id = f"exec-{resolved.task_id}-{pending_id[:12]}"
-            return {"accepted": True, "execution_id": execution_id}
+            return {
+                "accepted": True,
+                "execution_id": execution_id,
+                "policy_reevaluated": True,
+            }
         executed = await self._execute_plan(plan)
-        return {"accepted": True, **executed}
+        return {"accepted": True, "policy_reevaluated": True, **executed}
 
     async def _execute_plan(self, plan: Plan) -> JsonDict:
         """Ejecuta un plan ya autorizado por política y audita el resultado terminal."""
@@ -541,6 +758,7 @@ async def start_daemon(
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     audit_query: AuditQueryPort | None = None,
+    idempotency: IdempotencyPort | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -561,6 +779,7 @@ async def start_daemon(
         scheduler=scheduler,
         runner=runner,
         audit_query=audit_query,
+        idempotency=idempotency,
     )
     scheduler.set_on_queued(daemon._execute_plan if runner is not None else None)
     server = await asyncio.start_unix_server(daemon.handle, str(socket_path))
@@ -628,6 +847,7 @@ async def run_daemon(
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
     audit_query: AuditQueryPort | None = None,
+    idempotency: IdempotencyPort | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -647,6 +867,7 @@ async def run_daemon(
         scheduler=scheduler,
         runner=runner,
         audit_query=audit_query,
+        idempotency=idempotency,
         reaper_interval_s=reaper_interval_s,
         digest_enabled=digest_enabled,
         digest_hour=digest_hour,
@@ -689,6 +910,65 @@ def _confirmation_matches(level: RiskLevel, response: str) -> bool:
     if level == RiskLevel.C:
         return response == "CONFIRMAR"
     return False
+
+
+def _home_confirmation_result(plan_id: str, confirmed: Mapping[str, Any]) -> JsonDict:
+    reevaluated = confirmed.get("policy_reevaluated") is True
+    if confirmed.get("accepted") is True:
+        success = confirmed.get("success")
+        return {
+            "outcome": "resolved",
+            "plan_id": plan_id,
+            "accepted": True,
+            "status": "failed" if success is False else "verified",
+            "message": str(confirmed.get("detail") or "Plan resuelto por Wyss."),
+            "policy_reevaluated": reevaluated,
+            **({"execution_id": confirmed["execution_id"]} if "execution_id" in confirmed else {}),
+        }
+    reason = str(confirmed.get("reason") or "confirmación inválida")
+    if reason in {"pending no encontrado", "pending stale"}:
+        outcome = "already_resolved"
+    elif reason == "propuesta expirada":
+        outcome = "expired"
+    elif reason == "plan rechazado por política al confirmar":
+        outcome = "policy_rejected"
+    else:
+        outcome = "confirmation_required"
+    return {
+        "outcome": outcome,
+        "plan_id": plan_id,
+        "accepted": False,
+        "status": "failed",
+        "message": reason,
+        "policy_reevaluated": reevaluated,
+    }
+
+
+def _fingerprint(payload: Mapping[str, object]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def _json_mapping(value: Mapping[str, Any]) -> Mapping[str, JsonValue]:
+    encoded = json.dumps(dict(value), ensure_ascii=False, separators=(",", ":"))
+    decoded = json.loads(encoded)
+    if not isinstance(decoded, dict):
+        raise TypeError("respuesta Home no es un objeto JSON")
+    return cast(dict[str, JsonValue], decoded)
+
+
+def _bounded_string(value: object, *, name: str, maximum: int) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+        raise ValueError(f"{name} debe tener entre 1 y {maximum} caracteres")
+    return value.strip()
+
+
+def _optional_string(value: object, *, name: str, maximum: int) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str) or len(value) > maximum:
+        raise ValueError(f"{name} debe tener como máximo {maximum} caracteres")
+    return value
 
 
 def _bounded_int(value: object, *, name: str, minimum: int, maximum: int) -> int:

@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import pytest
 
+from adapters.sqlite_idempotency import SqliteIdempotencyStore
 from core.domain import ActorType, AuditEvent, AuditEventType, AuditQuery, Outcome, RiskLevel
 from core.domain.ledger import Transaccion
 from core.domain.memory import MemoryFact
@@ -155,6 +156,15 @@ def fake_ledger() -> LedgerPort:
     return _FakeLedger()
 
 
+@pytest.fixture
+def idempotency(tmp_path: Path) -> Iterator[SqliteIdempotencyStore]:
+    store = SqliteIdempotencyStore(tmp_path / "client_requests.db")
+    try:
+        yield store
+    finally:
+        store.close()
+
+
 async def _handle_rpc(
     daemon: DaemonServer, method: str, params: dict[str, object]
 ) -> dict[str, Any]:
@@ -249,6 +259,206 @@ async def test_ask_round_trip(
         AuditEventType.PLAN_CREATED,
         AuditEventType.POLICY_DECISION,
     }
+
+
+async def test_home_intent_is_idempotent_and_b_confirmation_resolves_once(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+    )
+    intent: dict[str, object] = {
+        "message_id": "msg-intent-1",
+        "request_id": "request-1",
+        "source": "panel:living",
+        "text": "mover archivo",
+        "input": "text",
+    }
+
+    first = await _handle_rpc(daemon, "home.intent", intent)
+    replay = await _handle_rpc(daemon, "home.intent", intent)
+
+    assert first["result"] == replay["result"]
+    proposed = first["result"]
+    assert proposed["outcome"] == "pending"
+    assert proposed["risk"] == "B"
+    assert proposed["summary"] == "mover archivo"
+    assert proposed["steps"] == [{"description": "file.move", "target": "/tmp/source.txt"}]
+    assert len(pending_store.load_pending()) == 1
+
+    answer = {
+        "message_id": "msg-answer-1",
+        "plan_id": proposed["pending_id"],
+        "decision": "approve",
+        "confirmation": "s",
+        "expected_revision": 1,
+        "source": "panel:living",
+    }
+    resolved = await _handle_rpc(daemon, "home.plan.answer", answer)
+    resolved_replay = await _handle_rpc(daemon, "home.plan.answer", answer)
+
+    assert resolved["result"] == resolved_replay["result"]
+    assert resolved["result"]["outcome"] == "resolved"
+    assert resolved["result"]["policy_reevaluated"] is True
+    confirmed = pending_store.load(str(proposed["pending_id"]))
+    assert confirmed is not None
+    assert confirmed.status == "confirmed"
+
+    stale = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {**answer, "message_id": "msg-answer-2", "source": "android:owner"},
+    )
+    assert stale["result"]["outcome"] == "already_resolved"
+
+
+async def test_home_c_requires_literal_and_d_never_becomes_pending(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+    )
+    c_intent = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "msg-c",
+            "request_id": "request-c",
+            "source": "android:owner",
+            "text": "borrar archivo",
+            "input": "text",
+        },
+    )
+    plan_id = str(c_intent["result"]["pending_id"])
+    weak = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {
+            "message_id": "msg-c-weak",
+            "plan_id": plan_id,
+            "decision": "approve",
+            "confirmation": "s",
+            "expected_revision": 1,
+            "source": "android:owner",
+        },
+    )
+    assert weak["result"]["outcome"] == "confirmation_required"
+    still_pending = pending_store.load(plan_id)
+    assert still_pending is not None
+    assert still_pending.status == "pending"
+
+    strong = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {
+            "message_id": "msg-c-strong",
+            "plan_id": plan_id,
+            "decision": "approve",
+            "confirmation": "CONFIRMAR",
+            "expected_revision": 1,
+            "source": "panel:living",
+        },
+    )
+    assert strong["result"]["outcome"] == "resolved"
+
+    denied = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "msg-d",
+            "request_id": "request-d",
+            "source": "panel:living",
+            "text": "formatear disco",
+            "input": "text",
+        },
+    )
+    assert denied["result"]["outcome"] == "rejected"
+    assert "pending_id" not in denied["result"]
+
+
+async def test_home_rejection_resolves_without_execution(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+        idempotency=idempotency,
+    )
+    proposed = await _handle_rpc(
+        daemon,
+        "home.intent",
+        {
+            "message_id": "msg-reject-intent",
+            "request_id": "request-reject",
+            "source": "panel:living",
+            "text": "mover archivo",
+            "input": "text",
+        },
+    )
+    plan_id = str(proposed["result"]["pending_id"])
+
+    rejected = await _handle_rpc(
+        daemon,
+        "home.plan.answer",
+        {
+            "message_id": "msg-reject-answer",
+            "plan_id": plan_id,
+            "decision": "reject",
+            "confirmation": "",
+            "expected_revision": 1,
+            "source": "panel:living",
+        },
+    )
+
+    assert rejected["result"]["outcome"] == "resolved"
+    assert rejected["result"]["accepted"] is False
+    assert rejected["result"]["policy_reevaluated"] is True
+    stored_rejection = pending_store.load(plan_id)
+    assert stored_rejection is not None
+    assert stored_rejection.status == "rejected"
 
 
 async def test_audit_rpc_queries_port_with_closed_filters(

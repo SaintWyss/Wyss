@@ -11,6 +11,7 @@ from core.domain.home import (
     CapabilityPage,
     CapabilityState,
     DeliveryReceipt,
+    IdempotencyClaim,
     JsonValue,
     Notification,
     ProjectionEvent,
@@ -25,6 +26,14 @@ class HomePort(Protocol):
     async def snapshot(self) -> ProjectionSnapshot: ...
 
     async def execute(self, command: CapabilityCommand) -> ProjectionEvent: ...
+
+
+class IdempotencyPort(Protocol):
+    """Claims durables para que reintentos no repitan efectos."""
+
+    def claim(self, key: str, fingerprint: str) -> IdempotencyClaim: ...
+
+    def complete(self, key: str, response: Mapping[str, JsonValue]) -> None: ...
 
 
 class ProjectionPort(Protocol):

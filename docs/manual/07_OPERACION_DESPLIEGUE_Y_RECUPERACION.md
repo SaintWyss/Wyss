@@ -66,6 +66,7 @@ config/config.toml
 config/.env              # cifrado y manejo separado
 data/audit.db
 data/pending.db
+data/client_requests.db
 data/routines.db
 data/memory.db
 data/ledger.db

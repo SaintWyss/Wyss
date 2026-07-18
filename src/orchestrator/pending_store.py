@@ -143,14 +143,18 @@ class PendingStore:
                 expired.append(loaded)
         return expired
 
-    def resolve(self, pending_id: str, resolved_by: str) -> PendingProposal | None:
-        """Confirma una propuesta solo si sigue pending; rechaza estados stale."""
+    def resolve(
+        self, pending_id: str, resolved_by: str, *, status: str = "confirmed"
+    ) -> PendingProposal | None:
+        """Resuelve una propuesta una sola vez; confirma o registra rechazo explícito."""
+        if status not in {"confirmed", "rejected"}:
+            raise ValueError("status de resolución inválido")
         resolved_at = datetime.now(UTC).isoformat()
         cur = self._conn.execute(
             "UPDATE pending_proposals "
-            "SET status='confirmed', resolved_at=?, resolved_by=? "
+            "SET status=?, resolved_at=?, resolved_by=? "
             "WHERE id=? AND status='pending'",
-            (resolved_at, resolved_by, pending_id),
+            (status, resolved_at, resolved_by, pending_id),
         )
         self._conn.commit()
         if cur.rowcount != 1:

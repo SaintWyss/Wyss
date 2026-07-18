@@ -42,6 +42,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = [
+  "src/adapters",
   "src/core",
   "src/orchestrator",
   "src/agents",
@@ -82,6 +83,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.importlinter]
 include_external_packages = true
 root_packages = [
+  "adapters",
   "core",
   "orchestrator",
   "agents",
@@ -101,6 +103,7 @@ type = "forbidden"
 source_modules = ["core"]
 forbidden_modules = [
   "pydantic",
+  "adapters",
   "orchestrator",
   "agents",
   "knowledge",
@@ -117,6 +120,7 @@ forbidden_modules = [
 name = "las capas importan de core, nunca entre sí"
 type = "independence"
 modules = [
+  "adapters",
   "orchestrator",
   "agents",
   "knowledge",

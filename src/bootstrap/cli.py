@@ -23,6 +23,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
+from adapters.sqlite_idempotency import SqliteIdempotencyStore
 from audit.sqlite_logger import SqliteAuditLogger
 from bootstrap.config import WyssSettings as BootstrapWyssSettings
 from bootstrap.config import load_settings
@@ -512,8 +513,10 @@ async def _run_start_daemon(
     ledger_store: SqliteLedgerStore,
     scheduler: RoutineScheduler,
 ) -> None:
-    runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
+    idempotency = SqliteIdempotencyStore(_client_requests_db_path(settings))
+    journal: UndoJournal | None = None
     try:
+        runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
         if settings.orchestrator.mode == "deterministic":
             await run_daemon(
                 _socket_path(settings),
@@ -522,6 +525,7 @@ async def _run_start_daemon(
                 pending_store=pending_store,
                 audit=audit,
                 audit_query=audit,
+                idempotency=idempotency,
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -552,6 +556,7 @@ async def _run_start_daemon(
                 pending_store=pending_store,
                 audit=audit,
                 audit_query=audit,
+                idempotency=idempotency,
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -563,7 +568,9 @@ async def _run_start_daemon(
                 digest_dir=settings.data_dir / "digests",
             )
     finally:
-        journal.close()
+        if journal is not None:
+            journal.close()
+        idempotency.close()
 
 
 @app.command()
@@ -1872,6 +1879,10 @@ def _socket_path(settings: WyssSettings) -> Path:
 
 def _pending_db_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "pending.db"
+
+
+def _client_requests_db_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "client_requests.db"
 
 
 def _routine_db_path(settings: WyssSettings) -> Path:

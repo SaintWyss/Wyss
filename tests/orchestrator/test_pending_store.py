@@ -129,6 +129,18 @@ def test_double_resolve_is_atomic(pending_store: PendingStore) -> None:
     assert second is None
 
 
+def test_explicit_rejection_resolves_without_confirming(pending_store: PendingStore) -> None:
+    pending_id = pending_store.save(_plan(), _decision(), ttl_seconds=60)
+
+    rejected = pending_store.resolve(pending_id, resolved_by="panel:living", status="rejected")
+    second = pending_store.resolve(pending_id, resolved_by="owner")
+
+    assert rejected is not None
+    assert rejected.status == "rejected"
+    assert rejected.resolved_by == "panel:living"
+    assert second is None
+
+
 def test_reap_once_expires_and_audits(pending_store: PendingStore) -> None:
     pending_id = pending_store.save(_plan(), _decision(RiskLevel.C), ttl_seconds=-1)
     audit = FakeAudit()
