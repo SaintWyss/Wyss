@@ -61,7 +61,8 @@ class ShellAdapter:
         else:
             self._allowed_binaries = set()  # fail-closed: nada permitido por defecto
         self._resolved_binaries: dict[str, str | None] = {
-            binary: shutil.which(binary) for binary in self._allowed_binaries
+            binary: (str(Path(found).resolve()) if (found := shutil.which(binary)) else None)
+            for binary in self._allowed_binaries
         }
 
     @staticmethod
@@ -172,7 +173,7 @@ class ShellAdapter:
 
         effective_action = Action(
             type=action.type,
-            target=str(Path(resolved).resolve()),
+            target=resolved,
             parameters={**action.parameters, "requested_binary": binary, "argv": list(args)},
             on_error=action.on_error,
             retry_params=action.retry_params,
