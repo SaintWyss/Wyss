@@ -4,6 +4,7 @@
 
 - ✅ **v0.1 Demo técnica** — Phases 1-8 (shipped 2026-07-10, tagged v0.1.0)
 - 🚧 **v1.0 Producto final — app móvil + asistente diario** — Phases 9-15 (in progress)
+- 🚧 **v1.0 Integración Home autoritativa** — Phases 16+ (in progress desde 2026-07-18)
 
 **Regla transversal inviolable:** nada B/C se auto-ejecuta — todo productor de planes (rutinas, intake, agentes) pasa por `CognitivePolicyEngine` y cae a la bandeja; el owner sella. Nivel D absoluto.
 
@@ -26,6 +27,7 @@
 - [x] **Phase 13: Intake n8n** - Webhook externo → propuesta → bandeja con bearer token
 - [x] **Phase 14: Web PC Polish** - Glow-up desktop + superficies de rutinas/digest/memoria
 - [x] **Phase 15: Mobile APK** - Capacitor + pairing QR + cert pinning TOFU
+- [ ] **Phase 16: Home Authority Core** - Ports, RPC Unix idempotente, política y auditoría
 
 ## Phase Details
 
@@ -201,6 +203,20 @@ Plans:
 **Research flags**: HIGH — spike de cert pinning + schema del QR payload ANTES de construir (spike = 15-01, gate de wave)
 **UI hint**: yes
 
+#### Phase 16: Home Authority Core
+**Goal**: Yo convierto a Wyss en la única autoridad pública para intenciones, planes,
+confirmaciones y auditoría consumidas por Home Edge.
+**Depends on**: Phase 5 (daemon), Phase 6 (segunda muralla), Phase 15 (clientes existentes)
+**Requirements**: HOME-CORE-01..06
+**Success Criteria**:
+  1. Yo expongo ports puros antes de cada adapter Home
+  2. Yo acepto intenciones por socket Unix `0600` con identidad, correlación e idempotencia durable
+  3. Yo mantengo B simple, C literal, D absoluto y re-evaluación antes de resolver
+  4. Yo hago que la primera respuesta válida gane de forma atómica
+  5. Yo completo audit RPC mediante un port sin acceso directo a SQLite desde aplicación
+  6. Yo mantengo Python, web y Android como gates bloqueantes
+**Plans**: ejecución incremental mediante PR #3–#7; el siguiente corte conecta el adapter de Home Edge.
+
 ## Coverage
 
 **v1.0: 25/25 requirements mapeados a exactamente una fase.**
@@ -217,7 +233,7 @@ Sin orphans, sin duplicados. MULTI-02 (nada B/C se auto-ejecuta) se cierra en Ph
 
 ## Progress
 
-**Execution Order:** 9 → 10 → 11 → 12 → 13 → 14 → 15
+**Execution Order:** 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -236,6 +252,7 @@ Sin orphans, sin duplicados. MULTI-02 (nada B/C se auto-ejecuta) se cierra en Ph
 | 13. Intake n8n | v1.0 | 0/TBD | Not started | - |
 | 14. Web PC Polish | v1.0 | 0/TBD | Not started | - |
 | 15. Mobile APK | v1.0 | 5/6 | In Progress|  |
+| 16. Home Authority Core | v1.0 | incremental | In Progress | - |
 
 ## Milestones del research (v1.0)
 

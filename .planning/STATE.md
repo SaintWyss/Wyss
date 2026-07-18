@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Producto final — app móvil + asistente diario
-status: milestone_complete
-last_updated: 2026-07-16T00:00:00-03:00
-last_activity: 2026-07-11 -- Phase 15 checkpoint E2E device approved
+status: active
+last_updated: 2026-07-18T13:45:00-03:00
+last_activity: 2026-07-18 -- Phase 16 Home authority core in progress
 progress:
   total_phases: 7
   completed_phases: 7
   total_plans: 32
   completed_plans: 32
   percent: 100
-stopped_at: Milestone complete after Phase 15 device checkpoint
+stopped_at: Phase 16 implementation and review
 ---
 
 # Wyss — State
@@ -24,15 +24,15 @@ See: `.planning/PROJECT.md` (updated 2026-07-10).
 
 **Core value:** Encontrar cualquier cosa en 2 TB en segundos, delegar tareas a agentes con control total y auditar todo.
 
-**Current focus:** milestone funcional cerrado; pendiente formalizar versionado y release distribuible.
+**Current focus:** integrar Wyss, Home Edge y ESP32 con Wyss como única autoridad.
 
 ## Current Position
 
-- Phase: 15 — Mobile APK
-- Plan: 15-06
-- Status: complete
-- Last activity: 2026-07-11
-- Evidence: `.planning/phases/15-mobile-apk/15-06-SUMMARY.md`
+- Phase: 16 — Home Authority Core
+- Plan: incremental PR #3–#7
+- Status: in progress
+- Last activity: 2026-07-18
+- Evidence: PRs, CI y `.planning/phases/16-home-authority-core/16-REVIEW.md`
 
 ## v1.0 Roadmap — Phases 9–15
 
