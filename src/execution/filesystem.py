@@ -25,9 +25,9 @@ from send2trash import send2trash  # type: ignore[import-untyped]
 
 from core.domain.audit import ActorType, AuditEvent, AuditEventType
 from core.domain.execution import ToolResult, Verification
-from core.domain.plan import Action, Plan
+from core.domain.plan import Action
 from core.domain.risk import RiskLevel
-from core.policy.engine import CognitivePolicyEngine
+from core.ports.execution import ExecutionGuardPort
 from execution.journal import UndoJournal
 
 
@@ -95,18 +95,18 @@ class FileSystemAdapter:
     name, max_risk, describe(), execute(), verify().
 
     Inyección de dependencias (constructor):
-      - engine: CognitivePolicyEngine — para la segunda muralla (D-68)
+      - guard: ExecutionGuardPort — para la segunda muralla (D-68)
       - audit: objeto con método .log(AuditEvent) — para bloqueos + eventos
       - journal: UndoJournal — para registrar inversa ANTES de mutar (D-65)
     """
 
     def __init__(
         self,
-        engine: CognitivePolicyEngine,
+        guard: ExecutionGuardPort,
         audit: object,
         journal: UndoJournal,
     ) -> None:
-        self._engine = engine
+        self._guard = guard
         self._audit = audit
         self._journal = journal
 
@@ -143,18 +143,15 @@ class FileSystemAdapter:
             on_error=action.on_error,
             retry_params=action.retry_params,
         )
-        resolved_plan = Plan(
-            task_id="second-wall",
-            summary="second-wall check",
-            steps=(resolved_action,),
-            rationale="path-resolution re-eval",
+        authorization = self._guard.authorize(
+            resolved_action,
+            adapter=self.name,
+            max_risk=self.max_risk,
         )
-        decision = self._engine.evaluate(resolved_plan)
 
         # Condición de bloqueo: riesgo excede max_risk OR path cambió (path tricks)
-        if decision.risk_level > self.max_risk:
-            reason = f"risk_level={decision.risk_level.name} > max_risk={self.max_risk.name}"
-            self._audit_blocked(action.target, resolved_target, str(decision.risk_level), reason)
+        if not authorization.allowed:
+            reason = authorization.reason
             return False, resolved_target, reason
 
         # Anti-symlink del componente-archivo (F3, cerrado en PR-08): comparamos el
@@ -174,7 +171,12 @@ class FileSystemAdapter:
                 f"el archivo objetivo es un symlink que redirige (path tricks): "
                 f"{action.target!r} -> {resolved_target!r}"
             )
-            self._audit_blocked(action.target, resolved_target, str(decision.risk_level), reason)
+            self._audit_blocked(
+                action.target,
+                resolved_target,
+                authorization.risk_level.name,
+                reason,
+            )
             return False, resolved_target, reason
 
         return True, resolved_target, ""

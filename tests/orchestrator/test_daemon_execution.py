@@ -22,6 +22,7 @@ from core.policy import CognitivePolicyEngine
 from execution.executor import PlanExecutor
 from execution.filesystem import FileSystemAdapter
 from execution.git import GitAdapter
+from execution.guard import DeterministicExecutionGuard
 from execution.journal import UndoJournal
 from execution.shell import ShellAdapter
 from orchestrator.daemon import DaemonServer
@@ -126,10 +127,11 @@ def journal(tmp_path: Path) -> Iterator[UndoJournal]:
 def _runner(
     engine: CognitivePolicyEngine, audit: FakeAudit, journal: UndoJournal, tmp_path: Path
 ) -> PlanExecutor:
+    guard = DeterministicExecutionGuard(engine, cast(Any, audit))
     return PlanExecutor(
-        filesystem=FileSystemAdapter(engine, audit, journal),
-        shell=ShellAdapter(cast(Any, audit)),
-        git=GitAdapter(cast(Any, audit), tmp_path),
+        filesystem=FileSystemAdapter(guard, audit, journal),
+        shell=ShellAdapter(cast(Any, audit), guard),
+        git=GitAdapter(cast(Any, audit), tmp_path, guard),
         journal=journal,
         audit=audit,
     )

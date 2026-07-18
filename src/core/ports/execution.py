@@ -2,8 +2,15 @@
 
 from typing import Protocol
 
-from core.domain import Action, RiskLevel, ToolResult, Verification
-from core.domain.plan import Plan
+from core.domain import (
+    Action,
+    ExecutionAuthorization,
+    Plan,
+    PolicyDecision,
+    RiskLevel,
+    ToolResult,
+    Verification,
+)
 
 
 class Tool(Protocol):
@@ -20,6 +27,24 @@ class Tool(Protocol):
     async def execute(self, action: Action) -> ToolResult: ...
 
     async def verify(self, action: Action, result: ToolResult) -> Verification: ...
+
+
+class ExecutionGuardPort(Protocol):
+    """Segunda muralla determinista que cada adapter consulta antes del I/O."""
+
+    def authorize(
+        self,
+        action: Action,
+        *,
+        adapter: str,
+        max_risk: RiskLevel,
+    ) -> ExecutionAuthorization: ...
+
+
+class PolicyEvaluatorPort(Protocol):
+    """Frontera mínima del motor de política usada por la segunda muralla."""
+
+    def evaluate(self, plan: Plan) -> PolicyDecision: ...
 
 
 class PlanRunner(Protocol):

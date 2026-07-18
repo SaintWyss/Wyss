@@ -19,7 +19,7 @@ import pytest
 from core.domain.audit import AuditEventType
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
-from tests.execution.conftest import FakeAudit
+from tests.execution.conftest import FakeAudit, make_engine, make_guard
 
 if TYPE_CHECKING:
     from execution.git import GitAdapter
@@ -54,6 +54,7 @@ def _make_adapter(
     return GitAdapter(
         audit=audit,
         repo_path=repo_path,
+        guard=make_guard(make_engine(), audit),
         allowed_subcommands=allowed,
         timeout_s=10.0,
     )
@@ -129,6 +130,26 @@ async def test_allowed_status_runs(git_repo: Path) -> None:
     assert result.payload["returncode"] == 0
     # git status siempre produce algo en stdout
     assert isinstance(result.payload.get("stdout"), str)
+
+
+@pytest.mark.asyncio
+async def test_second_wall_rejects_force_push_main_even_when_allowlisted(
+    git_repo: Path,
+) -> None:
+    """Una regla D prevalece sobre la allowlist del adapter Git."""
+    audit = FakeAudit()
+    adapter = _make_adapter(audit, git_repo, allowed={"push"})
+    action = Action(
+        type="git.push",
+        target="main",
+        parameters={"force": True, "args": ["--force", "origin", "main"]},
+    )
+
+    result = await adapter.execute(action)
+
+    assert result.success is False
+    assert result.payload["blocked"] == "second_wall"
+    assert any(event.payload.get("blocked") == "second_wall" for event in audit.events)
 
 
 # ---------------------------------------------------------------------------
@@ -238,12 +259,12 @@ def test_git_adapter_never_uses_shell_equals_true() -> None:
 
 
 def test_git_adapter_protocol_properties(tmp_path: Path) -> None:
-    """GitAdapter debe exponer name='git' y max_risk=RiskLevel.B."""
+    """GitAdapter admite C confirmado y bloquea siempre D."""
     audit = FakeAudit()
     adapter = _make_adapter(audit, tmp_path)
 
     assert adapter.name == "git"
-    assert adapter.max_risk == RiskLevel.B
+    assert adapter.max_risk == RiskLevel.C
 
 
 # ---------------------------------------------------------------------------

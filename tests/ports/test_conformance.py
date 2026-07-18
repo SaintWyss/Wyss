@@ -17,6 +17,7 @@ from core.ports import (
     Chunker,
     ConfigStore,
     EmbeddingProvider,
+    ExecutionGuardPort,
     Extractor,
     FullTextIndex,
     ModelGatewayPort,
@@ -131,9 +132,20 @@ def test_tool_conforms() -> None:
     assert port is not None
 
 
+def test_execution_guard_conforms() -> None:
+    """La segunda muralla real satisface el puerto del núcleo."""
+    from execution.guard import DeterministicExecutionGuard
+    from tests.execution.conftest import FakeAudit, make_engine
+
+    audit = FakeAudit()
+    guard: ExecutionGuardPort = DeterministicExecutionGuard(make_engine(), audit)
+    assert guard is not None
+
+
 def test_filesystem_adapter_conforms(tmp_path: Path) -> None:
     """FileSystemAdapter satisface el protocolo Tool (verificado por mypy strict)."""
     from execution.filesystem import FileSystemAdapter
+    from execution.guard import DeterministicExecutionGuard
     from execution.journal import UndoJournal
     from tests.execution.conftest import FakeAudit
 
@@ -151,7 +163,11 @@ def test_filesystem_adapter_conforms(tmp_path: Path) -> None:
     _audit = FakeAudit()
     _journal = UndoJournal(tmp_path / "conformance_journal.db", backup_base_dir=tmp_path / "bk")
     try:
-        adapter: Tool = FileSystemAdapter(engine=_engine, audit=_audit, journal=_journal)
+        adapter: Tool = FileSystemAdapter(
+            guard=DeterministicExecutionGuard(_engine, _audit),
+            audit=_audit,
+            journal=_journal,
+        )
         assert adapter is not None
         assert adapter.name == "filesystem"
         assert adapter.max_risk == RiskLevel.C

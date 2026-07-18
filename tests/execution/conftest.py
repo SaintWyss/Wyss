@@ -22,9 +22,10 @@ import pytest
 
 from core.domain import AuditEvent, Span
 from core.domain.plan import Plan
-from core.domain.policy import AggregateThresholds, PolicyRules
+from core.domain.policy import AggregateThresholds, PolicyDecision, PolicyRules
 from core.domain.risk import RiskLevel
 from core.policy import BUILTIN_DENY, CognitivePolicyEngine
+from core.ports.execution import ExecutionGuardPort, PolicyEvaluatorPort
 from execution.journal import UndoJournal
 
 DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
@@ -49,8 +50,8 @@ DEFAULT_BASE_LEVELS: dict[str, RiskLevel] = {
 }
 
 
-@pytest.fixture
-def engine() -> CognitivePolicyEngine:
+def make_engine() -> CognitivePolicyEngine:
+    """Motor real con la política canónica usada por la suite de ejecución."""
     return CognitivePolicyEngine(
         PolicyRules(
             deny=BUILTIN_DENY,
@@ -58,6 +59,11 @@ def engine() -> CognitivePolicyEngine:
             thresholds=AggregateThresholds(),
         )
     )
+
+
+@pytest.fixture
+def engine() -> CognitivePolicyEngine:
+    return make_engine()
 
 
 class FakeAudit:
@@ -80,6 +86,13 @@ class FakeAudit:
         )
 
 
+def make_guard(engine: PolicyEvaluatorPort, audit: FakeAudit) -> ExecutionGuardPort:
+    """Construye la segunda muralla real para tests de adapters."""
+    from execution.guard import DeterministicExecutionGuard
+
+    return DeterministicExecutionGuard(engine, audit)
+
+
 class RecordingEngine:
     """Envuelve CognitivePolicyEngine y registra cada Plan evaluado en `.calls`.
 
@@ -91,7 +104,7 @@ class RecordingEngine:
         self._inner = inner
         self.calls: list[Plan] = []
 
-    def evaluate(self, plan: Plan) -> object:
+    def evaluate(self, plan: Plan) -> PolicyDecision:
         self.calls.append(plan)
         return self._inner.evaluate(plan)
 

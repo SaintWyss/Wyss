@@ -17,7 +17,7 @@ from core.domain.errors import (
     UnsupportedFileError,
     WyssError,
 )
-from core.domain.execution import ToolResult, Verification
+from core.domain.execution import ExecutionAuthorization, ToolResult, Verification
 from core.domain.gateway import (
     AgentModelRequest,
     ModelRequest,
@@ -85,6 +85,7 @@ __all__ = [
     "DeliveryReceipt",
     "DenyRule",
     "EstimateResult",
+    "ExecutionAuthorization",
     "ExtractedContent",
     "ExtractionError",
     "FileRecord",

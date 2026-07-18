@@ -26,6 +26,7 @@ from core.domain.execution import ToolResult, Verification
 from core.domain.plan import Action
 from core.domain.risk import RiskLevel
 from core.ports.audit import AuditPort
+from core.ports.execution import ExecutionGuardPort
 
 # Subcomandos git permitidos por defecto (pueden sobreescribirse vía TOML o constructor)
 DEFAULT_ALLOWED_SUBCOMMANDS: frozenset[str] = frozenset({"status", "diff", "add", "commit", "log"})
@@ -58,12 +59,14 @@ class GitAdapter:
         self,
         audit: AuditPort,
         repo_path: str | Path,
+        guard: ExecutionGuardPort,
         *,
         allowed_subcommands: set[str] | frozenset[str] | None = None,
         config_path: str | Path | None = None,
         timeout_s: float = 30.0,
     ) -> None:
         self._audit = audit
+        self._guard = guard
         self._repo_path = Path(repo_path)
         self._timeout_s = timeout_s
         self._git_binary: str | None = None  # resuelto lazy en primer uso
@@ -98,7 +101,7 @@ class GitAdapter:
 
     @property
     def max_risk(self) -> RiskLevel:
-        return RiskLevel.B  # operaciones git con side-effects controlados
+        return RiskLevel.C  # commit/push requieren confirmación fuerte; D se rechaza
 
     def describe(self, action: Action) -> str:
         raw_args = cast(Sequence[object], action.parameters.get("args", []))
@@ -111,7 +114,10 @@ class GitAdapter:
         Si el subcomando no está en el allowlist: loguea AuditEvent y retorna
         ToolResult(success=False) sin spawnar ningún proceso (D-66, fail-closed).
         """
-        subcommand = action.target
+        # Taxonomía canónica: `git.push` lleva el recurso (rama/remoto) en target.
+        # `git.run` se conserva solo por compatibilidad con planes históricos, donde
+        # target contenía el subcomando.
+        subcommand = action.target if action.type == "git.run" else action.type.removeprefix("git.")
         raw_args = cast(Sequence[object], action.parameters.get("args", []))
         args: list[str] = [str(a) for a in raw_args]
 
@@ -169,10 +175,17 @@ class GitAdapter:
         # --- argv exec (shell=False, D-66) ---
         try:
             returncode, stdout, stderr = await self._exec_git(
+                action=action,
                 resolved_git=resolved_git,
                 subcommand=subcommand,
                 args=args,
                 timeout_s=self._timeout_s,
+            )
+        except PermissionError as exc:
+            return ToolResult(
+                success=False,
+                detail=f"blocked: second wall — {exc}",
+                payload={"blocked": "second_wall", "reason": str(exc)},
             )
         except TimeoutError:
             return ToolResult(
@@ -200,6 +213,7 @@ class GitAdapter:
 
     async def _exec_git(
         self,
+        action: Action,
         resolved_git: str,
         subcommand: str,
         args: list[str],
@@ -210,6 +224,14 @@ class GitAdapter:
         Raises asyncio.TimeoutError si supera `timeout_s`; el proceso es matado y
         drenado para evitar zombies (T-06-ALLOW-2).
         """
+        authorization = self._guard.authorize(
+            action,
+            adapter=self.name,
+            max_risk=self.max_risk,
+        )
+        if not authorization.allowed:
+            raise PermissionError(authorization.reason)
+
         proc = await asyncio.create_subprocess_exec(
             resolved_git,
             subcommand,

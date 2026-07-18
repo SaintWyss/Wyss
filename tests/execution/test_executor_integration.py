@@ -23,7 +23,7 @@ from execution.filesystem import FileSystemAdapter
 from execution.git import GitAdapter
 from execution.journal import UndoJournal
 from execution.shell import ShellAdapter
-from tests.execution.conftest import FakeAudit
+from tests.execution.conftest import FakeAudit, make_guard
 
 
 @pytest.fixture
@@ -48,9 +48,10 @@ def executor(
     tmp_path: Path,
 ) -> PlanExecutor:
     """PlanExecutor con FileSystemAdapter REAL (shell/git presentes pero no usados aquí)."""
-    filesystem = FileSystemAdapter(engine=engine, audit=fake_audit, journal=journal)
-    shell = ShellAdapter(fake_audit, allowed_binaries=set())
-    git = GitAdapter(fake_audit, repo_path=tmp_path)
+    guard = make_guard(engine, fake_audit)
+    filesystem = FileSystemAdapter(guard=guard, audit=fake_audit, journal=journal)
+    shell = ShellAdapter(fake_audit, guard, allowed_binaries=set())
+    git = GitAdapter(fake_audit, repo_path=tmp_path, guard=guard)
     return PlanExecutor(
         filesystem=filesystem,
         shell=shell,

@@ -52,6 +52,7 @@ from core.ports.knowledge import EmbeddingProvider
 from execution.executor import PlanExecutor
 from execution.filesystem import FileSystemAdapter
 from execution.git import GitAdapter
+from execution.guard import DeterministicExecutionGuard
 from execution.journal import UndoJournal
 from execution.shell import ShellAdapter
 from execution.undo import UndoStep, apply_undo, inverse_plan, plan_undo
@@ -488,10 +489,11 @@ def _build_plan_runner(
         NotionTool(client=build_notion_client(notion_token), audit=audit) if notion_token else None
     )
     memory_tool = MemoryTool(store=memory_store, audit=audit)
+    guard = DeterministicExecutionGuard(engine, audit)
     executor = PlanExecutor(
-        filesystem=FileSystemAdapter(engine, audit, journal),
-        shell=ShellAdapter(audit),
-        git=GitAdapter(audit, settings.data_dir),
+        filesystem=FileSystemAdapter(guard, audit, journal),
+        shell=ShellAdapter(audit, guard),
+        git=GitAdapter(audit, settings.data_dir, guard),
         journal=journal,
         audit=audit,
         notion=notion,

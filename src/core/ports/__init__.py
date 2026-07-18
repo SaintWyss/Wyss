@@ -1,9 +1,9 @@
-"""Los 17 contratos del núcleo (16 Protocols + AgentBase) — definidos antes que las impls (D-11)."""
+"""Contratos del núcleo — definidos antes que sus implementaciones (D-11)."""
 
 from core.ports.agent import AgentBase
 from core.ports.audit import AuditPort, AuditQueryPort
 from core.ports.config import ConfigStore
-from core.ports.execution import PlanRunner, Tool
+from core.ports.execution import ExecutionGuardPort, PlanRunner, PolicyEvaluatorPort, Tool
 from core.ports.gateway import ModelGatewayPort, ModelProvider
 from core.ports.home import (
     CalendarPort,
@@ -41,6 +41,7 @@ __all__ = [
     "ClientEventPort",
     "ConfigStore",
     "EmbeddingProvider",
+    "ExecutionGuardPort",
     "Extractor",
     "FullTextIndex",
     "HomePort",
@@ -54,6 +55,7 @@ __all__ = [
     "OrchestratorPort",
     "PermissionStore",
     "PlanRunner",
+    "PolicyEvaluatorPort",
     "ProjectionPort",
     "ReminderPort",
     "Retrieval",

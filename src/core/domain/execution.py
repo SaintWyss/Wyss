@@ -3,6 +3,8 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from core.domain.risk import RiskLevel
+
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
@@ -19,3 +21,12 @@ class Verification:
 
     passed: bool
     detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionAuthorization:
+    """Decisión fail-closed de la segunda muralla previa al I/O real."""
+
+    allowed: bool
+    risk_level: RiskLevel
+    reason: str
