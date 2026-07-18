@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from audit import SqliteAuditLogger
-from core.domain.audit import ActorType, AuditEvent, AuditEventType
+from core.domain.audit import ActorType, AuditEvent, AuditEventType, AuditQuery
 from core.domain.errors import AuditIntegrityError
 
 
@@ -159,6 +159,19 @@ def test_correlation_by_task_id(
 
     assert count == 2
     assert "idx_audit_task" in indexes
+
+
+def test_query_filters_and_returns_newest_first(
+    logger: SqliteAuditLogger, make_event: Callable[..., AuditEvent]
+) -> None:
+    logger.log(make_event(task_id="target", message="primero"))
+    logger.log(make_event(task_id="other", message="ignorado"))
+    logger.log(make_event(task_id="target", message="último"))
+
+    events = logger.query(AuditQuery(task_id="target", limit=2))
+
+    assert [event.message for event in events] == ["último", "primero"]
+    assert all(event.task_id == "target" for event in events)
 
 
 def test_basic_concurrency(tmp_path: Path) -> None:

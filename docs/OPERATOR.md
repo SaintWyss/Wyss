@@ -247,7 +247,9 @@ uv run wyss audit --limit 200
 uv run wyss audit --since 2026-07-16T00:00:00+00:00
 ```
 
-El CLI lee `audit.db` directamente. El método RPC `audit` del daemon sigue siendo un stub que devuelve `[]`; no usarlo como evidencia de ausencia de eventos.
+El CLI lee `audit.db` directamente. Para integraciones locales yo uso el método RPC `audit`, que
+consulta el mismo adapter mediante un port, limita cada respuesta a 200 eventos y omite payloads
+salvo que yo pida `include_payload: true` explícitamente.
 
 ## 14. Undo
 
@@ -312,11 +314,10 @@ Usar `pkill` solo después de verificar el proceso con `pgrep -af wyss`.
 ## 18. Límites conocidos
 
 - package metadata aún declara `0.1.0` aunque el alcance v1 esté implementado;
-- audit RPC stub;
 - undo limitado a archivos;
 - deterministic es el default;
 - infraestructura LLM y Notion es externa;
 - TLS local requiere confianza TOFU;
-- CI raíz no ejecuta toda la matriz web/Android.
+- providers externos requieren sus credenciales y autorización propias.
 
 Verificación completa: [`TESTING.md`](TESTING.md). Configuración: [`CONFIGURATION.md`](CONFIGURATION.md).

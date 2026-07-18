@@ -11,14 +11,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from core.domain import ActorType, AuditEvent, AuditEventType, Outcome, RiskLevel
+from core.domain import ActorType, AuditEvent, AuditEventType, AuditQuery, Outcome, RiskLevel
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
 from core.domain.policy import PolicyDecision
 from core.domain.risk import outcome_for
 from core.orchestrator.intent import IntentCategory
 from core.policy import CognitivePolicyEngine
-from core.ports.audit import AuditPort
+from core.ports.audit import AuditPort, AuditQueryPort
 from core.ports.execution import PlanRunner
 from core.ports.ledger import LedgerPort
 from core.ports.memory import MemoryAdmin
@@ -75,6 +75,7 @@ class DaemonServer:
         ledger: LedgerPort,
         scheduler: RoutineScheduler,
         runner: PlanRunner | None = None,
+        audit_query: AuditQueryPort | None = None,
     ) -> None:
         self._engine = engine
         self._orchestrator = orchestrator
@@ -85,6 +86,7 @@ class DaemonServer:
         self._ledger = ledger
         self._scheduler = scheduler
         self._runner = runner
+        self._audit_query = audit_query
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
             "intake.propose": self._intake_propose,
@@ -338,8 +340,37 @@ class DaemonServer:
         }
 
     async def _audit_events(self, params: Mapping[str, Any]) -> JsonDict:
-        del params
-        return {"events": []}
+        if self._audit_query is None:
+            raise RuntimeError("consulta de auditoría no configurada")
+        limit = _bounded_int(params.get("limit", 50), name="limit", minimum=1, maximum=200)
+        since = _optional_datetime(params.get("since"), name="since")
+        task_id = _optional_non_empty_string(params.get("task_id"), name="task_id")
+        event_type_raw = _optional_non_empty_string(params.get("event_type"), name="event_type")
+        try:
+            event_type = AuditEventType(event_type_raw) if event_type_raw is not None else None
+        except ValueError as exc:
+            raise ValueError("event_type inválido") from exc
+        include_payload = params.get("include_payload", False)
+        if not isinstance(include_payload, bool):
+            raise ValueError("include_payload debe ser booleano")
+        events = self._audit_query.query(
+            AuditQuery(since=since, limit=limit, task_id=task_id, event_type=event_type)
+        )
+        return {
+            "events": [
+                {
+                    "event_id": event.event_id,
+                    "task_id": event.task_id,
+                    "actor_type": event.actor_type.value,
+                    "actor_id": event.actor_id,
+                    "event_type": event.event_type.value,
+                    "message": event.message,
+                    **({"payload": dict(event.payload)} if include_payload else {}),
+                    "created_at": event.created_at.isoformat(),
+                }
+                for event in events
+            ]
+        }
 
     async def _routine_add(self, params: Mapping[str, Any]) -> JsonDict:
         name = str(params.get("name", "")).strip()
@@ -509,6 +540,7 @@ async def start_daemon(
     ledger: LedgerPort,
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
+    audit_query: AuditQueryPort | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -528,6 +560,7 @@ async def start_daemon(
         ledger=ledger,
         scheduler=scheduler,
         runner=runner,
+        audit_query=audit_query,
     )
     scheduler.set_on_queued(daemon._execute_plan if runner is not None else None)
     server = await asyncio.start_unix_server(daemon.handle, str(socket_path))
@@ -594,6 +627,7 @@ async def run_daemon(
     ledger: LedgerPort,
     scheduler: RoutineScheduler,
     runner: PlanRunner | None = None,
+    audit_query: AuditQueryPort | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -612,6 +646,7 @@ async def run_daemon(
         ledger=ledger,
         scheduler=scheduler,
         runner=runner,
+        audit_query=audit_query,
         reaper_interval_s=reaper_interval_s,
         digest_enabled=digest_enabled,
         digest_hour=digest_hour,
@@ -654,6 +689,34 @@ def _confirmation_matches(level: RiskLevel, response: str) -> bool:
     if level == RiskLevel.C:
         return response == "CONFIRMAR"
     return False
+
+
+def _bounded_int(value: object, *, name: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise ValueError(f"{name} debe estar entre {minimum} y {maximum}")
+    return value
+
+
+def _optional_datetime(value: object, *, name: str) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} debe ser ISO 8601")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} debe ser ISO 8601") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{name} debe incluir zona horaria")
+    return parsed
+
+
+def _optional_non_empty_string(value: object, *, name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} debe ser texto no vacío")
+    return value.strip()
 
 
 def _routine_id_param(params: Mapping[str, Any]) -> str:
