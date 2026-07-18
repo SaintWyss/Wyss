@@ -91,7 +91,11 @@ class SqliteIdempotencyStore:
             if row is None:
                 count_row = self._conn.execute("SELECT COUNT(*) FROM client_requests").fetchone()
                 count = int(count_row[0])
-                if count >= self._max_rows:
+                completed_row = self._conn.execute(
+                    "SELECT COUNT(*) FROM client_requests WHERE status='completed'"
+                ).fetchone()
+                completed = int(completed_row[0])
+                if count >= self._max_rows or completed >= self._max_completed_rows:
                     raise RuntimeError("capacidad idempotente agotada; claim rechazado")
                 self._conn.execute(
                     "INSERT INTO client_requests "
@@ -149,12 +153,6 @@ class SqliteIdempotencyStore:
     def _maintain(self) -> None:
         """Poda completados con ventana y cuota; nunca borra claims ambiguos."""
         self.prune_completed(datetime.now(UTC) - timedelta(hours=24))
-        self._conn.execute(
-            "DELETE FROM client_requests WHERE request_key IN ("
-            "SELECT request_key FROM client_requests WHERE status='completed' "
-            "ORDER BY updated_at DESC, request_key DESC LIMIT -1 OFFSET ?)",
-            (self._max_completed_rows,),
-        )
         self._secure_files()
 
     def close(self) -> None:

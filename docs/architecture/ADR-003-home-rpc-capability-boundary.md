@@ -12,11 +12,14 @@ proceso Edge.
 
 ## Decisión
 
-Yo mantengo `wyss.sock` como límite owner/administrativo y creo `wyss-home.sock` como capacidad
-dedicada. En el socket Home aplico una allowlist cerrada (`home.intent`, `home.plan.answer` y
-`status`), derivo la identidad de autoridad como `home-edge` en el transporte y no confío en el
-campo `source` recibido. Ambos sockets nacen `0600`; el socket Home sólo arranca si existen un
-executor real y un store idempotente durable.
+Yo mantengo `wyss.sock` `0600` dentro del data dir privado como límite owner/administrativo y creo
+`wyss-home.sock` `0660` en un runtime dir separado `0750`, preparado para un grupo compartido entre
+Wyss y una cuenta de sistema Edge. En el socket Home verifico el
+UID real del peer con `SO_PEERCRED`, aplico una allowlist cerrada (`home.intent`,
+`home.plan.answer` y `status`), derivo la identidad de autoridad como `home-edge` en el transporte y
+no confío en el campo `source` recibido. El socket Home sólo arranca si existen un UID Edge
+distinto, un grupo compartido, un runtime dir precreado con permisos exactos, un executor real y un
+store idempotente durable; el mismo UID del owner se rechaza.
 
 Yo limito tasa y profundidad antes de ejecutar handlers. Las confirmaciones usan una revisión
 persistida y un compare-and-swap que incluye estado, TTL y revisión dentro de la misma transacción.
@@ -25,7 +28,7 @@ cuota y mantenimiento acotado; yo nunca podo automáticamente un claim `in_progr
 
 ## Consecuencias
 
-- Yo impido que un Edge comprometido invoque métodos administrativos por su canal legítimo.
+- Yo impido por DAC que el UID de Edge abra el socket owner y verifico su UID en el socket Home.
 - Yo fallo cerrado si faltan ejecución verificable, idempotencia o capacidad de almacenamiento.
 - Yo puedo revocar el acceso de Edge retirando sólo el socket dedicado sin detener la CLI owner.
 - Yo delego la identidad de cada panel o teléfono al futuro handshake autenticado Protocol v2;

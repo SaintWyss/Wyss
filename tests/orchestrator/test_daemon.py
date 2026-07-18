@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -256,6 +257,7 @@ async def test_start_daemon_binds_private_dedicated_home_socket(
 ) -> None:
     owner_socket = tmp_path / "wyss.sock"
     home_socket = tmp_path / "wyss-home.sock"
+    tmp_path.chmod(0o750)
 
     async def fake_start_unix_server(handler: object, path: str) -> _FakeAsyncioServer:
         del handler
@@ -267,6 +269,8 @@ async def test_start_daemon_binds_private_dedicated_home_socket(
     running = await start_daemon(
         owner_socket,
         home_socket_path=home_socket,
+        home_peer_uid=os.getuid() + 1,
+        home_peer_gid=os.getgid(),
         engine=engine,
         orchestrator=fake_orchestrator,
         pending_store=pending_store,
@@ -281,13 +285,41 @@ async def test_start_daemon_binds_private_dedicated_home_socket(
     )
     try:
         assert owner_socket.stat().st_mode & 0o777 == 0o600
-        assert home_socket.stat().st_mode & 0o777 == 0o600
+        assert home_socket.stat().st_mode & 0o777 == 0o660
         assert running.home_server is not None
     finally:
         await running.aclose()
 
     assert not owner_socket.exists()
     assert not home_socket.exists()
+
+
+async def test_home_socket_refuses_same_owner_uid(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    with pytest.raises(RuntimeError, match="UID distinto"):
+        await start_daemon(
+            tmp_path / "owner.sock",
+            home_socket_path=tmp_path / "home.sock",
+            home_peer_uid=os.getuid(),
+            home_peer_gid=os.getgid(),
+            engine=engine,
+            orchestrator=fake_orchestrator,
+            pending_store=pending_store,
+            audit=fake_audit,
+            routine_store=routine_store,
+            memory_store=memory_store,
+            ledger=fake_ledger,
+            scheduler=scheduler,
+        )
 
 
 async def test_dedicated_home_socket_real_ipc_rejects_admin_method(
@@ -303,10 +335,13 @@ async def test_dedicated_home_socket_real_ipc_rejects_admin_method(
 ) -> None:
     owner_socket = tmp_path / "wyss-real.sock"
     home_socket = tmp_path / "wyss-home-real.sock"
+    tmp_path.chmod(0o750)
     scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
     running = await start_daemon(
         owner_socket,
         home_socket_path=home_socket,
+        home_peer_uid=os.getuid() + 1,
+        home_peer_gid=os.getgid(),
         engine=engine,
         orchestrator=fake_orchestrator,
         pending_store=pending_store,
@@ -332,8 +367,9 @@ async def test_dedicated_home_socket_real_ipc_rejects_admin_method(
         writer.close()
         await writer.wait_closed()
 
-        assert response["error"]["code"] == -32601
-        assert response["id"] == "home-real"
+        assert response["error"]["code"] == -32001
+        assert response["error"]["message"] == "Home peer no autorizado"
+        assert response["id"] is None
     finally:
         await running.aclose()
 

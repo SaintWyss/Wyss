@@ -1,8 +1,10 @@
 """CLI de Wyss y composition root del pipeline de ingesta."""
 
 import asyncio
+import grp
 import json
 import os
+import pwd
 import secrets
 import sqlite3
 import subprocess
@@ -514,6 +516,8 @@ async def _run_start_daemon(
     scheduler: RoutineScheduler,
 ) -> None:
     idempotency = SqliteIdempotencyStore(_client_requests_db_path(settings))
+    home_identity = _home_edge_identity()
+    home_socket_path = _home_socket_path() if home_identity is not None else None
     journal: UndoJournal | None = None
     try:
         runner, journal = _build_plan_runner(settings, engine, audit, memory_store)
@@ -526,7 +530,9 @@ async def _run_start_daemon(
                 audit=audit,
                 audit_query=audit,
                 idempotency=idempotency,
-                home_socket_path=_home_socket_path(settings),
+                home_socket_path=home_socket_path,
+                home_peer_uid=home_identity[0] if home_identity is not None else None,
+                home_peer_gid=home_identity[1] if home_identity is not None else None,
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -558,7 +564,9 @@ async def _run_start_daemon(
                 audit=audit,
                 audit_query=audit,
                 idempotency=idempotency,
-                home_socket_path=_home_socket_path(settings),
+                home_socket_path=home_socket_path,
+                home_peer_uid=home_identity[0] if home_identity is not None else None,
+                home_peer_gid=home_identity[1] if home_identity is not None else None,
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -1896,8 +1904,37 @@ def _socket_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "wyss.sock"
 
 
-def _home_socket_path(settings: WyssSettings) -> Path:
-    return settings.data_dir / "wyss-home.sock"
+def _home_socket_path() -> Path:
+    raw = os.environ.get("WYSS_HOME_SOCKET_PATH", "").strip()
+    if not raw:
+        raise ConfigError("WYSS_HOME_SOCKET_PATH requerido al habilitar Home Edge")
+    path = Path(raw)
+    if not path.is_absolute():
+        raise ConfigError("WYSS_HOME_SOCKET_PATH debe ser absoluto")
+    return path
+
+
+def _home_edge_identity() -> tuple[int, int] | None:
+    """Resuelve la cuenta dedicada configurada; sin cuenta no expone socket Home."""
+    account = os.environ.get("WYSS_HOME_EDGE_USER", "").strip()
+    group = os.environ.get("WYSS_HOME_EDGE_GROUP", "").strip()
+    if not account and not group:
+        return None
+    if not account or not group:
+        raise ConfigError("WYSS_HOME_EDGE_USER y WYSS_HOME_EDGE_GROUP deben configurarse juntos")
+    try:
+        entry = pwd.getpwnam(account)
+    except KeyError as exc:
+        raise ConfigError(f"WYSS_HOME_EDGE_USER no existe: {account}") from exc
+    if entry.pw_uid == os.getuid():
+        raise ConfigError("WYSS_HOME_EDGE_USER debe tener un UID distinto al owner de Wyss")
+    try:
+        group_entry = grp.getgrnam(group)
+    except KeyError as exc:
+        raise ConfigError(f"WYSS_HOME_EDGE_GROUP no existe: {group}") from exc
+    if entry.pw_gid != group_entry.gr_gid and account not in group_entry.gr_mem:
+        raise ConfigError(f"{account} no pertenece a WYSS_HOME_EDGE_GROUP={group}")
+    return entry.pw_uid, group_entry.gr_gid
 
 
 def _pending_db_path(settings: WyssSettings) -> Path:

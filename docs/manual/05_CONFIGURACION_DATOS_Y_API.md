@@ -126,9 +126,15 @@ El daemon acepta métodos como:
 - `digest.today`;
 - `intake.propose`.
 
-La CLI usa `data/wyss.sock`; Home Edge usa exclusivamente `data/wyss-home.sock`. Ambos son Unix
-`0600`, pero el segundo sólo admite `home.intent`, `home.plan.answer` y `status`, y no confía en
-`source` enviado por el caller. Yo persisto claims Home en `data/client_requests.db` con archivos
+La CLI usa `data/wyss.sock` `0600`; Home Edge usa exclusivamente `data/wyss-home.sock` `0660`. Yo
+configuro `WYSS_HOME_EDGE_USER` con una cuenta de sistema distinta,
+`WYSS_HOME_EDGE_GROUP` con el grupo compartido y `WYSS_HOME_SOCKET_PATH` con una ruta absoluta fuera
+del data dir privado (por ejemplo `/run/wyss-home/authority.sock`). El servicio prepara su directorio
+padre como `0750 owner:grupo`; Wyss verifica permisos, membresía, grupo y peer mediante
+`SO_PEERCRED`. Sin esa
+configuración no expongo el socket Home. Este canal sólo
+admite `home.intent`, `home.plan.answer` y `status`, y no confía en `source` enviado por el caller.
+Yo persisto claims Home en `data/client_requests.db` con archivos
 DB/WAL/SHM `0600`, cuota y mantenimiento acotado: un replay idéntico recibe la primera respuesta,
 una key reutilizada con otro payload falla por conflicto y un efecto ambiguo después de un crash no
 se reintenta automáticamente. Yo resuelvo confirmaciones con compare-and-swap de revisión y TTL.

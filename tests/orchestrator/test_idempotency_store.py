@@ -91,3 +91,28 @@ def test_capacity_fails_closed_without_pruning_ambiguous_claims(tmp_path: Path) 
         assert store.claim("edge:one", "one").status is ClaimStatus.IN_PROGRESS
     finally:
         store.close()
+
+
+def test_completed_quota_never_evicts_replays_inside_24_hours(tmp_path: Path) -> None:
+    store = SqliteIdempotencyStore(
+        tmp_path / "client_requests.db",
+        max_rows=3,
+        max_completed_rows=1,
+        maintenance_interval=1,
+    )
+    try:
+        assert store.claim("edge:completed", "one").status is ClaimStatus.NEW
+        store.complete("edge:completed", {"outcome": "resolved"})
+
+        try:
+            store.claim("edge:new", "two")
+        except RuntimeError as exc:
+            assert "capacidad" in str(exc)
+        else:
+            raise AssertionError("la cuota debía fallar cerrado sin expulsar el replay")
+
+        replay = store.claim("edge:completed", "one")
+        assert replay.status is ClaimStatus.REPLAY
+        assert replay.response == {"outcome": "resolved"}
+    finally:
+        store.close()

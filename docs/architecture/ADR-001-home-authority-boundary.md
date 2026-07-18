@@ -24,8 +24,8 @@ executor ni abrir las bases de datos de Wyss.
 ## Consecuencias
 
 - Yo mantengo una única fuente de verdad y puedo reemplazar HTTP, WSS o IPC sin tocar dominio.
-- Yo autentico el proceso Home Edge local mediante permisos `0600` del socket Unix y no abro otro
-  puerto de red entre Edge y Wyss.
+- Yo mantengo el socket owner `0600` y asigno el socket Home `0660` a una cuenta Edge de UID
+  separado, verifico `SO_PEERCRED` y no abro otro puerto de red entre Edge y Wyss.
 - Yo persisto claims idempotentes antes de procesar intenciones o respuestas de planes; un estado
   ambiguo cierra sin repetir I/O.
 - Yo debo mapear explícitamente los DTO del protocolo en los composition roots.

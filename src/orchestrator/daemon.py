@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import os
+import socket
+import struct
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
@@ -99,6 +101,7 @@ class DaemonServer:
         audit_query: AuditQueryPort | None = None,
         idempotency: IdempotencyPort | None = None,
         home_rate_limit_per_second: int = 50,
+        home_peer_uid: int | None = None,
     ) -> None:
         if home_rate_limit_per_second < 1:
             raise ValueError("home_rate_limit_per_second debe ser positivo")
@@ -114,6 +117,7 @@ class DaemonServer:
         self._audit_query = audit_query
         self._idempotency = idempotency
         self._home_rate_limit = home_rate_limit_per_second
+        self._home_peer_uid = home_peer_uid
         self._home_request_times: deque[float] = deque()
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
@@ -140,6 +144,9 @@ class DaemonServer:
 
     async def handle_home(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Atiende sólo el contrato Home y deriva la identidad del socket dedicado."""
+        if self._home_peer_uid is not None and _peer_uid(writer) != self._home_peer_uid:
+            await _write_closed_error(writer, -32001, "Home peer no autorizado")
+            return
         await self._handle_transport(reader, writer, home_only=True)
 
     async def _handle_transport(
@@ -887,6 +894,8 @@ async def start_daemon(
     audit_query: AuditQueryPort | None = None,
     idempotency: IdempotencyPort | None = None,
     home_socket_path: Path | None = None,
+    home_peer_uid: int | None = None,
+    home_peer_gid: int | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -897,6 +906,11 @@ async def start_daemon(
     await _cleanup_stale_socket(socket_path)
     if home_socket_path is not None:
         await _cleanup_stale_socket(home_socket_path)
+        if home_peer_uid is None or home_peer_gid is None:
+            raise RuntimeError("socket Home requiere UID y GID de peer dedicados")
+        if home_peer_uid == os.getuid():
+            raise RuntimeError("Home Edge debe usar un UID distinto al owner de Wyss")
+        _validate_home_runtime_dir(home_socket_path.parent, home_peer_gid)
     socket_path.parent.mkdir(parents=True, exist_ok=True)
     daemon = DaemonServer(
         engine=engine,
@@ -910,6 +924,7 @@ async def start_daemon(
         runner=runner,
         audit_query=audit_query,
         idempotency=idempotency,
+        home_peer_uid=home_peer_uid,
     )
     scheduler.set_on_queued(daemon._execute_plan if runner is not None else None)
     server = await asyncio.start_unix_server(daemon.handle, str(socket_path))
@@ -921,13 +936,14 @@ async def start_daemon(
             await server.wait_closed()
             socket_path.unlink(missing_ok=True)
             raise RuntimeError("socket Home requiere idempotencia y executor configurados")
-        home_socket_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             home_server = await asyncio.start_unix_server(
                 daemon.handle_home,
                 str(home_socket_path),
             )
-            os.chmod(home_socket_path, 0o600)
+            assert home_peer_gid is not None
+            os.chown(home_socket_path, -1, home_peer_gid)
+            os.chmod(home_socket_path, 0o660)
         except BaseException:
             server.close()
             await server.wait_closed()
@@ -1001,6 +1017,8 @@ async def run_daemon(
     audit_query: AuditQueryPort | None = None,
     idempotency: IdempotencyPort | None = None,
     home_socket_path: Path | None = None,
+    home_peer_uid: int | None = None,
+    home_peer_gid: int | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -1022,6 +1040,8 @@ async def run_daemon(
         audit_query=audit_query,
         idempotency=idempotency,
         home_socket_path=home_socket_path,
+        home_peer_uid=home_peer_uid,
+        home_peer_gid=home_peer_gid,
         reaper_interval_s=reaper_interval_s,
         digest_enabled=digest_enabled,
         digest_hour=digest_hour,
@@ -1040,6 +1060,40 @@ def _error_response(req_id: object, code: int, message: str) -> JsonDict:
         "error": {"code": code, "message": message},
         "id": req_id,
     }
+
+
+def _peer_uid(writer: asyncio.StreamWriter) -> int | None:
+    """Lee SO_PEERCRED del socket Unix; ausencia o formato inválido falla cerrado."""
+    peer_socket = writer.get_extra_info("socket")
+    if peer_socket is None or not hasattr(peer_socket, "getsockopt"):
+        return None
+    try:
+        raw = peer_socket.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+        _pid, uid, _gid = struct.unpack("3i", raw)
+    except (OSError, struct.error):
+        return None
+    return int(uid)
+
+
+async def _write_closed_error(writer: asyncio.StreamWriter, code: int, message: str) -> None:
+    writer.write(json.dumps(_error_response(None, code, message)).encode() + b"\n")
+    await writer.drain()
+    writer.close()
+    await writer.wait_closed()
+
+
+def _validate_home_runtime_dir(path: Path, shared_gid: int) -> None:
+    """Exige un runtime dir precreado, atravesable sólo por owner y grupo Edge."""
+    if not path.is_dir():
+        raise RuntimeError(f"runtime dir Home no existe: {path}")
+    stat = path.stat()
+    mode = stat.st_mode & 0o777
+    if stat.st_gid != shared_gid:
+        raise RuntimeError("runtime dir Home no pertenece al grupo compartido configurado")
+    if shared_gid not in {*os.getgroups(), os.getegid()}:
+        raise RuntimeError("el proceso Wyss no pertenece al grupo compartido Home")
+    if mode != 0o750:
+        raise RuntimeError("runtime dir Home debe ser 0750: grupo r-x y sin acceso para otros")
 
 
 def _digest_window(today: date) -> tuple[str, str]:

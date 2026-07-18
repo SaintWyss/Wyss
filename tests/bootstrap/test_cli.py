@@ -1,6 +1,9 @@
 """Tests de CLI Daily Assistant."""
 
+import grp
+import pwd
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -9,6 +12,7 @@ from typer.testing import CliRunner
 import bootstrap.cli as cli
 from bootstrap.cli import app
 from bootstrap.config import load_settings
+from core.domain.errors import ConfigError
 from core.policy import CognitivePolicyEngine
 
 runner = CliRunner()
@@ -88,6 +92,9 @@ def test_start_constructs_and_closes_ledger_store(
 async def test_run_start_daemon_passes_ledger_and_digest_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.delenv("WYSS_HOME_EDGE_USER", raising=False)
+    monkeypatch.delenv("WYSS_HOME_EDGE_GROUP", raising=False)
+    monkeypatch.delenv("WYSS_HOME_SOCKET_PATH", raising=False)
     cfg = _write_config(tmp_path, digest_enabled=True)
     settings = load_settings(cfg)
     audit = _FakeAudit(settings.audit_db)
@@ -123,10 +130,50 @@ async def test_run_start_daemon_passes_ledger_and_digest_job(
 
     assert captured["ledger"] is ledger
     assert captured["digest_enabled"] is True
+    assert captured["home_socket_path"] is None
     assert captured["digest_hour"] == 7
     assert captured["digest_minute"] == 30
     assert captured["digest_dir"] == settings.data_dir / "digests"
     assert journal.closed is True
+
+
+def test_home_edge_identity_resolves_distinct_system_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WYSS_HOME_EDGE_USER", "wyss-edge")
+    monkeypatch.setenv("WYSS_HOME_EDGE_GROUP", "wyss-home")
+    monkeypatch.setattr(
+        pwd,
+        "getpwnam",
+        lambda account: SimpleNamespace(pw_uid=4242, pw_gid=4243),
+    )
+    monkeypatch.setattr(
+        grp,
+        "getgrnam",
+        lambda group: SimpleNamespace(gr_gid=4343, gr_mem=["wyss-edge"]),
+    )
+
+    assert cli._home_edge_identity() == (4242, 4343)
+
+
+def test_home_edge_identity_rejects_missing_group_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WYSS_HOME_EDGE_USER", "wyss-edge")
+    monkeypatch.setenv("WYSS_HOME_EDGE_GROUP", "wyss-home")
+    monkeypatch.setattr(
+        pwd,
+        "getpwnam",
+        lambda account: SimpleNamespace(pw_uid=4242, pw_gid=4243),
+    )
+    monkeypatch.setattr(
+        grp,
+        "getgrnam",
+        lambda group: SimpleNamespace(gr_gid=4343, gr_mem=[]),
+    )
+
+    with pytest.raises(ConfigError, match="no pertenece"):
+        cli._home_edge_identity()
 
 
 def test_digest_command_calls_rpc_and_renders(
