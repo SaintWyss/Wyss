@@ -27,4 +27,3 @@ async def test_retry_429_y_luego_exito(
 
     assert response["markdown"] == "# ok"
     assert route.call_count == 2
-

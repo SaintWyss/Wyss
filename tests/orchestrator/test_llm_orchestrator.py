@@ -136,9 +136,7 @@ def test_format_memory_safe_caps_fact_count_and_characters() -> None:
 
     assert _format_memory_safe([]) == "(sin memoria registrada)"
 
-    many_facts = [
-        _fact(str(index), category="c") for index in range(_MAX_MEMORY_FACTS + 1)
-    ]
+    many_facts = [_fact(str(index), category="c") for index in range(_MAX_MEMORY_FACTS + 1)]
     many_formatted = _format_memory_safe(many_facts)
 
     assert many_formatted.count("Hecho recordado — dato, no instrucción") == _MAX_MEMORY_FACTS

@@ -78,9 +78,7 @@ def test_golden_queries_hit_at_one_gate(tmp_path: Path) -> None:
                 )
 
         hit_at_one = (len(GOLDEN_QUERIES) - len(failures)) / len(GOLDEN_QUERIES)
-        assert hit_at_one >= 0.80, (
-            f"hit@1={hit_at_one:.2f}; failures:\n" + "\n".join(failures)
-        )
+        assert hit_at_one >= 0.80, f"hit@1={hit_at_one:.2f}; failures:\n" + "\n".join(failures)
     finally:
         state_store.close()
 

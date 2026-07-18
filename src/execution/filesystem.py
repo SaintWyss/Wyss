@@ -126,9 +126,7 @@ class FileSystemAdapter:
     # Segunda muralla (D-68)
     # ------------------------------------------------------------------
 
-    def _second_wall(
-        self, action: Action
-    ) -> tuple[bool, str, str]:
+    def _second_wall(self, action: Action) -> tuple[bool, str, str]:
         """Resuelve el path real y re-evalúa con el engine de política.
 
         Returns:
@@ -434,9 +432,7 @@ class FileSystemAdapter:
         if parent.exists():
             for candidate in parent.iterdir():
                 name = candidate.name
-                if name == original_path.name or (
-                    name.startswith(stem) and name.endswith(suffix)
-                ):
+                if name == original_path.name or (name.startswith(stem) and name.endswith(suffix)):
                     return candidate
         return None
 

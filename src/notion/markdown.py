@@ -50,4 +50,3 @@ def _cap_text(text: str, cap_chars: int) -> tuple[str, bool]:
         f"{len(text)} caracteres totales, mostrando {cap_chars}]",
         True,
     )
-

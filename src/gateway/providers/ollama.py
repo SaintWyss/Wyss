@@ -28,9 +28,7 @@ class OllamaEmbeddingProvider:
         self._model = model
 
     async def embed(self, texts: Sequence[str]) -> Sequence[Vector]:
-        resp = await self._client.post(
-            self._url, json={"model": self._model, "input": list(texts)}
-        )
+        resp = await self._client.post(self._url, json={"model": self._model, "input": list(texts)})
         resp.raise_for_status()
         # /api/embed devuelve "embeddings" (batch, L2-normalizado). El dict muere acá.
         return [tuple(vec) for vec in resp.json()["embeddings"]]

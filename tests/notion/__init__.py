@@ -1,2 +1,1 @@
 """Tests del adapter Notion."""
-

@@ -28,9 +28,7 @@ def test_wal_active(logger: SqliteAuditLogger, tmp_path: Path) -> None:
         conn.close()
 
 
-def test_roundtrip_persists_all_d07_fields(
-    logger: SqliteAuditLogger, tmp_path: Path
-) -> None:
+def test_roundtrip_persists_all_d07_fields(logger: SqliteAuditLogger, tmp_path: Path) -> None:
     """(2) Roundtrip D-07: payload cubre los 8 campos del registro mínimo."""
     payload: dict[str, object] = {
         "actor": "santiago",
@@ -119,9 +117,7 @@ def test_span_happy_path(logger: SqliteAuditLogger, tmp_path: Path) -> None:
     ]
 
 
-def test_span_failure_records_and_propagates(
-    logger: SqliteAuditLogger, tmp_path: Path
-) -> None:
+def test_span_failure_records_and_propagates(logger: SqliteAuditLogger, tmp_path: Path) -> None:
     """(4b) Span con excepción: SPAN_FAILED registrado y la excepción se propaga."""
     with pytest.raises(ValueError, match="boom"), logger.span("task-fail", "agent", "riesgoso"):
         raise ValueError("boom")
@@ -202,9 +198,7 @@ def test_basic_concurrency(tmp_path: Path) -> None:
     assert count == 100
 
 
-def test_fail_fast_when_journal_not_wal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fail_fast_when_journal_not_wal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """(7) journal_mode ≠ wal → AuditIntegrityError con el path en el mensaje."""
     import audit.sqlite_logger as mod
 

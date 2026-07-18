@@ -108,13 +108,10 @@ class LedgerRetrieval:
             or "  - (sin gastos categorizados en la ventana)"
         )
         escasez = coverage < _COBERTURA_MINIMA_DIAS
-        nota_cobertura = (
-            f"Cobertura: {coverage} días con datos "
-            + (
-                "(ESCASA — declarar incertidumbre, no proyectar con confianza)."
-                if escasez
-                else "(suficiente para una lectura del mes)."
-            )
+        nota_cobertura = f"Cobertura: {coverage} días con datos " + (
+            "(ESCASA — declarar incertidumbre, no proyectar con confianza)."
+            if escasez
+            else "(suficiente para una lectura del mes)."
         )
         snippet = (
             f"Hechos verificados del ledger (ventana {desde}..{hasta}):\n"

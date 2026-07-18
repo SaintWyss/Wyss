@@ -25,9 +25,7 @@ from execution.executor import PlanExecutor
 # ---------------------------------------------------------------------------
 
 
-def _make_plan(
-    *actions: Action, task_id: str = "task-test-1"
-) -> Plan:
+def _make_plan(*actions: Action, task_id: str = "task-test-1") -> Plan:
     return Plan(
         task_id=task_id,
         summary="test plan",
@@ -49,9 +47,7 @@ def _ok_adapter(
             payload={"journal_entry_id": journal_entry_id},
         )
     )
-    adapter.verify = AsyncMock(
-        return_value=Verification(passed=verify_passed, detail="ok")
-    )
+    adapter.verify = AsyncMock(return_value=Verification(passed=verify_passed, detail="ok"))
     return adapter
 
 
@@ -316,9 +312,7 @@ async def test_retry_respects_max_attempts() -> None:
     filesystem.execute = AsyncMock(
         return_value=ToolResult(success=False, detail="always fails", payload={})
     )
-    filesystem.verify = AsyncMock(
-        return_value=Verification(passed=False, detail="fail verify")
-    )
+    filesystem.verify = AsyncMock(return_value=Verification(passed=False, detail="fail verify"))
 
     journal = MagicMock()
     journal.restore = MagicMock(return_value=True)
@@ -362,9 +356,7 @@ async def test_escalate_audits_without_rollback() -> None:
     filesystem.execute = AsyncMock(
         return_value=ToolResult(success=False, detail="escalation fail", payload={})
     )
-    filesystem.verify = AsyncMock(
-        return_value=Verification(passed=False, detail="fail verify")
-    )
+    filesystem.verify = AsyncMock(return_value=Verification(passed=False, detail="fail verify"))
 
     journal = MagicMock()
     journal.restore = MagicMock(return_value=True)
@@ -394,8 +386,7 @@ async def test_escalate_audits_without_rollback() -> None:
     escalate_events = [
         e
         for e in fake_audit.events
-        if e.event_type == AuditEventType.TASK_FAILED
-        and e.payload.get("escalate") is True
+        if e.event_type == AuditEventType.TASK_FAILED and e.payload.get("escalate") is True
     ]
     assert len(escalate_events) == 1, (
         f"Esperaba 1 evento TASK_FAILED escalate, encontré: {fake_audit.events}"
@@ -417,17 +408,13 @@ async def test_successful_plan_marks_applied() -> None:
     filesystem.execute = AsyncMock(
         return_value=ToolResult(success=True, detail="ok", payload={"journal_entry_id": "e1"})
     )
-    filesystem.verify = AsyncMock(
-        return_value=Verification(passed=True, detail="ok")
-    )
+    filesystem.verify = AsyncMock(return_value=Verification(passed=True, detail="ok"))
 
     shell = MagicMock()
     shell.execute = AsyncMock(
         return_value=ToolResult(success=True, detail="ok", payload={"journal_entry_id": "e2"})
     )
-    shell.verify = AsyncMock(
-        return_value=Verification(passed=True, detail="ok")
-    )
+    shell.verify = AsyncMock(return_value=Verification(passed=True, detail="ok"))
 
     journal = MagicMock()
     journal.restore = MagicMock(return_value=True)

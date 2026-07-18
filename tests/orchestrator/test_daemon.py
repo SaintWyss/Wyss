@@ -150,8 +150,7 @@ async def _handle_rpc(
 ) -> dict[str, Any]:
     reader = asyncio.StreamReader()
     reader.feed_data(
-        json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 7}).encode()
-        + b"\n"
+        json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 7}).encode() + b"\n"
     )
     reader.feed_eof()
     writer = _MemoryWriter()
@@ -274,9 +273,7 @@ async def test_intake_propose_floors_a_to_pending_b_and_never_executes(
     assert len(pending) == 1
     assert pending[0].risk_level == "B"
     received = next(
-        event
-        for event in fake_audit.events
-        if event.event_type == AuditEventType.COMMAND_RECEIVED
+        event for event in fake_audit.events if event.event_type == AuditEventType.COMMAND_RECEIVED
     )
     assert received.actor_type is ActorType.SYSTEM
     assert received.actor_id == "intake"
@@ -342,9 +339,7 @@ async def test_intake_propose_preserves_d_reject(
         scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
     )
 
-    response = await _handle_rpc(
-        daemon, "intake.propose", {"instruction": "formatear disco"}
-    )
+    response = await _handle_rpc(daemon, "intake.propose", {"instruction": "formatear disco"})
 
     assert "error" not in response
     assert response["result"]["outcome"] == "rejected"
@@ -482,15 +477,11 @@ async def test_memory_handlers_round_trip_via_rpc(
         }
     ]
 
-    edited = await _handle_rpc(
-        daemon, "memory.edit", {"fact_id": "fact-1", "value": "mate amargo"}
-    )
+    edited = await _handle_rpc(daemon, "memory.edit", {"fact_id": "fact-1", "value": "mate amargo"})
     assert edited["result"] == {"ok": True}
     assert memory_store.list_all()[0].value == "mate amargo"
 
-    missing_edit = await _handle_rpc(
-        daemon, "memory.edit", {"fact_id": "missing", "value": "x"}
-    )
+    missing_edit = await _handle_rpc(daemon, "memory.edit", {"fact_id": "missing", "value": "x"})
     assert missing_edit["result"] == {"ok": False}
 
     forgotten = await _handle_rpc(daemon, "memory.forget", {"fact_id": "fact-1"})

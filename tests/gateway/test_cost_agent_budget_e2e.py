@@ -42,11 +42,7 @@ def _pellegrini_gateway(
 ) -> ModelGateway:
     """ModelGateway real con tier economico → provider litellm y tope por-agente de Pellegrini."""
     router = ModelRouter(
-        {
-            "economico": TierConfig(
-                provider="litellm", model_alias=_ALIAS, max_tokens=64
-            )
-        }
+        {"economico": TierConfig(provider="litellm", model_alias=_ALIAS, max_tokens=64)}
     )
     minimizer = ContextMinimizer(env_values=frozenset(), config_patterns=())
     cost = CostTracker(
@@ -106,9 +102,7 @@ async def test_budget_exhaustion_blocks_before_provider(tmp_path: Path) -> None:
 async def test_other_agent_unaffected_by_pellegrini_cap(tmp_path: Path) -> None:
     """D4 (aislamiento): el tope de pellegrini no afecta a otro agent_id bajo el global."""
     provider = FakeModelProvider(
-        response=ModelResponse(
-            text="x", tokens_in=500, tokens_out=500, cost_usd=0.0, latency_ms=1
-        )
+        response=ModelResponse(text="x", tokens_in=500, tokens_out=500, cost_usd=0.0, latency_ms=1)
     )
     gw = _pellegrini_gateway(tmp_path / "t.db", provider=provider, pellegrini_budget=1.0)
 
@@ -117,8 +111,6 @@ async def test_other_agent_unaffected_by_pellegrini_cap(tmp_path: Path) -> None:
     with pytest.raises(BudgetExceeded, match="pellegrini"):
         await gw.ask(_ask())  # pellegrini ya agotado → veta
     # belgrano (sin cap por-agente) sigue pasando bajo el global
-    otro = AgentModelRequest(
-        agent_id="belgrano", task_id="b-1", prompt="hola", tier="economico"
-    )
+    otro = AgentModelRequest(agent_id="belgrano", task_id="b-1", prompt="hola", tier="economico")
     resp = await gw.ask(otro)
     assert resp.text == "x"

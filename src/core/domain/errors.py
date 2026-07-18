@@ -120,9 +120,7 @@ class SecretFileExcluded(WyssError):
     """
 
     def __init__(self, pattern_name: str, layer: str) -> None:
-        super().__init__(
-            f"archivo excluido: detectado patrón '{pattern_name}' en capa '{layer}'"
-        )
+        super().__init__(f"archivo excluido: detectado patrón '{pattern_name}' en capa '{layer}'")
         self.pattern_name = pattern_name  # nombre del patrón, JAMÁS el secreto
         self.layer = layer  # "path_denylist" | "builtin_pattern" | "entropy"
 

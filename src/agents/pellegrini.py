@@ -162,10 +162,7 @@ async def handle_task(*, instruccion: str, hechos: object) -> Plan:
     elif consulta == "gastos_por_categoria":
         summary = "Lectura de gastos por categoría del ledger (¿dónde se va la plata?)."
     elif consulta == "surplus":
-        summary = (
-            f"Capacidad de ahorro: superávit verificado "
-            f"${float(hechos_map['surplus']):.2f}."
-        )
+        summary = f"Capacidad de ahorro: superávit verificado ${float(hechos_map['surplus']):.2f}."
     else:
         summary = "Lectura general de las finanzas del mes."
 

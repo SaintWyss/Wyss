@@ -36,11 +36,7 @@ def _build_gateway(
     client: httpx.AsyncClient,
 ) -> ModelGateway:
     router = ModelRouter(
-        {
-            "economico": TierConfig(
-                provider="litellm", model_alias="gemini-default", max_tokens=64
-            )
-        }
+        {"economico": TierConfig(provider="litellm", model_alias="gemini-default", max_tokens=64)}
     )
     minimizer = ContextMinimizer(env_values=frozenset(), config_patterns=())
     cost = CostTracker(
@@ -51,9 +47,7 @@ def _build_gateway(
         audit=audit,
     )
     traces = TraceStore(db_path)
-    provider = LiteLLMProvider(
-        client, base_url="http://litellm.test:4000", master_key="k"
-    )
+    provider = LiteLLMProvider(client, base_url="http://litellm.test:4000", master_key="k")
     return ModelGateway(
         router=router,
         minimizer=minimizer,
@@ -82,9 +76,7 @@ async def test_transient_429_then_200_recovers(
     assert resp.text == "ok"
     assert route.call_count == 2  # 1 fallo transiente + 1 éxito
     # el gate (record) registró una vez (éxito); el authorize se re-pasó cada intento.
-    cost_events = [
-        e for e in audit.events if e.event_type is AuditEventType.COST_RECORDED
-    ]
+    cost_events = [e for e in audit.events if e.event_type is AuditEventType.COST_RECORDED]
     assert cost_events  # registró el costo del intento exitoso
 
 
@@ -110,9 +102,7 @@ async def test_connect_error_retries_and_audits(
 ) -> None:
     """WR-05: ConnectError (LiteLLM caído) es transiente: reintenta y, agotado, re-raise
     con TASK_FAILED auditado — el fallo de red nunca propaga crudo sin rastro."""
-    route = respx_mock.post(_LITELLM_URL).mock(
-        side_effect=httpx.ConnectError("connection refused")
-    )
+    route = respx_mock.post(_LITELLM_URL).mock(side_effect=httpx.ConnectError("connection refused"))
     async with httpx.AsyncClient() as client:
         gw = _build_gateway(db_path=traces_db_path, audit=audit, client=client)
         req = AgentModelRequest(agent_id="a", task_id="t-4", prompt="hola")

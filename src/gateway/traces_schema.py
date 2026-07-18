@@ -40,8 +40,7 @@ CREATE TABLE IF NOT EXISTS traces (
 
 CREATE_INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id)",
-    "CREATE INDEX IF NOT EXISTS idx_traces_purpose_time "
-    "ON traces(purpose, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_traces_purpose_time ON traces(purpose, created_at)",
 )
 
 # Estado durable del gate de costo (GATE-04): un asiento por llamada registrada.
@@ -61,8 +60,7 @@ CREATE TABLE IF NOT EXISTS spend_ledger (
 
 CREATE_SPEND_INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_spend_time ON spend_ledger(created_at)",
-    "CREATE INDEX IF NOT EXISTS idx_spend_agent_time "
-    "ON spend_ledger(agent_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_spend_agent_time ON spend_ledger(agent_id, created_at)",
 )
 
 

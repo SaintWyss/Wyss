@@ -63,10 +63,7 @@ async def test_unauthorized_blocked(
     assert len(fake_audit.events) >= 1, (
         "Debe haber al menos un evento de auditoría al bloquear acceso a BC"
     )
-    policy_events = [
-        e for e in fake_audit.events
-        if e.event_type == AuditEventType.POLICY_DECISION
-    ]
+    policy_events = [e for e in fake_audit.events if e.event_type == AuditEventType.POLICY_DECISION]
     assert len(policy_events) >= 1, (
         f"El evento de auditoría debe ser POLICY_DECISION; eventos: {fake_audit.events}"
     )
@@ -107,6 +104,4 @@ async def test_revoked_permission_denied(
         await scoped.search(query, subject)
 
     # Verificar que no hubo cache — la verificación ocurrió en esta query
-    assert len(fake_audit.events) >= 1, (
-        "Debe auditarse el intento con permiso revocado"
-    )
+    assert len(fake_audit.events) >= 1, "Debe auditarse el intento con permiso revocado"

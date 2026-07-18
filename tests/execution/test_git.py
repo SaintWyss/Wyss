@@ -150,9 +150,7 @@ async def test_read_subcommand_write_flag_blocked(git_repo: Path) -> None:
         assert result.payload.get("blocked") == "write_flag"
         assert "returncode" not in result.payload  # no hubo proceso
 
-    blocked_events = [
-        e for e in audit.events if e.payload.get("blocked") == "write_flag"
-    ]
+    blocked_events = [e for e in audit.events if e.payload.get("blocked") == "write_flag"]
     assert len(blocked_events) == 2
 
 

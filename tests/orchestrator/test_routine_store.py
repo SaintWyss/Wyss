@@ -24,17 +24,12 @@ def _read_conn(db_path: Path) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
-def test_wal_active_and_schema_created(
-    routine_store: RoutineStore, tmp_path: Path
-) -> None:
+def test_wal_active_and_schema_created(routine_store: RoutineStore, tmp_path: Path) -> None:
     conn = _read_conn(tmp_path / "routines.db")
     try:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         tables = {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         indexes = {row[1] for row in conn.execute("PRAGMA index_list('routines')")}
     finally:
@@ -92,9 +87,9 @@ def test_catch_up_persists_as_integer_and_reads_as_bool(
     loaded = routine_store.get(routine_id)
     conn = _read_conn(tmp_path / "routines.db")
     try:
-        stored = conn.execute(
-            "SELECT catch_up FROM routines WHERE id=?", (routine_id,)
-        ).fetchone()[0]
+        stored = conn.execute("SELECT catch_up FROM routines WHERE id=?", (routine_id,)).fetchone()[
+            0
+        ]
     finally:
         conn.close()
 

@@ -485,9 +485,7 @@ def _build_plan_runner(
     journal = UndoJournal(exec_dir / "journal.db", backup_base_dir=exec_dir / "undo_backups")
     notion_token = os.environ.get("NOTION_TOKEN")
     notion = (
-        NotionTool(client=build_notion_client(notion_token), audit=audit)
-        if notion_token
-        else None
+        NotionTool(client=build_notion_client(notion_token), audit=audit) if notion_token else None
     )
     memory_tool = MemoryTool(store=memory_store, audit=audit)
     executor = PlanExecutor(
@@ -1088,9 +1086,7 @@ def undo(
             audit_logger.close()
 
 
-def _print_undo_table(
-    task_id: str, steps: Sequence[UndoStep], decision: PolicyDecision
-) -> None:
+def _print_undo_table(task_id: str, steps: Sequence[UndoStep], decision: PolicyDecision) -> None:
     """Dry-run del undo: qué se revertiría, en qué orden y con qué nivel de riesgo."""
     table = Table(title=f"Undo de '{task_id}' — nivel {decision.risk_level.name}")
     table.add_column("#", justify="right")
@@ -1302,9 +1298,7 @@ def web(
 
     token = _load_or_create_web_token(settings.data_dir)
     intake_token = (
-        _load_or_create_intake_token(settings.data_dir)
-        if settings.intake.enabled
-        else None
+        _load_or_create_intake_token(settings.data_dir) if settings.intake.enabled else None
     )
     local_url = f"{scheme}://127.0.0.1:{port}/?token={token}"
     if not lan:

@@ -35,8 +35,7 @@ CREATE TABLE IF NOT EXISTS pending_proposals (
 """
 
 CREATE_INDEX = (
-    "CREATE INDEX IF NOT EXISTS idx_pending_status "
-    "ON pending_proposals(status, expires_at)"
+    "CREATE INDEX IF NOT EXISTS idx_pending_status ON pending_proposals(status, expires_at)"
 )
 
 _INSERT = (

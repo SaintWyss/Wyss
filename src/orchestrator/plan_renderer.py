@@ -59,8 +59,7 @@ def _action_to_text(position: int, action: Action) -> str:
 def plan_to_text(plan: Plan, decision: PolicyDecision) -> str:
     """Representacion textual testeable del Plan propuesto."""
     steps = "\n".join(
-        _action_to_text(position, action)
-        for position, action in enumerate(plan.steps, start=1)
+        _action_to_text(position, action) for position, action in enumerate(plan.steps, start=1)
     )
     return (
         f"Resumen: {plan.summary}\n"

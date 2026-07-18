@@ -28,9 +28,7 @@ from core.domain.risk import RiskLevel
 from core.ports.audit import AuditPort
 
 # Subcomandos git permitidos por defecto (pueden sobreescribirse vía TOML o constructor)
-DEFAULT_ALLOWED_SUBCOMMANDS: frozenset[str] = frozenset(
-    {"status", "diff", "add", "commit", "log"}
-)
+DEFAULT_ALLOWED_SUBCOMMANDS: frozenset[str] = frozenset({"status", "diff", "add", "commit", "log"})
 
 # Subcomandos de lectura (PR-11): clasifican nivel A en la política, así que NO pueden
 # aceptar flags con capacidad de escritura — `git log --output=<archivo>` escribe.
@@ -221,9 +219,7 @@ class GitAdapter:
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout_b, stderr_b = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout_s
-            )
+            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
         except TimeoutError:
             proc.kill()
             await proc.communicate()  # drain para evitar zombie

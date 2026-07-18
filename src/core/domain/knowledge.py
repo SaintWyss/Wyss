@@ -37,8 +37,15 @@ class IngestSettings:
     max_file_bytes: int = 104_857_600  # 100 MB (D-41)
     dir_denylist: tuple[str, ...] = field(
         default=(
-            ".git", "node_modules", ".cache", "__pycache__",
-            ".venv", "venv", "dist", "build", ".tox",
+            ".git",
+            "node_modules",
+            ".cache",
+            "__pycache__",
+            ".venv",
+            "venv",
+            "dist",
+            "build",
+            ".tox",
         )
     )
     entropy_allowlist: tuple[str, ...] = ()  # D-30: globs que desactivan capa 3 de entropía

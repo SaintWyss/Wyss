@@ -95,16 +95,12 @@ class TraceStore:
 
     def query_by_task(self, task_id: str) -> list[dict[str, object]]:
         """Devuelve los traces de una tarea (índice idx_traces_task, D-22)."""
-        rows = self._conn.execute(
-            f"{_SELECT} WHERE task_id=? ORDER BY id", (task_id,)
-        ).fetchall()
+        rows = self._conn.execute(f"{_SELECT} WHERE task_id=? ORDER BY id", (task_id,)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
     def query_by_purpose(self, purpose: str) -> list[dict[str, object]]:
         """Filtra traces por purpose (índice idx_traces_purpose_time, D-22)."""
-        rows = self._conn.execute(
-            f"{_SELECT} WHERE purpose=? ORDER BY id", (purpose,)
-        ).fetchall()
+        rows = self._conn.execute(f"{_SELECT} WHERE purpose=? ORDER BY id", (purpose,)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
     def purge_older_than(self, days: int) -> int:

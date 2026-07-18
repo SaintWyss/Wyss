@@ -69,16 +69,15 @@ def test_no_agent_to_agent_import() -> None:
             for alias in node.names:
                 assert not (
                     module_name.startswith("agents.")
-                    and alias.name not in {
+                    and alias.name
+                    not in {
                         "AgentMemory",
                         "ScopedRetrieval",
                         "AgentRegistry",
                     }
                     and alias.name.endswith("Agent")
                     and alias.name != "ConfiguredAgent"
-                ), (
-                    f"ConfiguredAgent importa otro agente: {module_name}.{alias.name}"
-                )
+                ), f"ConfiguredAgent importa otro agente: {module_name}.{alias.name}"
 
 
 def test_definition_is_frozen(sample_definition: AgentDefinition) -> None:
@@ -159,8 +158,6 @@ def test_run_delegates_to_plan_runner_not_execute(
     # _run es sync — lo llamamos directamente (no via execute que impone audit)
     report = agent._run(plan)
 
-    assert fake_plan_runner.last_plan is not None, (
-        "_run debe haber delegado el plan al PlanRunner"
-    )
+    assert fake_plan_runner.last_plan is not None, "_run debe haber delegado el plan al PlanRunner"
     assert fake_plan_runner.last_plan is plan
     assert report is not None

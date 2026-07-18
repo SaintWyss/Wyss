@@ -70,9 +70,7 @@ def test_loads_valid_gateway_section(write_config: Callable[[str], Path]) -> Non
 
 def test_gateway_defaults_when_absent(write_config: Callable[[str], Path]) -> None:
     """Sin sección [gateway], GatewaySettings tiene defaults (no rompe configs de Fase 1)."""
-    settings = load_settings(
-        write_config('data_dir = "data"\naudit_db = "data/audit.db"\n')
-    )
+    settings = load_settings(write_config('data_dir = "data"\naudit_db = "data/audit.db"\n'))
     assert settings.gateway.timeout_s == 120.0  # default D-25
     assert settings.gateway.trace_retention_days == 90  # default D-22
     assert settings.gateway.tiers == {}
@@ -80,7 +78,7 @@ def test_gateway_defaults_when_absent(write_config: Callable[[str], Path]) -> No
 
 def test_extra_key_in_gateway_rejected(write_config: Callable[[str], Path]) -> None:
     """Una clave extra/typo bajo [gateway] falla (extra=forbid) nombrando el loc."""
-    bad = _VALID + '\n[gateway.no_existe]\nx = 1\n'
+    bad = _VALID + "\n[gateway.no_existe]\nx = 1\n"
     with pytest.raises(ConfigError, match="no_existe"):
         load_settings(write_config(bad))
 

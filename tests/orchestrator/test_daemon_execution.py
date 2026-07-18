@@ -86,8 +86,7 @@ class _FakeLedger:
 async def _rpc(daemon: DaemonServer, method: str, params: dict[str, object]) -> dict[str, Any]:
     reader = asyncio.StreamReader()
     reader.feed_data(
-        json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-        + b"\n"
+        json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode() + b"\n"
     )
     reader.feed_eof()
     writer = _MemoryWriter()
@@ -168,9 +167,7 @@ async def test_confirm_executes_file_write_end_to_end(
     plan = Plan(
         task_id="rc-smoke",
         summary="crear nota de prueba",
-        steps=(
-            Action("file.write", str(target), {"content": "hola desde wyss rc"}),
-        ),
+        steps=(Action("file.write", str(target), {"content": "hola desde wyss rc"}),),
         rationale="smoke RC v0.1",
     )
     runner = _runner(engine, fake_audit, journal, tmp_path)
@@ -220,9 +217,7 @@ async def test_wrong_confirmation_does_not_execute(
     daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
 
     asked = await _rpc(daemon, "ask", {"instruction": "crear nota"})
-    denied = await _rpc(
-        daemon, "confirm", {"pending_id": asked["pending_id"], "response": "s"}
-    )
+    denied = await _rpc(daemon, "confirm", {"pending_id": asked["pending_id"], "response": "s"})
     assert denied["accepted"] is False
     assert not target.exists()
 
@@ -328,9 +323,7 @@ async def test_expired_proposal_not_executed(
     runner = _runner(engine, fake_audit, journal, tmp_path)
     daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
 
-    result = await _rpc(
-        daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}
-    )
+    result = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"})
     assert result["accepted"] is False
     assert result["reason"] == "propuesta expirada"
     assert not target.exists()
@@ -367,9 +360,7 @@ async def test_double_confirm_executes_only_once(
     assert first["accepted"] is True
     assert second["accepted"] is False
     assert second["reason"] == "pending no encontrado"
-    completed = [
-        e for e in fake_audit.events if e.event_type is AuditEventType.TASK_COMPLETED
-    ]
+    completed = [e for e in fake_audit.events if e.event_type is AuditEventType.TASK_COMPLETED]
     assert len(completed) == 1  # ejecutó exactamente una vez
 
 
@@ -393,9 +384,7 @@ async def test_confirm_escalated_risk_requires_stronger_word(
         rationale="test",
     )
     # pending guardado con nivel B mentido (como si la política hubiera cambiado después)
-    stale = PolicyDecision(
-        task_id="rc-esc", risk_level=RiskLevel.B, outcome=Outcome.CONFIRM_SIMPLE
-    )
+    stale = PolicyDecision(task_id="rc-esc", risk_level=RiskLevel.B, outcome=Outcome.CONFIRM_SIMPLE)
     pending_id = pending_store.save(plan, stale, ttl_seconds=600)
     runner = _runner(engine, fake_audit, journal, tmp_path)
     daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
@@ -405,9 +394,7 @@ async def test_confirm_escalated_risk_requires_stronger_word(
     assert "re-evaluado" in weak["reason"]
     assert not target.exists()
 
-    strong = await _rpc(
-        daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}
-    )
+    strong = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"})
     assert strong["accepted"] is True
     assert target.exists()
 
@@ -439,8 +426,6 @@ async def test_confirm_reevaluates_and_rejects_now_dangerous(
     runner = _runner(engine, fake_audit, journal, tmp_path)
     daemon = _daemon(engine, plan, pending_store, fake_audit, runner)
 
-    result = await _rpc(
-        daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"}
-    )
+    result = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"})
     assert result["accepted"] is False
     assert "política" in result["reason"]

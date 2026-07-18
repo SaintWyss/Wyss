@@ -139,9 +139,7 @@ async def _fire_routine(
                         else None
                     ),
                     "execution_success": (
-                        execution_result.get("success")
-                        if execution_result is not None
-                        else None
+                        execution_result.get("success") if execution_result is not None else None
                     ),
                 },
             )

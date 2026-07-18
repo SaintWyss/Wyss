@@ -94,8 +94,7 @@ class SqliteLedgerStore:
     def coverage_days(self, desde: str, hasta: str) -> int:
         """Nº de fechas distintas con datos en `[desde, hasta]` — COUNT(DISTINCT) SQL-side."""
         (total,) = self._conn.execute(
-            "SELECT COUNT(DISTINCT fecha) FROM transacciones "
-            "WHERE fecha BETWEEN ? AND ?",
+            "SELECT COUNT(DISTINCT fecha) FROM transacciones WHERE fecha BETWEEN ? AND ?",
             (desde, hasta),
         ).fetchone()
         return int(total)

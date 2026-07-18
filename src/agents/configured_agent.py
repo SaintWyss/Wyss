@@ -42,10 +42,7 @@ def _format_hits_safe(hits: Sequence[Hit]) -> str:
         return "(sin resultados)"
     parts: list[str] = []
     for index, hit in enumerate(hits, start=1):
-        parts.append(
-            f"Resultado {index} - fuente: {hit.source_path}\n"
-            f"{hit.snippet}"
-        )
+        parts.append(f"Resultado {index} - fuente: {hit.source_path}\n{hit.snippet}")
     return "\n\n".join(parts)
 
 
@@ -104,9 +101,7 @@ def _action_from_mapping(data: Mapping[str, object]) -> Action | None:
         return None
     raw_params = data.get("parameters")
     params: Mapping[str, object] = (
-        cast(Mapping[str, object], raw_params)
-        if isinstance(raw_params, dict)
-        else {}
+        cast(Mapping[str, object], raw_params) if isinstance(raw_params, dict) else {}
     )
     return Action(type=raw_type, target=raw_target, parameters=params)
 

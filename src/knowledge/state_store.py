@@ -56,8 +56,8 @@ class StateStore:
         row = cast(
             tuple[object, ...] | None,
             self._conn.execute(
-            "SELECT size, mtime, sha256, status FROM file_state WHERE path=? AND kb_id=?",
-            (path_text, kb_id),
+                "SELECT size, mtime, sha256, status FROM file_state WHERE path=? AND kb_id=?",
+                (path_text, kb_id),
             ).fetchone(),
         )
         if row is None:
@@ -258,9 +258,7 @@ class StateStore:
 
     def list_kb_ids(self) -> list[str]:
         """Lista BCs distintas presentes en `file_state`, ordenadas por id."""
-        rows = self._conn.execute(
-            "SELECT DISTINCT kb_id FROM file_state ORDER BY kb_id"
-        ).fetchall()
+        rows = self._conn.execute("SELECT DISTINCT kb_id FROM file_state ORDER BY kb_id").fetchall()
         return [str(row[0]) for row in rows]
 
     def mtime_by_path(self, source_path: str, kb_id: str) -> float | None:
@@ -281,8 +279,8 @@ class StateStore:
         row = cast(
             tuple[object, ...] | None,
             self._conn.execute(
-            f"SELECT {', '.join(_COLUMNS)} FROM file_state WHERE path=? AND kb_id=?",
-            (self._path_text(path), kb_id),
+                f"SELECT {', '.join(_COLUMNS)} FROM file_state WHERE path=? AND kb_id=?",
+                (self._path_text(path), kb_id),
             ).fetchone(),
         )
         if row is None:
@@ -347,8 +345,8 @@ class StateStore:
         row = cast(
             tuple[object, ...] | None,
             self._conn.execute(
-            "SELECT size, mtime FROM file_state WHERE path=? AND kb_id=?",
-            (str(path), kb_id),
+                "SELECT size, mtime FROM file_state WHERE path=? AND kb_id=?",
+                (str(path), kb_id),
             ).fetchone(),
         )
         if row is not None:

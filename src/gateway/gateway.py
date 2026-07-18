@@ -222,9 +222,7 @@ class ModelGateway:
             # otras corutinas concurrentes ven este estimado en authorize() y no pueden
             # exceder el presupuesto. Se libera al terminar el intento; en el camino de
             # éxito no hay await entre release y cost.record (sin ventana de subconteo).
-            reserved = self._cost.reserve(
-                request.agent_id, model_alias, est_in, est_out
-            )
+            reserved = self._cost.reserve(request.agent_id, model_alias, est_in, est_out)
             # (b)+(c) llamada al provider; clasificar el error.
             try:
                 return await provider.complete(model_request)

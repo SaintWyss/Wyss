@@ -121,9 +121,7 @@ class IngestPipeline:
             source = item.source
             if source is None:
                 continue
-            if not self._state_store.needs_reindex(
-                source.path, kb_id, source.size, source.mtime
-            ):
+            if not self._state_store.needs_reindex(source.path, kb_id, source.size, source.mtime):
                 continue
 
             path_match = self._secret_filter.check_path(source.path)
@@ -134,18 +132,14 @@ class IngestPipeline:
 
             extractor = self._registry.resolve(source.media_type)
             if extractor is None:
-                self._state_store.mark_skipped(
-                    source.path, kb_id, FileStatus.skipped_unsupported
-                )
+                self._state_store.mark_skipped(source.path, kb_id, FileStatus.skipped_unsupported)
                 skipped += 1
                 continue
 
             try:
                 content = extractor.extract(source)
             except UnsupportedFileError:
-                self._state_store.mark_skipped(
-                    source.path, kb_id, FileStatus.skipped_unsupported
-                )
+                self._state_store.mark_skipped(source.path, kb_id, FileStatus.skipped_unsupported)
                 skipped += 1
                 continue
             except ExtractionError as exc:
@@ -202,9 +196,7 @@ class IngestPipeline:
             source = item.source
             if item.status is not None or source is None:
                 continue
-            if not self._state_store.needs_reindex(
-                source.path, kb_id, source.size, source.mtime
-            ):
+            if not self._state_store.needs_reindex(source.path, kb_id, source.size, source.mtime):
                 continue
             files += 1
             total_bytes += source.size
@@ -226,9 +218,7 @@ class IngestPipeline:
             source = item.source
             if item.status is not None or source is None:
                 continue
-            if not self._state_store.needs_reindex(
-                source.path, kb_id, source.size, source.mtime
-            ):
+            if not self._state_store.needs_reindex(source.path, kb_id, source.size, source.mtime):
                 continue
             reason = "nuevo" if self._state_store.get(source.path, kb_id) is None else "modificado"
             result.append((source.path, reason))
@@ -241,9 +231,7 @@ class IngestPipeline:
             dir_denylist=frozenset(self._settings.dir_denylist),
         )
 
-    def _index_entries(
-        self, content: ExtractedContent, kb_id: str
-    ) -> tuple[IndexEntry, ...]:
+    def _index_entries(self, content: ExtractedContent, kb_id: str) -> tuple[IndexEntry, ...]:
         return tuple(
             IndexEntry(entry_id=chunk.chunk_id, kb_id=kb_id, chunk=chunk)
             for chunk in self._chunker.chunk(content)

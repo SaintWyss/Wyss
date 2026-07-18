@@ -154,9 +154,7 @@ def test_notion_read_page_es_A(engine: CognitivePolicyEngine) -> None:
 
 
 @pytest.mark.parametrize("action_type", ["notion.create_page", "notion.update_page"])
-def test_notion_writes_son_C(
-    action_type: str, engine: CognitivePolicyEngine
-) -> None:
+def test_notion_writes_son_C(action_type: str, engine: CognitivePolicyEngine) -> None:
     """NOTION-02: escrituras Notion requieren confirmación fuerte nivel C."""
     decision = engine.evaluate(_plan(Action(action_type, "page-id")))
     assert decision.risk_level == RiskLevel.C

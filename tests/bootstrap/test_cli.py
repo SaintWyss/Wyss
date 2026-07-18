@@ -135,9 +135,7 @@ def test_digest_command_calls_rpc_and_renders(
     cfg = _write_config(tmp_path)
     calls: list[tuple[Path, str, dict[str, object]]] = []
 
-    async def fake_rpc(
-        socket_path: Path, method: str, params: dict[str, object]
-    ) -> dict[str, Any]:
+    async def fake_rpc(socket_path: Path, method: str, params: dict[str, object]) -> dict[str, Any]:
         calls.append((socket_path, method, params))
         return {
             "markdown": "# Digest diario\n\n## Finanzas Pellegrini\nIngresos: $1.00\n",
@@ -159,9 +157,7 @@ def test_digest_command_daemon_down_is_actionable(
 ) -> None:
     cfg = _write_config(tmp_path)
 
-    async def fake_rpc(
-        socket_path: Path, method: str, params: dict[str, object]
-    ) -> dict[str, Any]:
+    async def fake_rpc(socket_path: Path, method: str, params: dict[str, object]) -> dict[str, Any]:
         del socket_path, method, params
         raise FileNotFoundError
 
@@ -177,11 +173,7 @@ def test_digest_command_daemon_down_is_actionable(
 
 def _write_config(tmp_path: Path, *, digest_enabled: bool = False) -> Path:
     cfg = tmp_path / "config.toml"
-    digest = (
-        "[digest]\nenabled = true\nhour = 7\nminute = 30\n"
-        if digest_enabled
-        else ""
-    )
+    digest = "[digest]\nenabled = true\nhour = 7\nminute = 30\n" if digest_enabled else ""
     cfg.write_text(
         f"""\
 data_dir = "{tmp_path / "data"}"

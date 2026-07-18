@@ -165,9 +165,7 @@ class ShellAdapter:
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout_b, stderr_b = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout_s
-            )
+            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
         except TimeoutError:
             proc.kill()
             await proc.communicate()  # drain para evitar zombie

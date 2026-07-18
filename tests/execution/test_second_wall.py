@@ -122,16 +122,15 @@ def test_tampered_path_blocked(
     result = asyncio.run(adapter.execute(action))
 
     # DEBE bloquearse porque resolved != original target
-    assert result.success is False, (
-        f"Se esperaba bloqueo por path tamperado, resultado: {result}"
-    )
+    assert result.success is False, f"Se esperaba bloqueo por path tamperado, resultado: {result}"
     assert "second wall" in result.detail.lower(), (
         f"Detail no menciona 'second wall': {result.detail!r}"
     )
     # DEBE haberse registrado un evento de audit
     assert len(fake_audit.events) >= 1, "No se registró evento de auditoría al bloquear"
     blocked_events = [
-        e for e in fake_audit.events
+        e
+        for e in fake_audit.events
         if isinstance(e.payload, dict) and e.payload.get("blocked") == "second_wall"
     ]
     assert len(blocked_events) >= 1, (

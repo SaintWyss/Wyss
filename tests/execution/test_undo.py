@@ -44,29 +44,43 @@ def _record_applied(
     return entry_id
 
 
-def test_plan_undo_reverse_order_and_only_applied(
-    journal: UndoJournal, tmp_path: Path
-) -> None:
+def test_plan_undo_reverse_order_and_only_applied(journal: UndoJournal, tmp_path: Path) -> None:
     """Solo entradas 'applied' de la tarea, en orden inverso de ejecución."""
     first = tmp_path / "a.txt"
     second = tmp_path / "b.txt"
     first.write_text("a")
     second.write_text("b")
     _record_applied(
-        journal, "t1", 0, "file.write", str(first),
+        journal,
+        "t1",
+        0,
+        "file.write",
+        str(first),
         {"type": "file.delete", "target": str(first), "parameters": {}},
     )
     _record_applied(
-        journal, "t1", 1, "file.write", str(second),
+        journal,
+        "t1",
+        1,
+        "file.write",
+        str(second),
         {"type": "file.delete", "target": str(second), "parameters": {}},
     )
     # pendiente (plan en vuelo) y de otra tarea: no deben aparecer
     journal.record(
-        task_id="t1", step_index=2, action_type="file.write", origin="x",
-        destination=None, inverse_op={"type": "file.delete", "target": "x"},
+        task_id="t1",
+        step_index=2,
+        action_type="file.write",
+        origin="x",
+        destination=None,
+        inverse_op={"type": "file.delete", "target": "x"},
     )
     _record_applied(
-        journal, "otra", 0, "file.write", "y",
+        journal,
+        "otra",
+        0,
+        "file.write",
+        "y",
         {"type": "file.delete", "target": "y", "parameters": {}},
     )
 
@@ -81,7 +95,11 @@ def test_undo_new_file_write_deletes(journal: UndoJournal, tmp_path: Path) -> No
     created = tmp_path / "nuevo.txt"
     created.write_text("contenido")
     entry_id = _record_applied(
-        journal, "t-new", 0, "file.write", str(created),
+        journal,
+        "t-new",
+        0,
+        "file.write",
+        str(created),
         {"type": "file.delete", "target": str(created), "parameters": {}},
     )
 
@@ -102,7 +120,10 @@ def test_undo_overwrite_restores_backup(journal: UndoJournal, tmp_path: Path) ->
     target = tmp_path / "nota.txt"
     target.write_text("viejo")
     entry_id = journal.record(
-        task_id="t-ow", step_index=0, action_type="file.write", origin=str(target),
+        task_id="t-ow",
+        step_index=0,
+        action_type="file.write",
+        origin=str(target),
         destination=None,
         inverse_op={"type": "file.write", "target": str(target), "parameters": {}},
     )
@@ -123,7 +144,11 @@ def test_undo_move_moves_back(journal: UndoJournal, tmp_path: Path) -> None:
     dest = tmp_path / "destino.txt"
     dest.write_text("movido")  # estado post-move: el archivo vive en dest
     _record_applied(
-        journal, "t-mv", 0, "file.move", str(origin),
+        journal,
+        "t-mv",
+        0,
+        "file.move",
+        str(origin),
         {"type": "file.move", "target": str(dest), "parameters": {"destination": str(origin)}},
         destination=str(dest),
     )
@@ -143,7 +168,11 @@ def test_undo_move_collision_not_ready(journal: UndoJournal, tmp_path: Path) -> 
     dest.write_text("movido")
     origin.write_text("recreado a mano")  # colisión
     _record_applied(
-        journal, "t-col", 0, "file.move", str(origin),
+        journal,
+        "t-col",
+        0,
+        "file.move",
+        str(origin),
         {"type": "file.move", "target": str(dest), "parameters": {"destination": str(origin)}},
         destination=str(dest),
     )
@@ -157,7 +186,11 @@ def test_undo_move_collision_not_ready(journal: UndoJournal, tmp_path: Path) -> 
 def test_unknown_inverse_not_ready(journal: UndoJournal, tmp_path: Path) -> None:
     """Un tipo de inversa desconocido se marca irreversible, nunca se aplica a ciegas."""
     _record_applied(
-        journal, "t-unk", 0, "shell.run", "algo",
+        journal,
+        "t-unk",
+        0,
+        "shell.run",
+        "algo",
         {"type": "shell.rerun", "target": "algo", "parameters": {}},
     )
 
@@ -173,7 +206,11 @@ def test_restore_guard_by_expected_status(journal: UndoJournal, tmp_path: Path) 
     created = tmp_path / "guard.txt"
     created.write_text("x")
     entry_id = _record_applied(
-        journal, "t-guard", 0, "file.write", str(created),
+        journal,
+        "t-guard",
+        0,
+        "file.write",
+        str(created),
         {"type": "file.delete", "target": str(created), "parameters": {}},
     )
 
@@ -189,7 +226,11 @@ def test_inverse_plan_is_fail_closed_material(journal: UndoJournal, tmp_path: Pa
     created = tmp_path / "p.txt"
     created.write_text("x")
     _record_applied(
-        journal, "t-plan", 0, "file.write", str(created),
+        journal,
+        "t-plan",
+        0,
+        "file.write",
+        str(created),
         {"type": "file.delete", "target": str(created), "parameters": {}},
     )
 

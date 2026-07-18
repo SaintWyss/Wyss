@@ -123,9 +123,7 @@ class CognitivePolicyEngine:
 
     def _under_sensitive(self, target: str) -> bool:
         norm = _normalize(target)
-        return any(
-            fnmatch(norm, _sensitive_glob(p)) for p in self._rules.thresholds.sensitive_dirs
-        )
+        return any(fnmatch(norm, _sensitive_glob(p)) for p in self._rules.thresholds.sensitive_dirs)
 
 
 def _args_contain(action: Action, substrings: tuple[str, ...]) -> bool:
