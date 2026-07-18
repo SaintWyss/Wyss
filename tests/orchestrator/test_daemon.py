@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from core.domain import ActorType, AuditEventType, Outcome, RiskLevel
+from core.domain import ActorType, AuditEvent, AuditEventType, AuditQuery, Outcome, RiskLevel
 from core.domain.ledger import Transaccion
 from core.domain.memory import MemoryFact
 from core.domain.plan import Action, Plan
@@ -110,6 +110,16 @@ class _SpyRunner:
         del plan
         self.calls += 1
         return object()
+
+
+class _FakeAuditQuery:
+    def __init__(self, events: list[AuditEvent]) -> None:
+        self.events = events
+        self.query_seen: AuditQuery | None = None
+
+    def query(self, query: AuditQuery) -> list[AuditEvent]:
+        self.query_seen = query
+        return self.events[: query.limit]
 
 
 @pytest.fixture
@@ -239,6 +249,88 @@ async def test_ask_round_trip(
         AuditEventType.PLAN_CREATED,
         AuditEventType.POLICY_DECISION,
     }
+
+
+async def test_audit_rpc_queries_port_with_closed_filters(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    event = AuditEvent.new(
+        task_id="task-audit",
+        actor_type=ActorType.SYSTEM,
+        actor_id="daemon",
+        event_type=AuditEventType.TASK_COMPLETED,
+        message="terminado",
+        payload={"private": "detalle"},
+    )
+    query_port = _FakeAuditQuery([event])
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        audit_query=query_port,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+    )
+
+    response = await _handle_rpc(
+        daemon,
+        "audit",
+        {"limit": 10, "task_id": "task-audit", "event_type": "task.completed"},
+    )
+
+    assert "error" not in response
+    assert response["result"]["events"] == [
+        {
+            "event_id": event.event_id,
+            "task_id": "task-audit",
+            "actor_type": "system",
+            "actor_id": "daemon",
+            "event_type": "task.completed",
+            "message": "terminado",
+            "created_at": event.created_at.isoformat(),
+        }
+    ]
+    assert query_port.query_seen == AuditQuery(
+        limit=10,
+        task_id="task-audit",
+        event_type=AuditEventType.TASK_COMPLETED,
+    )
+
+
+async def test_audit_rpc_rejects_out_of_range_limit(
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+) -> None:
+    daemon = DaemonServer(
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        audit_query=_FakeAuditQuery([]),
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
+    )
+
+    response = await _handle_rpc(daemon, "audit", {"limit": 201})
+
+    assert response["error"]["code"] == -32000
+    assert "entre 1 y 200" in response["error"]["message"]
 
 
 async def test_intake_propose_floors_a_to_pending_b_and_never_executes(

@@ -80,6 +80,22 @@ class AuditEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class AuditQuery:
+    """Consulta acotada del log; no expone SQL ni detalles del adapter."""
+
+    since: datetime | None = None
+    limit: int = 50
+    task_id: str | None = None
+    event_type: AuditEventType | None = None
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.limit <= 200:
+            raise ValueError("limit debe estar entre 1 y 200")
+        if self.since is not None and self.since.tzinfo is None:
+            raise ValueError("since debe incluir zona horaria")
+
+
+@dataclass(frozen=True, slots=True)
 class Span:
     """Una operación temporizada (start/end/exception) auditada vía context manager."""
 

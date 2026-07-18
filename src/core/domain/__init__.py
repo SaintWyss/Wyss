@@ -1,7 +1,7 @@
 """Entidades de dominio frozen (stdlib only) — vocabulario público del núcleo."""
 
 from core.domain.agent import AgentDefinition, Report
-from core.domain.audit import ActorType, AuditEvent, AuditEventType, Span
+from core.domain.audit import ActorType, AuditEvent, AuditEventType, AuditQuery, Span
 from core.domain.config import GatewaySettings, WyssSettings
 from core.domain.errors import (
     AuditIntegrityError,
@@ -74,6 +74,7 @@ __all__ = [
     "AuditEvent",
     "AuditEventType",
     "AuditIntegrityError",
+    "AuditQuery",
     "BudgetExceeded",
     "CameraFrame",
     "CapabilityCommand",

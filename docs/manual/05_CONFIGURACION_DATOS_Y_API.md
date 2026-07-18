@@ -118,13 +118,14 @@ El daemon acepta métodos como:
 - `ask`;
 - `confirm`;
 - `status`;
-- `audit` — stub actual;
+- `audit` — consulta acotada por `since`, `task_id`, `event_type` y `limit` (1–200);
 - `routine.add/list/pause/resume/delete`;
 - `memory.list/edit/forget`;
 - `digest.today`;
 - `intake.propose`.
 
-La CLI y el bridge traducen sus acciones a estos métodos por Unix socket.
+La CLI y el bridge traducen sus acciones a estos métodos por Unix socket. Yo omito el `payload` de
+auditoría por defecto; sólo lo incluyo cuando el caller local envía `include_payload: true`.
 
 ## API web
 

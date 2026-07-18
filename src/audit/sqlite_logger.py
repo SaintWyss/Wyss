@@ -15,7 +15,7 @@ from pathlib import Path
 from types import TracebackType
 
 from audit.schema import PRAGMAS, apply_schema
-from core.domain import ActorType, AuditEvent, AuditEventType, Span
+from core.domain import ActorType, AuditEvent, AuditEventType, AuditQuery, Span
 from core.domain.errors import AuditIntegrityError
 
 _INSERT = (
@@ -81,6 +81,48 @@ class SqliteAuditLogger:
     def span(self, task_id: str, actor: str, event: str) -> AbstractContextManager[Span]:
         """Context manager que audita inicio, fin (con duración ms) y excepción."""
         return self._span_impl(task_id, actor, event)
+
+    def query(self, query: AuditQuery) -> list[AuditEvent]:
+        """Lee eventos con filtros cerrados y parámetros SQL, más recientes primero."""
+        clauses: list[str] = []
+        params: list[object] = []
+        if query.since is not None:
+            clauses.append("created_at >= ?")
+            params.append(query.since.astimezone(UTC).isoformat())
+        if query.task_id is not None:
+            clauses.append("task_id = ?")
+            params.append(query.task_id)
+        if query.event_type is not None:
+            clauses.append("event_type = ?")
+            params.append(query.event_type.value)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(query.limit)
+        rows = self._conn.execute(
+            "SELECT event_id, task_id, actor_type, actor_id, event_type, message, payload, "
+            f"created_at FROM audit_events{where} ORDER BY created_at DESC, id DESC LIMIT ?",
+            params,
+        ).fetchall()
+        events: list[AuditEvent] = []
+        for row in rows:
+            payload = json.loads(str(row[6]))
+            if not isinstance(payload, dict):
+                raise AuditIntegrityError("payload de auditoría no es un objeto JSON")
+            created_at = datetime.fromisoformat(str(row[7]))
+            if created_at.tzinfo is None:
+                raise AuditIntegrityError("timestamp de auditoría sin zona horaria")
+            events.append(
+                AuditEvent(
+                    event_id=str(row[0]),
+                    task_id=str(row[1]) if row[1] is not None else None,
+                    actor_type=ActorType(str(row[2])),
+                    actor_id=str(row[3]),
+                    event_type=AuditEventType(str(row[4])),
+                    message=str(row[5]),
+                    payload=payload,
+                    created_at=created_at,
+                )
+            )
+        return events
 
     @contextmanager
     def _span_impl(self, task_id: str, actor: str, event: str) -> Iterator[Span]:
