@@ -126,11 +126,13 @@ El daemon acepta métodos como:
 - `digest.today`;
 - `intake.propose`.
 
-La CLI y Home Edge traducen sus acciones a estos métodos por el socket Unix `0600`. Yo persisto
-claims Home en `data/client_requests.db`: un replay idéntico recibe la primera respuesta, una key
-reutilizada con otro payload falla por conflicto y un efecto ambiguo después de un crash no se
-reintenta automáticamente. Yo omito el `payload` de auditoría por defecto; sólo lo incluyo cuando
-el caller local envía `include_payload: true`.
+La CLI usa `data/wyss.sock`; Home Edge usa exclusivamente `data/wyss-home.sock`. Ambos son Unix
+`0600`, pero el segundo sólo admite `home.intent`, `home.plan.answer` y `status`, y no confía en
+`source` enviado por el caller. Yo persisto claims Home en `data/client_requests.db` con archivos
+DB/WAL/SHM `0600`, cuota y mantenimiento acotado: un replay idéntico recibe la primera respuesta,
+una key reutilizada con otro payload falla por conflicto y un efecto ambiguo después de un crash no
+se reintenta automáticamente. Yo resuelvo confirmaciones con compare-and-swap de revisión y TTL.
+Yo omito el `payload` de auditoría por defecto; sólo el socket owner puede pedirlo explícitamente.
 
 ## API web
 

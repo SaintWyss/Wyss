@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -34,9 +35,27 @@ CREATE TABLE IF NOT EXISTS client_requests (
 class SqliteIdempotencyStore:
     """Yo conservo resultados durables y cierro en ambiguo tras un crash."""
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(
+        self,
+        db_path: Path,
+        *,
+        max_rows: int = 10_000,
+        max_completed_rows: int = 5_000,
+        maintenance_interval: int = 100,
+    ) -> None:
+        if min(max_rows, max_completed_rows, maintenance_interval) < 1:
+            raise ValueError("límites de idempotencia deben ser positivos")
+        if max_completed_rows > max_rows:
+            raise ValueError("max_completed_rows no puede superar max_rows")
         self._db_path = db_path
+        self._max_rows = max_rows
+        self._max_completed_rows = max_completed_rows
+        self._maintenance_interval = maintenance_interval
+        self._claims_since_maintenance = 0
         db_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(db_path, os.O_CREAT, 0o600)
+        os.close(fd)
+        os.chmod(db_path, 0o600)
         self._conn = sqlite3.connect(db_path, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         journal_mode: str | None = None
@@ -51,11 +70,16 @@ class SqliteIdempotencyStore:
             )
         self._conn.execute(_SCHEMA)
         self.prune_completed(datetime.now(UTC) - timedelta(hours=24))
+        self._secure_files()
 
     def claim(self, key: str, fingerprint: str) -> IdempotencyClaim:
         """Crea un claim o devuelve replay/conflicto sin reabrir efectos ambiguos."""
         if not key or not fingerprint:
             raise ValueError("key y fingerprint son requeridos")
+        self._claims_since_maintenance += 1
+        if self._claims_since_maintenance >= self._maintenance_interval:
+            self._maintain()
+            self._claims_since_maintenance = 0
         now = datetime.now(UTC).isoformat()
         self._conn.execute("BEGIN IMMEDIATE")
         try:
@@ -65,6 +89,10 @@ class SqliteIdempotencyStore:
                 (key,),
             ).fetchone()
             if row is None:
+                count_row = self._conn.execute("SELECT COUNT(*) FROM client_requests").fetchone()
+                count = int(count_row[0])
+                if count >= self._max_rows:
+                    raise RuntimeError("capacidad idempotente agotada; claim rechazado")
                 self._conn.execute(
                     "INSERT INTO client_requests "
                     "(request_key, fingerprint, status, response_json, created_at, updated_at) "
@@ -95,6 +123,7 @@ class SqliteIdempotencyStore:
         )
         if cursor.rowcount != 1:
             raise RuntimeError("claim idempotente inexistente o ya completado")
+        self._secure_files()
 
     def prune_completed(self, older_than: datetime) -> int:
         """Elimina sólo respuestas completadas fuera de la ventana contractual de 24 h."""
@@ -104,7 +133,29 @@ class SqliteIdempotencyStore:
             "DELETE FROM client_requests WHERE status='completed' AND updated_at < ?",
             (older_than.astimezone(UTC).isoformat(),),
         )
+        self._secure_files()
         return cursor.rowcount
+
+    def _secure_files(self) -> None:
+        """Mantiene 0600 en la DB y en sidecars WAL/SHM si existen."""
+        for path in (
+            self._db_path,
+            Path(f"{self._db_path}-wal"),
+            Path(f"{self._db_path}-shm"),
+        ):
+            if path.exists():
+                os.chmod(path, 0o600)
+
+    def _maintain(self) -> None:
+        """Poda completados con ventana y cuota; nunca borra claims ambiguos."""
+        self.prune_completed(datetime.now(UTC) - timedelta(hours=24))
+        self._conn.execute(
+            "DELETE FROM client_requests WHERE request_key IN ("
+            "SELECT request_key FROM client_requests WHERE status='completed' "
+            "ORDER BY updated_at DESC, request_key DESC LIMIT -1 OFFSET ?)",
+            (self._max_completed_rows,),
+        )
+        self._secure_files()
 
     def close(self) -> None:
         self._conn.close()

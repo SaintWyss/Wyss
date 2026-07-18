@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import os
+import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -60,16 +62,23 @@ class RunningDaemon:
     socket_path: Path
     reaper_task: asyncio.Task[None]
     scheduler: RoutineScheduler
+    home_server: asyncio.AbstractServer | None = None
+    home_socket_path: Path | None = None
 
     async def aclose(self) -> None:
         """Cierra server, background task y socket."""
         self.server.close()
         await self.server.wait_closed()
+        if self.home_server is not None:
+            self.home_server.close()
+            await self.home_server.wait_closed()
         self.reaper_task.cancel()
         with suppress(asyncio.CancelledError):
             await self.reaper_task
         self.scheduler.shutdown(wait=False)
         self.socket_path.unlink(missing_ok=True)
+        if self.home_socket_path is not None:
+            self.home_socket_path.unlink(missing_ok=True)
 
 
 class DaemonServer:
@@ -89,7 +98,10 @@ class DaemonServer:
         runner: PlanRunner | None = None,
         audit_query: AuditQueryPort | None = None,
         idempotency: IdempotencyPort | None = None,
+        home_rate_limit_per_second: int = 50,
     ) -> None:
+        if home_rate_limit_per_second < 1:
+            raise ValueError("home_rate_limit_per_second debe ser positivo")
         self._engine = engine
         self._orchestrator = orchestrator
         self._pending_store = pending_store
@@ -101,6 +113,8 @@ class DaemonServer:
         self._runner = runner
         self._audit_query = audit_query
         self._idempotency = idempotency
+        self._home_rate_limit = home_rate_limit_per_second
+        self._home_request_times: deque[float] = deque()
         self._handlers: dict[str, JsonHandler] = {
             "ask": self._ask,
             "intake.propose": self._intake_propose,
@@ -122,35 +136,70 @@ class DaemonServer:
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Atiende una request JSON-RPC por línea."""
+        await self._handle_transport(reader, writer, home_only=False)
+
+    async def handle_home(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Atiende sólo el contrato Home y deriva la identidad del socket dedicado."""
+        await self._handle_transport(reader, writer, home_only=True)
+
+    async def _handle_transport(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        *,
+        home_only: bool,
+    ) -> None:
         try:
-            raw = await reader.readline()
             try:
-                request = json.loads(raw)
-            except json.JSONDecodeError:
-                response = _error_response(None, -32700, "Parse error")
+                raw = await reader.readline()
+            except ValueError:
+                response = _error_response(None, -32600, "Request demasiado grande")
             else:
-                response = await self._dispatch(request)
+                try:
+                    request = json.loads(raw)
+                except json.JSONDecodeError:
+                    response = _error_response(None, -32700, "Parse error")
+                else:
+                    response = await self._dispatch(request, home_only=home_only)
             writer.write(json.dumps(response).encode() + b"\n")
             await writer.drain()
         finally:
             writer.close()
             await writer.wait_closed()
 
-    async def _dispatch(self, request: object) -> JsonDict:
+    async def _dispatch(self, request: object, *, home_only: bool = False) -> JsonDict:
         if not isinstance(request, dict):
             return _error_response(None, -32600, "Invalid Request")
         req_id = request.get("id")
         method = request.get("method")
         params = request.get("params", {})
+        if home_only and not self._allow_home_request():
+            return _error_response(req_id, -32029, "rate limit excedido")
+        if home_only and method not in {"home.intent", "home.plan.answer", "status"}:
+            return _error_response(req_id, -32601, "Method not found")
         if not isinstance(method, str) or method not in self._handlers:
             return _error_response(req_id, -32601, "Method not found")
         if not isinstance(params, Mapping):
             return _error_response(req_id, -32602, "Invalid params")
+        if home_only and _json_depth(params) > 16:
+            return _error_response(req_id, -32602, "payload demasiado profundo")
+        if home_only and method in {"home.intent", "home.plan.answer"}:
+            params = {**params, "source": "home-edge"}
         try:
             result = await self._handlers[method](params)
         except Exception as exc:
             return _error_response(req_id, -32000, str(exc))
         return {"jsonrpc": "2.0", "result": result, "id": req_id}
+
+    def _allow_home_request(self) -> bool:
+        now = time.monotonic()
+        threshold = now - 1.0
+        while self._home_request_times and self._home_request_times[0] <= threshold:
+            self._home_request_times.popleft()
+        if len(self._home_request_times) >= self._home_rate_limit:
+            return False
+        self._home_request_times.append(now)
+        return True
 
     async def _ask(self, params: Mapping[str, Any]) -> JsonDict:
         instruction = str(params.get("instruction", "")).strip()
@@ -204,6 +253,9 @@ class DaemonServer:
             executed = await self._execute_plan(plan)
             return {"outcome": "executed", **executed}
         if dispatched.get("outcome") == "pending":
+            pending = self._pending_store.load(str(dispatched["pending_id"]))
+            if pending is None:
+                raise RuntimeError("pending recién creado no disponible")
             dispatched.update(
                 {
                     "risk": decision.risk_level.name,
@@ -213,6 +265,7 @@ class DaemonServer:
                         for action in plan.steps
                     ],
                     "expires_in_ms": min(ttl_for_risk(decision.risk_level) * 1000, 300_000),
+                    "revision": pending.revision,
                 }
             )
         return dispatched
@@ -302,26 +355,43 @@ class DaemonServer:
         if claim.status is ClaimStatus.IN_PROGRESS:
             return {"outcome": "in_progress", "plan_id": plan_id}
 
-        if expected_revision != 1:
-            result: JsonDict = {
-                "outcome": "conflict",
-                "plan_id": plan_id,
-                "policy_reevaluated": False,
-            }
-        elif decision == "reject":
-            result = await self._reject_pending(plan_id, actor_id=source)
+        if decision == "reject":
+            result = await self._reject_pending(
+                plan_id,
+                actor_id=source,
+                expected_revision=expected_revision,
+            )
         else:
-            confirmed = await self._confirm_pending(plan_id, confirmation, actor_id=source)
+            confirmed = await self._confirm_pending(
+                plan_id,
+                confirmation,
+                actor_id=source,
+                expected_revision=expected_revision,
+            )
             result = _home_confirmation_result(plan_id, confirmed)
         self._complete_idempotency(key, result)
         return result
 
-    async def _reject_pending(self, pending_id: str, *, actor_id: str) -> JsonDict:
+    async def _reject_pending(
+        self,
+        pending_id: str,
+        *,
+        actor_id: str,
+        expected_revision: int,
+    ) -> JsonDict:
         proposal = self._pending_store.load(pending_id)
         if proposal is None or proposal.status != "pending":
             return {
                 "outcome": "already_resolved",
                 "plan_id": pending_id,
+                "revision": proposal.revision if proposal is not None else None,
+                "policy_reevaluated": False,
+            }
+        if proposal.revision != expected_revision:
+            return {
+                "outcome": "conflict",
+                "plan_id": pending_id,
+                "revision": proposal.revision,
                 "policy_reevaluated": False,
             }
         if _is_expired(proposal.expires_at):
@@ -332,11 +402,18 @@ class DaemonServer:
             }
         plan = _plan_from_json(proposal.plan_json)
         fresh_decision = self._engine.evaluate(plan)
-        resolved = self._pending_store.resolve(pending_id, actor_id, status="rejected")
+        resolved = self._pending_store.resolve(
+            pending_id,
+            actor_id,
+            status="rejected",
+            expected_revision=expected_revision,
+        )
         if resolved is None:
+            current = self._pending_store.load(pending_id)
             return {
                 "outcome": "already_resolved",
                 "plan_id": pending_id,
+                "revision": current.revision if current is not None else None,
                 "policy_reevaluated": True,
             }
         self._audit.log(
@@ -359,6 +436,7 @@ class DaemonServer:
             "plan_id": pending_id,
             "accepted": False,
             "status": "verified",
+            "revision": resolved.revision,
             "message": "Plan rechazado.",
             "policy_reevaluated": True,
         }
@@ -431,13 +509,29 @@ class DaemonServer:
             raise ValueError("pending_id requerido")
         return await self._confirm_pending(pending_id, response, actor_id="owner")
 
-    async def _confirm_pending(self, pending_id: str, response: str, *, actor_id: str) -> JsonDict:
+    async def _confirm_pending(
+        self,
+        pending_id: str,
+        response: str,
+        *,
+        actor_id: str,
+        expected_revision: int | None = None,
+    ) -> JsonDict:
         proposal = self._pending_store.load(pending_id)
         if proposal is None or proposal.status != "pending":
             return {
                 "accepted": False,
                 "execution_id": None,
                 "reason": "pending no encontrado",
+                "revision": proposal.revision if proposal is not None else None,
+                "policy_reevaluated": False,
+            }
+        if expected_revision is not None and proposal.revision != expected_revision:
+            return {
+                "accepted": False,
+                "execution_id": None,
+                "reason": "revision conflict",
+                "revision": proposal.revision,
                 "policy_reevaluated": False,
             }
         # Defensa en profundidad: el ttl_reaper corre cada N s, así que una propuesta
@@ -458,6 +552,12 @@ class DaemonServer:
         plan = _plan_from_json(proposal.plan_json)
         fresh_decision = self._engine.evaluate(plan)
         if fresh_decision.outcome == Outcome.REJECT or fresh_decision.risk_level >= RiskLevel.D:
+            resolved = self._pending_store.resolve(
+                pending_id,
+                "policy",
+                status="rejected",
+                expected_revision=proposal.revision,
+            )
             await dispatch(
                 plan,
                 fresh_decision,
@@ -468,6 +568,7 @@ class DaemonServer:
                 "accepted": False,
                 "execution_id": None,
                 "reason": "plan rechazado por política al confirmar",
+                "revision": resolved.revision if resolved is not None else proposal.revision,
                 "policy_reevaluated": True,
             }
 
@@ -499,26 +600,41 @@ class DaemonServer:
                         "se requiere la confirmación de ese nivel"
                     ),
                     "policy_reevaluated": True,
+                    "required_risk": effective_level.name,
+                    "revision": proposal.revision,
                 }
             return {"accepted": False, "execution_id": None, "policy_reevaluated": True}
 
-        resolved = self._pending_store.resolve(pending_id, actor_id)
+        if self._runner is None:
+            return {
+                "accepted": False,
+                "execution_id": None,
+                "reason": "executor no disponible",
+                "revision": proposal.revision,
+                "policy_reevaluated": True,
+            }
+
+        resolved = self._pending_store.resolve(
+            pending_id,
+            actor_id,
+            expected_revision=expected_revision,
+        )
         if resolved is None:
+            current = self._pending_store.load(pending_id)
             return {
                 "accepted": False,
                 "execution_id": None,
                 "reason": "pending stale",
-                "policy_reevaluated": True,
-            }
-        if self._runner is None:
-            execution_id = f"exec-{resolved.task_id}-{pending_id[:12]}"
-            return {
-                "accepted": True,
-                "execution_id": execution_id,
+                "revision": current.revision if current is not None else proposal.revision,
                 "policy_reevaluated": True,
             }
         executed = await self._execute_plan(plan)
-        return {"accepted": True, "policy_reevaluated": True, **executed}
+        return {
+            "accepted": True,
+            "revision": resolved.revision,
+            "policy_reevaluated": True,
+            **executed,
+        }
 
     async def _execute_plan(self, plan: Plan) -> JsonDict:
         """Ejecuta un plan ya autorizado por política y audita el resultado terminal."""
@@ -759,6 +875,7 @@ async def start_daemon(
     runner: PlanRunner | None = None,
     audit_query: AuditQueryPort | None = None,
     idempotency: IdempotencyPort | None = None,
+    home_socket_path: Path | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -767,6 +884,8 @@ async def start_daemon(
 ) -> RunningDaemon:
     """Arranca el Unix socket server y devuelve recursos cerrables."""
     await _cleanup_stale_socket(socket_path)
+    if home_socket_path is not None:
+        await _cleanup_stale_socket(home_socket_path)
     socket_path.parent.mkdir(parents=True, exist_ok=True)
     daemon = DaemonServer(
         engine=engine,
@@ -784,6 +903,26 @@ async def start_daemon(
     scheduler.set_on_queued(daemon._execute_plan if runner is not None else None)
     server = await asyncio.start_unix_server(daemon.handle, str(socket_path))
     os.chmod(socket_path, 0o600)
+    home_server: asyncio.AbstractServer | None = None
+    if home_socket_path is not None:
+        if idempotency is None or runner is None:
+            server.close()
+            await server.wait_closed()
+            socket_path.unlink(missing_ok=True)
+            raise RuntimeError("socket Home requiere idempotencia y executor configurados")
+        home_socket_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            home_server = await asyncio.start_unix_server(
+                daemon.handle_home,
+                str(home_socket_path),
+            )
+            os.chmod(home_socket_path, 0o600)
+        except BaseException:
+            server.close()
+            await server.wait_closed()
+            socket_path.unlink(missing_ok=True)
+            home_socket_path.unlink(missing_ok=True)
+            raise
     reaper_task = asyncio.create_task(
         ttl_reaper(pending_store, audit, interval_s=reaper_interval_s)
     )
@@ -831,6 +970,8 @@ async def start_daemon(
         socket_path=socket_path,
         reaper_task=reaper_task,
         scheduler=scheduler,
+        home_server=home_server,
+        home_socket_path=home_socket_path,
     )
 
 
@@ -848,6 +989,7 @@ async def run_daemon(
     runner: PlanRunner | None = None,
     audit_query: AuditQueryPort | None = None,
     idempotency: IdempotencyPort | None = None,
+    home_socket_path: Path | None = None,
     reaper_interval_s: float = 30.0,
     digest_enabled: bool = False,
     digest_hour: int = 8,
@@ -868,6 +1010,7 @@ async def run_daemon(
         runner=runner,
         audit_query=audit_query,
         idempotency=idempotency,
+        home_socket_path=home_socket_path,
         reaper_interval_s=reaper_interval_s,
         digest_enabled=digest_enabled,
         digest_hour=digest_hour,
@@ -923,6 +1066,7 @@ def _home_confirmation_result(plan_id: str, confirmed: Mapping[str, Any]) -> Jso
             "status": "failed" if success is False else "verified",
             "message": str(confirmed.get("detail") or "Plan resuelto por Wyss."),
             "policy_reevaluated": reevaluated,
+            **({"revision": confirmed["revision"]} if "revision" in confirmed else {}),
             **({"execution_id": confirmed["execution_id"]} if "execution_id" in confirmed else {}),
         }
     reason = str(confirmed.get("reason") or "confirmación inválida")
@@ -932,6 +1076,10 @@ def _home_confirmation_result(plan_id: str, confirmed: Mapping[str, Any]) -> Jso
         outcome = "expired"
     elif reason == "plan rechazado por política al confirmar":
         outcome = "policy_rejected"
+    elif reason == "revision conflict":
+        outcome = "conflict"
+    elif reason == "executor no disponible":
+        outcome = "degraded"
     else:
         outcome = "confirmation_required"
     return {
@@ -941,12 +1089,27 @@ def _home_confirmation_result(plan_id: str, confirmed: Mapping[str, Any]) -> Jso
         "status": "failed",
         "message": reason,
         "policy_reevaluated": reevaluated,
+        **({"revision": confirmed["revision"]} if "revision" in confirmed else {}),
+        **({"required_risk": confirmed["required_risk"]} if "required_risk" in confirmed else {}),
     }
 
 
 def _fingerprint(payload: Mapping[str, object]) -> str:
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def _json_depth(value: object, *, _depth: int = 0) -> int:
+    if _depth > 16:
+        return _depth
+    if isinstance(value, Mapping):
+        return max(
+            (_json_depth(item, _depth=_depth + 1) for item in value.values()),
+            default=_depth,
+        )
+    if isinstance(value, (list, tuple)):
+        return max((_json_depth(item, _depth=_depth + 1) for item in value), default=_depth)
+    return _depth
 
 
 def _json_mapping(value: Mapping[str, Any]) -> Mapping[str, JsonValue]:

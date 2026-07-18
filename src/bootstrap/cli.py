@@ -44,7 +44,7 @@ from core.domain.knowledge import (
 )
 from core.domain.plan import Action, ErrorPolicy, Plan, RetryParams
 from core.domain.policy import PolicyDecision
-from core.domain.risk import Outcome, RiskLevel
+from core.domain.risk import Outcome, RiskLevel, outcome_for
 from core.domain.security import Subject
 from core.orchestrator.intent import IntentCategory, IntentClassification
 from core.policy import CognitivePolicyEngine
@@ -526,6 +526,7 @@ async def _run_start_daemon(
                 audit=audit,
                 audit_query=audit,
                 idempotency=idempotency,
+                home_socket_path=_home_socket_path(settings),
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -557,6 +558,7 @@ async def _run_start_daemon(
                 audit=audit,
                 audit_query=audit,
                 idempotency=idempotency,
+                home_socket_path=_home_socket_path(settings),
                 routine_store=routine_store,
                 memory_store=memory_store,
                 ledger=ledger_store,
@@ -678,6 +680,23 @@ def confirm(
                 {"pending_id": pending_id, "response": response},
             )
         )
+        required_risk = result.get("required_risk")
+        if result.get("accepted") is False and required_risk in {"B", "C"}:
+            fresh_level = RiskLevel[str(required_risk)]
+            fresh_decision = PolicyDecision(
+                task_id=proposal.task_id,
+                risk_level=fresh_level,
+                outcome=outcome_for(fresh_level),
+            )
+            if prompt_confirmation(fresh_decision, console):
+                fresh_response = "CONFIRMAR" if fresh_level is RiskLevel.C else "s"
+                result = asyncio.run(
+                    _json_rpc_call(
+                        _socket_path(settings),
+                        "confirm",
+                        {"pending_id": pending_id, "response": fresh_response},
+                    )
+                )
         _render_confirm_result(result)
     except typer.Exit:
         # typer.Exit hereda de RuntimeError: sin este re-raise lo tragaría el except genérico.
@@ -1875,6 +1894,10 @@ def _format_routine_schedule(schedule: object) -> str:
 
 def _socket_path(settings: WyssSettings) -> Path:
     return settings.data_dir / "wyss.sock"
+
+
+def _home_socket_path(settings: WyssSettings) -> Path:
+    return settings.data_dir / "wyss-home.sock"
 
 
 def _pending_db_path(settings: WyssSettings) -> Path:

@@ -223,6 +223,7 @@ def _pending(
         expires_at="2026-07-12T00:00:00+00:00",
         resolved_at=None,
         resolved_by=None,
+        revision=1,
     )
 
 

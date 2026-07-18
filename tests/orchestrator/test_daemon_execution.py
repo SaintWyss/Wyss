@@ -281,7 +281,7 @@ async def test_without_runner_keeps_legacy_shape(
     pending_store: PendingStore,
     fake_audit: FakeAudit,
 ) -> None:
-    """Sin runner inyectado el daemon conserva el contrato previo (no ejecuta)."""
+    """Sin runner el daemon falla cerrado y no afirma una ejecución inexistente."""
     target = tmp_path / "nota.txt"
     plan = Plan(
         task_id="rc-legacy",
@@ -295,9 +295,13 @@ async def test_without_runner_keeps_legacy_shape(
     confirmed = await _rpc(
         daemon, "confirm", {"pending_id": asked["pending_id"], "response": "CONFIRMAR"}
     )
-    assert confirmed["accepted"] is True
+    assert confirmed["accepted"] is False
+    assert confirmed["reason"] == "executor no disponible"
     assert "success" not in confirmed
     assert not target.exists()
+    loaded = pending_store.load(str(asked["pending_id"]))
+    assert loaded is not None
+    assert loaded.status == "pending"
 
 
 async def test_expired_proposal_not_executed(
@@ -431,3 +435,11 @@ async def test_confirm_reevaluates_and_rejects_now_dangerous(
     result = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"})
     assert result["accepted"] is False
     assert "política" in result["reason"]
+    rejected = pending_store.load(pending_id)
+    assert rejected is not None
+    assert rejected.status == "rejected"
+    assert rejected.revision == 2
+
+    second = await _rpc(daemon, "confirm", {"pending_id": pending_id, "response": "CONFIRMAR"})
+    assert second["accepted"] is False
+    assert second["reason"] == "pending no encontrado"
