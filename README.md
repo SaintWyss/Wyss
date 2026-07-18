@@ -6,7 +6,7 @@ Asistente operativo humano-primero con política A–D, ejecución verificable, 
 
 **Autor:** Santiago Wyss  
 **Estado funcional:** alcance del milestone v1.0 implementado en el código  
-**Versión del paquete:** `0.1.0` — pendiente de unificación antes de una release v1.0 formal
+**Versión del paquete:** `1.0.0.dev0` — línea v1 en desarrollo; no es una release final
 
 - [Estado real y evidencia](docs/RELEASE_STATUS.md)
 - [Guía del operador](docs/OPERATOR.md)
@@ -36,7 +36,7 @@ Los modelos ayudan a interpretar y proponer. No asignan el nivel de riesgo ni pu
 | Política A–D y denylist built-in no removible | Implementadas y testeadas |
 | FileSystem, Shell y Git adapters | Implementados, con segunda muralla y verificación |
 | Undo | Implementado para `file.*`; shell/git pendientes |
-| Auditoría | Funciona por CLI; RPC `audit` continúa como stub |
+| Auditoría | Funciona por CLI y RPC acotado sobre el socket local |
 | Indexación FTS5 + vectores + RRF | Implementada |
 | Gateway de modelos, presupuesto y minimización | Implementados |
 | Orquestador deterministic | Implementado y default de la plantilla |
@@ -52,7 +52,8 @@ Los modelos ayudan a interpretar y proponer. No asignan el nivel de riesgo ni pu
 | APK Android | Implementado y pairing QR aprobado en dispositivo real |
 | Modo Equipo | Fuera del alcance actual |
 
-`v0.1.0` sigue siendo una release histórica válida. Después se implementaron las fases 9–15. El metadata del paquete todavía no fue elevado, por lo que la formulación correcta es **alcance v1.0 implementado**, no release v1.0 publicada.
+`v0.1.0` sigue siendo una release histórica válida. Después se implementaron las fases 9–15. Yo
+uso `1.0.0.dev0` para identificar la línea v1 activa sin declarar una release v1.0 publicada.
 
 ## Niveles de acción
 
@@ -247,17 +248,16 @@ cd mobile/android
 ./gradlew assembleDebug
 ```
 
-El workflow raíz automatiza actualmente la cadena Python. Web y Android deben ejecutarse según el alcance del cambio. Ver [`docs/TESTING.md`](docs/TESTING.md).
+El workflow raíz automatiza Python, web y Android como gates independientes y bloqueantes. Ver
+[`docs/TESTING.md`](docs/TESTING.md).
 
 ## Límites conocidos
 
-- package metadata todavía en `0.1.0`;
-- audit JSON-RPC stub;
 - undo limitado a archivos;
 - dependencias externas para LLM y Notion;
 - TLS local y pairing basados en confianza TOFU;
 - NTFS/FUSE puede ignorar permisos POSIX o impedir WAL;
-- la matriz completa web/Android no está incorporada al CI raíz.
+- la publicación v1 final sigue bloqueada hasta completar integración, evidencia física y rollback.
 
 ## Documentación
 

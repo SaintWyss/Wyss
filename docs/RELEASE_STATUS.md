@@ -1,15 +1,16 @@
 # Estado real de Wyss
 
-Última revisión documental: 2026-07-16.
+Última revisión documental: 2026-07-18.
 
 ## Resumen
 
-El código de `main` contiene el alcance funcional del milestone interno **v1.0 — app móvil + asistente diario**. Sin embargo, el paquete Python, el README histórico y varias release notes todavía usan `0.1.0`. Por eso deben separarse dos conceptos:
+El código de `main` contiene el alcance funcional del milestone interno **v1.0 — app móvil + asistente diario**. Yo separo ese alcance de una publicación final:
 
 - **alcance implementado:** fases 1–15, incluido el cliente Android;
-- **versión distribuida/formal:** el metadata de `pyproject.toml` continúa en `0.1.0` y no prueba por sí solo una release pública v1.0.
+- **versión activa:** `1.0.0.dev0`, que identifica desarrollo de la línea v1 y no una release pública.
 
-No declarar una release v1.0 distribuible hasta unificar versionado, artefactos, changelog y gates de publicación.
+Yo no declaro una release v1.0 distribuible hasta completar artefactos, changelog, integración y
+gates de publicación.
 
 ## Matriz de capacidades
 
@@ -18,7 +19,7 @@ No declarar una release v1.0 distribuible hasta unificar versionado, artefactos,
 | Política A–D, confirmaciones y denylist no removible | Implementada | `src/core/policy/`, daemon y tests de seguridad | Nivel D no es confirmable; la política se reevalúa al confirmar |
 | Ejecución real y verificación | Implementada | `src/execution/`, `PlanExecutor`, daemon | FileSystem, Shell y Git; fail-closed |
 | Undo | Parcial | `src/execution/undo.py`, CLI `wyss undo` | Solo inversas `file.*`; shell/git no tienen undo |
-| Auditoría SQLite | Implementada con gap RPC | `src/audit/`, CLI `wyss audit` | El método JSON-RPC `audit` todavía devuelve lista vacía |
+| Auditoría SQLite | Implementada | `src/audit/`, CLI y RPC `audit` | Lectura acotada por port; payload omitido por defecto |
 | Indexación y búsqueda híbrida | Implementada | `src/knowledge/` | FTS5 + vectores + RRF |
 | Gateway de modelos | Implementado | `src/gateway/` | Presupuesto, minimización, providers y trazas |
 | Orquestador deterministic | Implementado | `src/bootstrap/cli.py` | Es el default de `config/config.example.toml` |
@@ -42,16 +43,18 @@ La release v0.1.0 registró 539 pruebas, mypy strict, Ruff e import-linter verde
 
 Después de esa release se agregaron rutinas, Notion, memoria, digest, intake, web y APK. Las fases contienen summaries y validaciones específicas, incluida la aprobación E2E del APK en un teléfono real el 11 de julio de 2026.
 
-El CI raíz actual ejecuta:
+El CI raíz actual ejecuta en jobs bloqueantes:
 
 ```bash
 uv run pytest -q
-uv run mypy
+uv run mypy src tests
 uv run ruff check src tests
 uv run lint-imports
+cd web && npm run test && npm run lint && npm run build
+cd mobile && npx cap sync android && bash android/gradlew -p android testDebugUnitTest assembleDebug
 ```
 
-La existencia de CI verde para Python no implica automáticamente que web y Android estén validados en cada PR. Ver [`TESTING.md`](TESTING.md).
+Yo exijo los tres jobs verdes antes de integrar. Ver [`TESTING.md`](TESTING.md).
 
 ## Contradicciones resueltas
 
@@ -65,7 +68,9 @@ No debe volver a describirse como “pendiente de toda verificación”, pero ta
 
 ### v0.1.0 frente a milestone v1.0
 
-`v0.1.0` es una release histórica cerrada el 10 de julio. El código posterior implementó el milestone v1.0, pero el metadata del paquete sigue en `0.1.0`. Hasta unificarlo, la documentación debe decir **“alcance v1.0 implementado”**, no “release v1.0 publicada”.
+`v0.1.0` es una release histórica cerrada el 10 de julio. Yo uso `1.0.0.dev0` durante la
+integración v1. Sólo voy a declarar `1.0.0` y publicar artefactos cuando todos los gates de esta
+sección estén completos.
 
 ### `.planning/ROADMAP.md` y `.planning/STATE.md`
 
@@ -73,7 +78,6 @@ Los artefactos de planificación acumularon casillas y métricas contradictorias
 
 ## Riesgos y límites vigentes
 
-- `audit` por JSON-RPC sigue siendo stub; el CLI directo funciona.
 - Undo no cubre shell ni Git.
 - El modo deterministic sigue siendo el default de la plantilla.
 - El gateway LLM depende de infraestructura y secretos externos.
@@ -81,16 +85,15 @@ Los artefactos de planificación acumularon casillas y métricas contradictorias
 - Los permisos `0600` pueden no aplicarse en NTFS/FUSE.
 - Los datos SQLite que requieren WAL deben vivir en un filesystem compatible.
 - El APK validado usa el flujo local del owner; distribución, firma release y actualización segura deben documentarse antes de publicar.
-- CI no ejecuta actualmente toda la matriz web/Android en el workflow raíz.
-- El versionado del package y la narrativa de release están desalineados.
+- La versión de desarrollo no implica artefactos finales ni autorización de publicación.
 
 ## Gates para declarar una release v1.0 formal
 
-1. actualizar `pyproject.toml`, cliente móvil y cualquier superficie que muestre versión;
+1. retirar el sufijo `.dev0` sólo desde el commit exacto aprobado;
 2. crear changelog consolidado desde v0.1.0;
 3. producir artefactos reproducibles y firmados;
 4. ejecutar la cadena Python, web y Android desde un commit exacto;
 5. repetir smoke de daemon, bridge, LLM, Notion, intake y APK;
 6. documentar upgrade y rollback;
-7. eliminar o marcar stubs operativos, especialmente audit RPC;
+7. eliminar o marcar cualquier stub operativo restante;
 8. publicar checksums y evidencia de aceptación.
