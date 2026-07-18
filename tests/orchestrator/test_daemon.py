@@ -290,6 +290,54 @@ async def test_start_daemon_binds_private_dedicated_home_socket(
     assert not home_socket.exists()
 
 
+async def test_dedicated_home_socket_real_ipc_rejects_admin_method(
+    tmp_path: Path,
+    engine: CognitivePolicyEngine,
+    pending_store: PendingStore,
+    routine_store: RoutineStore,
+    memory_store: _FakeMemoryStore,
+    fake_audit: FakeAudit,
+    fake_orchestrator: FakeOrchestrator,
+    fake_ledger: LedgerPort,
+    idempotency: SqliteIdempotencyStore,
+) -> None:
+    owner_socket = tmp_path / "wyss-real.sock"
+    home_socket = tmp_path / "wyss-home-real.sock"
+    scheduler = _routine_scheduler(engine, pending_store, fake_audit, routine_store)
+    running = await start_daemon(
+        owner_socket,
+        home_socket_path=home_socket,
+        engine=engine,
+        orchestrator=fake_orchestrator,
+        pending_store=pending_store,
+        audit=fake_audit,
+        routine_store=routine_store,
+        memory_store=memory_store,
+        ledger=fake_ledger,
+        scheduler=scheduler,
+        runner=_SpyRunner(),
+        idempotency=idempotency,
+        reaper_interval_s=3600,
+    )
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(home_socket))
+        writer.write(
+            json.dumps(
+                {"jsonrpc": "2.0", "method": "audit", "params": {}, "id": "home-real"}
+            ).encode()
+            + b"\n"
+        )
+        await writer.drain()
+        response = json.loads(await reader.readline())
+        writer.close()
+        await writer.wait_closed()
+
+        assert response["error"]["code"] == -32601
+        assert response["id"] == "home-real"
+    finally:
+        await running.aclose()
+
+
 async def test_ask_round_trip(
     engine: CognitivePolicyEngine,
     pending_store: PendingStore,
