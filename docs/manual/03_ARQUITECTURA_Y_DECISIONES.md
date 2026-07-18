@@ -152,6 +152,15 @@ Rutinas, intake, CLI y web producen planes que terminan en el mismo `dispatch()`
 
 **Límite:** el primer pairing debe hacerse en una red y pantalla confiables.
 
+### D-17 — Wyss como única autoridad Home
+
+**Yo elegí:** exponer capacidades y proyecciones mediante ports públicos de `core`.
+
+**Porque:** Home Edge, web, Android y ESP32 no deben acceder al executor ni a bases internas, y no
+deben convertirse en autoridades alternativas.
+
+**Detalle:** [ADR-001 — límite de autoridad Home](../architecture/ADR-001-home-authority-boundary.md).
+
 ## Alternativas descartadas
 
 | Alternativa | Ventaja | Por qué la descarté |
