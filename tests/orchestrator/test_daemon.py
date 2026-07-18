@@ -525,7 +525,9 @@ async def test_home_intent_is_idempotent_and_b_confirmation_resolves_once(
     assert proposed["outcome"] == "pending"
     assert proposed["risk"] == "B"
     assert proposed["summary"] == "mover archivo"
-    assert proposed["steps"] == [{"description": "file.move", "target": "/tmp/source.txt"}]
+    assert proposed["steps"] == [
+        {"description": "file.move", "target": "/tmp/source.txt", "parameters": {}}
+    ]
     assert proposed["revision"] == 1
     assert len(pending_store.load_pending()) == 1
 

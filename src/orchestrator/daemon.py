@@ -41,6 +41,7 @@ from core.ports.memory import MemoryAdmin
 from core.ports.orchestrator import OrchestratorPort
 from orchestrator.digest import compose_digest, write_digest_file
 from orchestrator.dispatcher import dispatch, ttl_for_risk
+from orchestrator.home_plan_preview import home_action_step
 from orchestrator.pending_store import PendingStore
 from orchestrator.routine_store import Routine, RoutineStore
 from orchestrator.scheduler import (
@@ -278,10 +279,7 @@ class DaemonServer:
                 {
                     "risk": decision.risk_level.name,
                     "summary": plan.summary,
-                    "steps": [
-                        {"description": action.type, "target": action.target}
-                        for action in plan.steps
-                    ],
+                    "steps": [home_action_step(action) for action in plan.steps],
                     "expires_in_ms": min(ttl_for_risk(decision.risk_level) * 1000, 300_000),
                     "revision": pending.revision,
                 }
