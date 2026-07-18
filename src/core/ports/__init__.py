@@ -5,6 +5,18 @@ from core.ports.audit import AuditPort
 from core.ports.config import ConfigStore
 from core.ports.execution import PlanRunner, Tool
 from core.ports.gateway import ModelGatewayPort, ModelProvider
+from core.ports.home import (
+    CalendarPort,
+    CameraPort,
+    ClientEventPort,
+    HomePort,
+    MediaPort,
+    NotificationPort,
+    ProjectionPort,
+    ReminderPort,
+    SpeechPort,
+    TimerPort,
+)
 from core.ports.knowledge import (
     Chunker,
     EmbeddingProvider,
@@ -22,21 +34,31 @@ from core.ports.security import PermissionStore
 __all__ = [
     "AgentBase",
     "AuditPort",
+    "CalendarPort",
+    "CameraPort",
     "Chunker",
+    "ClientEventPort",
     "ConfigStore",
     "EmbeddingProvider",
     "Extractor",
     "FullTextIndex",
+    "HomePort",
     "LedgerPort",
+    "MediaPort",
     "MemoryAdmin",
     "MemoryPort",
     "ModelGatewayPort",
     "ModelProvider",
+    "NotificationPort",
     "OrchestratorPort",
     "PermissionStore",
     "PlanRunner",
+    "ProjectionPort",
+    "ReminderPort",
     "Retrieval",
+    "SpeechPort",
     "TaskRepository",
+    "TimerPort",
     "Tool",
     "VectorIndex",
 ]
