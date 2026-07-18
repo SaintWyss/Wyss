@@ -188,6 +188,17 @@ class DaemonServer:
         try:
             result = await self._handlers[method](params)
         except Exception as exc:
+            if home_only:
+                self._audit.log(
+                    AuditEvent.new(
+                        actor_type=ActorType.SYSTEM,
+                        actor_id="home-rpc",
+                        event_type=AuditEventType.TASK_FAILED,
+                        message=f"request Home falló ({type(exc).__name__})",
+                        payload={"method": method},
+                    )
+                )
+                return _error_response(req_id, -32000, "Home request failed")
             return _error_response(req_id, -32000, str(exc))
         return {"jsonrpc": "2.0", "result": result, "id": req_id}
 

@@ -1,6 +1,6 @@
 # ADR-003 — Yo separo la capacidad RPC de Home Edge
 
-**Estado:** aceptada  
+**Estado:** aceptada
 **Fecha:** 2026-07-18
 
 ## Contexto

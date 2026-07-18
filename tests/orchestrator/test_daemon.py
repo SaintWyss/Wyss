@@ -421,7 +421,7 @@ async def test_home_socket_is_method_scoped_and_derives_edge_identity(
         scheduler=_routine_scheduler(engine, pending_store, fake_audit, routine_store),
         idempotency=idempotency,
         runner=_SpyRunner(),
-        home_rate_limit_per_second=3,
+        home_rate_limit_per_second=4,
     )
 
     forbidden = await _handle_home_rpc(daemon, "audit", {"include_payload": True})
@@ -435,6 +435,13 @@ async def test_home_socket_is_method_scoped_and_derives_edge_identity(
         cursor = child
     too_deep = await _handle_home_rpc(daemon, "status", nested)
     assert too_deep["error"]["code"] == -32602
+
+    closed_error = await _handle_home_rpc(
+        daemon,
+        "home.intent",
+        {"message_id": "invalid-without-required-fields"},
+    )
+    assert closed_error["error"]["message"] == "Home request failed"
 
     accepted = await _handle_home_rpc(
         daemon,
