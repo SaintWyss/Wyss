@@ -61,6 +61,8 @@ from execution.shell import ShellAdapter
 from execution.undo import UndoStep, apply_undo, inverse_plan, plan_undo
 from gateway.providers.ollama import OllamaEmbeddingProvider
 from gateway.secrets_patterns import BUILTIN_SECRET_PATTERNS
+from home.reminder_store import ReminderStore
+from home.timer_store import TimerStore
 from knowledge.chunker import TokenChunker
 from knowledge.extractors import (
     DocxExtractor,
@@ -96,9 +98,13 @@ app = typer.Typer(help="Wyss CLI")
 fin_app = typer.Typer(help="Ledger de finanzas")
 routine_app = typer.Typer(help="Rutinas programadas")
 memory_app = typer.Typer(help="Memoria del owner")
+reminder_app = typer.Typer(help="Recordatorios del hogar (proyectados al panel)")
+timer_app = typer.Typer(help="Timers del hogar (proyectados al panel)")
 app.add_typer(fin_app, name="fin")
 app.add_typer(routine_app, name="routine")
 app.add_typer(memory_app, name="memory")
+app.add_typer(reminder_app, name="reminder")
+app.add_typer(timer_app, name="timer")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -979,6 +985,229 @@ def _memory_mutation(
         raise typer.Exit(code=1) from exc
 
 
+_DEFAULT_HOME_TZ = "America/Argentina/Cordoba"
+
+
+@reminder_app.command("add")
+def reminder_add(
+    text: str,
+    due_at: Annotated[
+        str,
+        typer.Option("--due", help="Vencimiento ISO-8601 con offset (2026-07-20T09:00:00-03:00)."),
+    ],
+    timezone: Annotated[
+        str,
+        typer.Option("--timezone", help="Timezone IANA del panel."),
+    ] = _DEFAULT_HOME_TZ,
+    recurrence: Annotated[
+        str | None,
+        typer.Option("--recurrence", help="Recurrencia libre (ej: 'diario')."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Crea un recordatorio que el panel proyecta."""
+    try:
+        settings = load_settings(config)
+        with ReminderStore(settings.data_dir / "reminders.db") as store:
+            reminder = store.add(text=text, due_at=due_at, timezone=timezone, recurrence=recurrence)
+        console.print(f"Recordatorio creado: {reminder.reminder_id}", style="green")
+    except ValueError as exc:
+        _error_panel(str(exc), "ej: --due 2026-07-20T09:00:00-03:00")
+        raise typer.Exit(code=2) from exc
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@reminder_app.command("list")
+def reminder_list(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista recordatorios."""
+    try:
+        settings = load_settings(config)
+        db_path = settings.data_dir / "reminders.db"
+        if not db_path.exists():
+            _empty_state("Sin recordatorios todavía.", "wyss reminder add ...")
+            return
+        with ReminderStore(db_path) as store:
+            reminders = store.list_all()
+        if not reminders:
+            _empty_state("Sin recordatorios todavía.", "wyss reminder add ...")
+            return
+        table = Table(show_header=True)
+        table.add_column("id")
+        table.add_column("texto")
+        table.add_column("vence")
+        table.add_column("estado")
+        for item in reminders:
+            table.add_row(item.reminder_id[:8], item.text, item.due_at, item.status)
+        console.print(table)
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@reminder_app.command("done")
+def reminder_done(
+    reminder_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Marca un recordatorio como completado (acepta prefijo de id)."""
+    try:
+        settings = load_settings(config)
+        with ReminderStore(settings.data_dir / "reminders.db") as store:
+            target = _resolve_prefix(reminder_id, [r.reminder_id for r in store.list_all()])
+            if target is None or not store.complete(target):
+                _error_panel(
+                    f"recordatorio no encontrado o ya completado: {reminder_id}",
+                    "listá disponibles con: wyss reminder list",
+                )
+                raise typer.Exit(code=1)
+        console.print(f"Completado: {reminder_id}", style="green")
+    except typer.Exit:
+        raise
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@timer_app.command("start")
+def timer_start(
+    label: str,
+    minutes: Annotated[
+        float,
+        typer.Option("--minutes", help="Duración en minutos."),
+    ],
+    preset: Annotated[
+        str | None,
+        typer.Option("--preset", help="Nombre de preset opcional."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Arranca un timer que el panel proyecta con countdown."""
+    try:
+        settings = load_settings(config)
+        with TimerStore(settings.data_dir / "timers.db") as store:
+            timer = store.start(label=label, duration_seconds=int(minutes * 60), preset=preset)
+        console.print(
+            f"Timer corriendo: {timer.timer_id[:8]} — vence {timer.deadline_at}",
+            style="green",
+        )
+    except ValueError as exc:
+        _error_panel(str(exc), "ej: wyss timer start pasta --minutes 10")
+        raise typer.Exit(code=2) from exc
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@timer_app.command("list")
+def timer_list(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista timers con su estado actual."""
+    try:
+        settings = load_settings(config)
+        db_path = settings.data_dir / "timers.db"
+        if not db_path.exists():
+            _empty_state("Sin timers todavía.", "wyss timer start ...")
+            return
+        with TimerStore(db_path) as store:
+            _revision, timers = store.snapshot()
+        if not timers:
+            _empty_state("Sin timers todavía.", "wyss timer start ...")
+            return
+        table = Table(show_header=True)
+        table.add_column("id")
+        table.add_column("label")
+        table.add_column("estado")
+        table.add_column("restante (s)")
+        for item in timers:
+            table.add_row(item.timer_id[:8], item.label, item.status, str(item.remaining_seconds))
+        console.print(table)
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+def _timer_mutation(action: str, timer_id: str, config: Path) -> None:
+    try:
+        settings = load_settings(config)
+        with TimerStore(settings.data_dir / "timers.db") as store:
+            _revision, timers = store.snapshot()
+            target = _resolve_prefix(timer_id, [t.timer_id for t in timers])
+            ok = target is not None and getattr(store, action)(target)
+        if not ok:
+            _error_panel(
+                f"timer no encontrado o en estado incompatible: {timer_id}",
+                "listá disponibles con: wyss timer list",
+            )
+            raise typer.Exit(code=1)
+        console.print(f"{action}: {timer_id}", style="green")
+    except typer.Exit:
+        raise
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@timer_app.command("pause")
+def timer_pause(
+    timer_id: str,
+    config: Annotated[Path, typer.Option("--config", help="Ruta al config.toml.")] = Path(
+        "config/config.toml"
+    ),
+) -> None:
+    """Pausa un timer corriendo."""
+    _timer_mutation("pause", timer_id, config)
+
+
+@timer_app.command("resume")
+def timer_resume(
+    timer_id: str,
+    config: Annotated[Path, typer.Option("--config", help="Ruta al config.toml.")] = Path(
+        "config/config.toml"
+    ),
+) -> None:
+    """Reanuda un timer pausado."""
+    _timer_mutation("resume", timer_id, config)
+
+
+@timer_app.command("cancel")
+def timer_cancel(
+    timer_id: str,
+    config: Annotated[Path, typer.Option("--config", help="Ruta al config.toml.")] = Path(
+        "config/config.toml"
+    ),
+) -> None:
+    """Cancela un timer corriendo o pausado."""
+    _timer_mutation("cancel", timer_id, config)
+
+
+def _resolve_prefix(prefix: str, ids: list[str]) -> str | None:
+    """Id exacto o prefijo único; ambiguo/no encontrado → None."""
+    if prefix in ids:
+        return prefix
+    matches = [item for item in ids if item.startswith(prefix)]
+    return matches[0] if len(matches) == 1 else None
+
+
 @app.command()
 def undo(
     task_id: str,
@@ -1338,6 +1567,7 @@ def web(
     intake_token = (
         _load_or_create_intake_token(settings.data_dir) if settings.intake.enabled else None
     )
+    home_edge_token = _load_or_create_home_edge_token(settings.data_dir)
     local_url = f"{scheme}://127.0.0.1:{port}/?token={token}"
     if not lan:
         console.print(
@@ -1352,6 +1582,7 @@ def web(
                 settings,
                 token=token,
                 intake_token=intake_token,
+                home_edge_token=home_edge_token,
                 tls=tls,
                 lan_ip=lan_ip,
                 port=port,
@@ -1392,6 +1623,7 @@ def web(
             settings,
             token=token,
             intake_token=intake_token,
+            home_edge_token=home_edge_token,
             lan_hosts=frozenset({lan_ip}),
             tls=tls,
             lan_ip=lan_ip,
@@ -1433,6 +1665,25 @@ def _load_or_create_intake_token(data_dir: Path) -> str:
     best-effort del sistema.
     """
     token_file = data_dir / "intake_token"
+    if token_file.exists():
+        stored = token_file.read_text(encoding="utf-8").strip()
+        if len(stored) >= 32:
+            return stored
+    token = secrets.token_urlsafe(32)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(token, encoding="utf-8")
+    token_file.chmod(0o600)
+    return token
+
+
+def _load_or_create_home_edge_token(data_dir: Path) -> str:
+    """Token bearer del Home Edge (data/home_edge_token, 0600).
+
+    Mismo modelo que el token de intake: el bridge del panel lo manda como
+    `Authorization: Bearer` en `/api/home/*` y `/api/media/*`; borrar el
+    archivo rota el bearer.
+    """
+    token_file = data_dir / "home_edge_token"
     if token_file.exists():
         stored = token_file.read_text(encoding="utf-8").strip()
         if len(stored) >= 32:

@@ -44,6 +44,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = [
   "src/adapters",
+  "src/home",
   "src/orchestrator",
   "src/agents",
   "src/knowledge",
@@ -91,6 +92,7 @@ include_external_packages = true
 root_packages = [
   "adapters",
   "core",
+  "home",
   "orchestrator",
   "agents",
   "knowledge",
@@ -110,6 +112,7 @@ source_modules = ["core"]
 forbidden_modules = [
   "pydantic",
   "adapters",
+  "home",
   "orchestrator",
   "agents",
   "knowledge",
@@ -127,6 +130,7 @@ name = "las capas importan de core, nunca entre sí"
 type = "independence"
 modules = [
   "adapters",
+  "home",
   "orchestrator",
   "agents",
   "knowledge",

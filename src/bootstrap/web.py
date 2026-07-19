@@ -44,6 +44,8 @@ from core.domain import Query, TipoTransaccion, Transaccion
 from core.domain.audit import ActorType
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
 from core.domain.security import Subject
+from home.reminder_store import ReminderStore
+from home.timer_store import TimerStore
 from knowledge.state_store import BcFreshness, StateStore
 from ledger.sqlite_store import SqliteLedgerStore
 from orchestrator.pending_store import PendingProposal, PendingStore
@@ -123,6 +125,7 @@ def build_web_app(
     *,
     token: str,
     intake_token: str | None = None,
+    home_edge_token: str | None = None,
     lan_hosts: frozenset[str] = frozenset(),
     tls: bool = False,
     lan_ip: str | None = None,
@@ -187,6 +190,13 @@ def build_web_app(
                 error="origen no permitido",
                 accion="usá la interfaz local servida por wyss web",
             )
+
+        if request.url.path.startswith(("/api/home/", "/api/media/")):
+            # Superficie exclusiva del Home Edge: bearer dedicado, jamás cookie.
+            auth_response = _authenticate_home_edge(request, home_edge_token=home_edge_token)
+            if auth_response is not None:
+                return auth_response
+            return await call_next(request)
 
         if request.url.path == "/api/intake":
             # Única exención de cookie: n8n no tiene cookie jar y usa bearer dedicado.
@@ -442,6 +452,30 @@ def build_web_app(
         finally:
             if store is not None:
                 store.close()
+
+    @web_app.get("/api/home/reminders")
+    async def api_home_reminders(timezone: str) -> dict[str, object]:
+        if not timezone or len(timezone) > 64:
+            raise WebError(
+                status.HTTP_400_BAD_REQUEST,
+                error="timezone inválida",
+                accion="mandá la timezone IANA configurada en el panel",
+            )
+        with ReminderStore(settings.data_dir / "reminders.db") as store:
+            revision, reminders = store.snapshot(timezone)
+        return {
+            "revision": revision,
+            "reminders": [reminder.to_payload() for reminder in reminders],
+        }
+
+    @web_app.get("/api/home/timers")
+    async def api_home_timers() -> dict[str, object]:
+        with TimerStore(settings.data_dir / "timers.db") as store:
+            revision, timers = store.snapshot()
+        return {
+            "revision": revision,
+            "timers": [timer.to_payload() for timer in timers],
+        }
 
     @web_app.post("/api/ask")
     async def api_ask(body: AskBody) -> dict[str, Any]:
@@ -782,6 +816,34 @@ class _IntakeRateLimiter:
             return False
         self._hits.append(now)
         return True
+
+
+def _authenticate_home_edge(
+    request: Request,
+    *,
+    home_edge_token: str | None,
+) -> Response | None:
+    if home_edge_token is None:
+        return _error_response(
+            status.HTTP_404_NOT_FOUND,
+            error="home edge deshabilitado",
+            accion="levantá wyss web con el token de home edge",
+        )
+    header = request.headers.get("Authorization", "")
+    scheme, _, candidate = header.partition(" ")
+    if scheme.lower() != "bearer" or not candidate:
+        return _error_response(
+            status.HTTP_401_UNAUTHORIZED,
+            error="no autorizado",
+            accion="mandá Authorization: Bearer con el token de home edge",
+        )
+    if not compare_digest(candidate.strip(), home_edge_token):
+        return _error_response(
+            status.HTTP_401_UNAUTHORIZED,
+            error="no autorizado",
+            accion="verificá el token de home edge",
+        )
+    return None
 
 
 def _authenticate_intake(
