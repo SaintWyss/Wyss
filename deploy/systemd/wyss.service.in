@@ -1,0 +1,30 @@
+[Unit]
+Description=Wyss owner authority and Home RPC
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@WYSS_USER@
+Group=@HOME_GROUP@
+SupplementaryGroups=@OWNER_GROUP@
+WorkingDirectory=@WORKING_DIRECTORY@
+Environment=PYTHONUNBUFFERED=1
+Environment=WYSS_HOME_SOCKET_PATH=/run/wyss-home/wyss-home.sock
+Environment=WYSS_HOME_EDGE_USER=@EDGE_USER@
+Environment=WYSS_HOME_EDGE_GROUP=@HOME_GROUP@
+ExecStart=@REPOSITORY@/.venv/bin/wyss start --config @CONFIG_PATH@
+Restart=on-failure
+RestartSec=3
+RuntimeDirectory=wyss-home
+RuntimeDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@DATA_DIRECTORY@
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

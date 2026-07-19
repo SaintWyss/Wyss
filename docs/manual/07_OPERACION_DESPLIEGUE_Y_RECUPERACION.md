@@ -34,6 +34,20 @@ Yo recomiendo una unidad de usuario para el daemon:
 
 - `WorkingDirectory` al checkout/instalación;
 - `ExecStart` con `uv run wyss start` o binario empaquetado;
+
+Para Home Edge yo uso en cambio la unidad de sistema de `deploy/systemd`: necesito UIDs distintos
+para que `SO_PEERCRED` sea una frontera real. Yo instalo la unidad sin iniciarla hasta completar el
+smoke con:
+
+```bash
+scripts/install-system-service.sh saintwyss wyss-edge wyss-home \
+  /home/saintwyss/Wyss /ruta/al/checkout-operativo \
+  /ruta/al/config.toml /ruta/al/data
+sudo systemctl start wyss.service
+```
+
+Para rollback yo detengo `wyss.service`, restauro la unidad anterior y vuelvo a cargar systemd. El
+instalador copia la configuración como `0600`; no elimina la fuente ni las bases existentes.
 - `Restart=on-failure`;
 - `UMask=0077`;
 - límites de recursos;
