@@ -101,12 +101,14 @@ memory_app = typer.Typer(help="Memoria del owner")
 reminder_app = typer.Typer(help="Recordatorios del hogar (proyectados al panel)")
 timer_app = typer.Typer(help="Timers del hogar (proyectados al panel)")
 calendar_app = typer.Typer(help="Agenda Google Calendar (proyectada al panel)")
+spotify_app = typer.Typer(help="Spotify del hogar (proyectado al panel)")
 app.add_typer(fin_app, name="fin")
 app.add_typer(routine_app, name="routine")
 app.add_typer(memory_app, name="memory")
 app.add_typer(reminder_app, name="reminder")
 app.add_typer(timer_app, name="timer")
 app.add_typer(calendar_app, name="calendar")
+app.add_typer(spotify_app, name="spotify")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -1281,6 +1283,86 @@ def calendar_auth(
         "Google Calendar vinculado: refresh token en data/google_calendar_token",
         style="green",
     )
+
+
+@spotify_app.command("auth")
+def spotify_auth(
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Puerto loopback para el callback OAuth."),
+    ] = 8766,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Vincula Spotify (una vez): abre URL, guarda refresh token en data/.
+
+    Requiere SPOTIFY_CLIENT_ID y SPOTIFY_CLIENT_SECRET en config/.env y que la
+    app de developer.spotify.com tenga el redirect http://127.0.0.1:8766/ exacto.
+    """
+    from urllib.parse import urlencode
+
+    from home.spotify import (
+        AUTH_URL as SPOTIFY_AUTH_URL,
+    )
+    from home.spotify import (
+        SPOTIFY_SCOPES,
+        SpotifyError,
+        exchange_code,
+        save_refresh_token,
+    )
+    from home.spotify import (
+        client_credentials as spotify_credentials,
+    )
+
+    try:
+        settings = load_settings(config)
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    credentials = spotify_credentials()
+    if credentials is None:
+        _error_panel(
+            "faltan SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET",
+            "agregalas a config/.env (app de developer.spotify.com)",
+        )
+        raise typer.Exit(code=2)
+    redirect_uri = f"http://127.0.0.1:{port}/"
+    auth_url = f"{SPOTIFY_AUTH_URL}?" + urlencode(
+        {
+            "client_id": credentials[0],
+            "response_type": "code",
+            "redirect_uri": redirect_uri,
+            "scope": " ".join(SPOTIFY_SCOPES),
+        }
+    )
+    console.print(
+        Panel(
+            f"Abrí esta URL en el browser de ESTA máquina:\n\n{auth_url}\n\n"
+            f"Espero el callback en {redirect_uri} ...",
+            title="Vincular Spotify",
+            expand=False,
+        )
+    )
+    code = _wait_oauth_code(port)
+    if code is None:
+        _error_panel("no llegó el authorization code", "reintentá: wyss spotify auth")
+        raise typer.Exit(code=1)
+    try:
+        refresh_token = asyncio.run(
+            exchange_code(
+                client_id=credentials[0],
+                client_secret=credentials[1],
+                code=code,
+                redirect_uri=redirect_uri,
+            )
+        )
+    except SpotifyError as exc:
+        _error_panel(str(exc), "reintentá: wyss spotify auth")
+        raise typer.Exit(code=1) from exc
+    save_refresh_token(settings.data_dir, refresh_token)
+    console.print("Spotify vinculado: refresh token en data/spotify_token", style="green")
 
 
 def _wait_oauth_code(port: int, timeout_seconds: int = 300) -> str | None:

@@ -51,6 +51,9 @@ from home.google_calendar import (
     load_refresh_token,
 )
 from home.reminder_store import ReminderStore
+from home.spotify import SpotifyClient, SpotifyError, not_linked_state
+from home.spotify import client_credentials as spotify_credentials
+from home.spotify import load_refresh_token as spotify_refresh_token
 from home.timer_store import TimerStore
 from knowledge.state_store import BcFreshness, StateStore
 from ledger.sqlite_store import SqliteLedgerStore
@@ -474,6 +477,50 @@ def build_web_app(
             "reminders": [reminder.to_payload() for reminder in reminders],
         }
 
+    @web_app.get("/api/media/spotify", response_model=None)
+    async def api_media_spotify() -> dict[str, Any] | Response:
+        client = _spotify_client_or_none()
+        if client is None:
+            return not_linked_state()
+        try:
+            state = await client.state()
+        except SpotifyError as exc:
+            return _spotify_error_response(exc)
+        finally:
+            await client.aclose()
+        if state is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return state
+
+    @web_app.post("/api/media/spotify/commands", response_model=None)
+    async def api_media_spotify_command(body: MediaCommandBody) -> dict[str, Any] | Response:
+        client = _spotify_client_or_none()
+        if client is None:
+            # sin vinculación no hay comandos: el Edge lo mapea a reauth
+            raise WebError(
+                status.HTTP_401_UNAUTHORIZED,
+                error="Spotify no está vinculado",
+                accion="corré: wyss spotify auth",
+            )
+        try:
+            state = await client.execute(
+                action=body.action, value=body.value, device_id=body.device_id
+            )
+        except SpotifyError as exc:
+            return _spotify_error_response(exc)
+        finally:
+            await client.aclose()
+        if state is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return state
+
+    def _spotify_client_or_none() -> SpotifyClient | None:
+        credentials = spotify_credentials()
+        refresh = spotify_refresh_token(settings.data_dir)
+        if credentials is None or refresh is None:
+            return None
+        return _spotify_client(credentials[0], credentials[1], refresh)
+
     @web_app.get("/api/home/calendar/events")
     async def api_home_calendar(
         timezone: str,
@@ -863,6 +910,33 @@ class _IntakeRateLimiter:
             return False
         self._hits.append(now)
         return True
+
+
+class MediaCommandBody(BaseModel):
+    """Body de POST /api/media/spotify/commands (contrato del Edge)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1, max_length=256)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    action: str = Field(min_length=1, max_length=64)
+    value: int | None = Field(default=None, ge=0, le=100)
+    device_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+def _spotify_error_response(exc: SpotifyError) -> JSONResponse:
+    """Error del proveedor con el status que el Edge mapea (+Retry-After en 429)."""
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else None
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": str(exc), "accion": "revisá la vinculación con: wyss spotify auth"},
+        headers=headers,
+    )
+
+
+def _spotify_client(client_id: str, client_secret: str, refresh_token: str) -> SpotifyClient:
+    """Factory monkeypatcheable en tests (evita red real)."""
+    return SpotifyClient(client_id, client_secret, refresh_token)
 
 
 def _calendar_client(
