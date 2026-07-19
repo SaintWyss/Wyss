@@ -44,6 +44,12 @@ from core.domain import Query, TipoTransaccion, Transaccion
 from core.domain.audit import ActorType
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
 from core.domain.security import Subject
+from home.google_calendar import (
+    GoogleCalendarClient,
+    GoogleCalendarError,
+    client_credentials,
+    load_refresh_token,
+)
 from home.reminder_store import ReminderStore
 from home.timer_store import TimerStore
 from knowledge.state_store import BcFreshness, StateStore
@@ -468,6 +474,47 @@ def build_web_app(
             "reminders": [reminder.to_payload() for reminder in reminders],
         }
 
+    @web_app.get("/api/home/calendar/events")
+    async def api_home_calendar(
+        timezone: str,
+        window_days: int = 7,
+        sync_token: str | None = None,
+        page_token: str | None = None,
+        single_events: str = "true",
+    ) -> dict[str, Any]:
+        del single_events  # siempre expandimos instancias (singleEvents=true)
+        if not timezone or len(timezone) > 64 or not 1 <= window_days <= 31:
+            raise WebError(
+                status.HTTP_400_BAD_REQUEST,
+                error="parámetros de calendar inválidos",
+                accion="mandá timezone IANA y window_days entre 1 y 31",
+            )
+        credentials = client_credentials()
+        refresh_token = load_refresh_token(settings.data_dir)
+        if credentials is None or refresh_token is None:
+            # 401 = reauthorization_required en el Edge: falta vincular Google
+            raise WebError(
+                status.HTTP_401_UNAUTHORIZED,
+                error="Google Calendar no está vinculado",
+                accion="corré: wyss calendar auth",
+            )
+        client = _calendar_client(credentials[0], credentials[1], refresh_token)
+        try:
+            return await client.events_page(
+                timezone=timezone,
+                window_days=window_days,
+                sync_token=sync_token,
+                page_token=page_token,
+            )
+        except GoogleCalendarError as exc:
+            raise WebError(
+                exc.status_code,
+                error=str(exc),
+                accion="revisá la vinculación con: wyss calendar auth",
+            ) from exc
+        finally:
+            await client.aclose()
+
     @web_app.get("/api/home/timers")
     async def api_home_timers() -> dict[str, object]:
         with TimerStore(settings.data_dir / "timers.db") as store:
@@ -816,6 +863,13 @@ class _IntakeRateLimiter:
             return False
         self._hits.append(now)
         return True
+
+
+def _calendar_client(
+    client_id: str, client_secret: str, refresh_token: str
+) -> GoogleCalendarClient:
+    """Factory monkeypatcheable en tests (evita red real)."""
+    return GoogleCalendarClient(client_id, client_secret, refresh_token)
 
 
 def _authenticate_home_edge(

@@ -100,11 +100,13 @@ routine_app = typer.Typer(help="Rutinas programadas")
 memory_app = typer.Typer(help="Memoria del owner")
 reminder_app = typer.Typer(help="Recordatorios del hogar (proyectados al panel)")
 timer_app = typer.Typer(help="Timers del hogar (proyectados al panel)")
+calendar_app = typer.Typer(help="Agenda Google Calendar (proyectada al panel)")
 app.add_typer(fin_app, name="fin")
 app.add_typer(routine_app, name="routine")
 app.add_typer(memory_app, name="memory")
 app.add_typer(reminder_app, name="reminder")
 app.add_typer(timer_app, name="timer")
+app.add_typer(calendar_app, name="calendar")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -1198,6 +1200,119 @@ def timer_cancel(
 ) -> None:
     """Cancela un timer corriendo o pausado."""
     _timer_mutation("cancel", timer_id, config)
+
+
+@calendar_app.command("auth")
+def calendar_auth(
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Puerto loopback para el callback OAuth."),
+    ] = 8765,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Vincula Google Calendar (una vez): abre URL, guarda refresh token en data/.
+
+    Requiere GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en config/.env
+    (credencial OAuth tipo "Desktop app" con la Calendar API habilitada).
+    """
+    from urllib.parse import urlencode
+
+    from home.google_calendar import (
+        AUTH_URL,
+        CALENDAR_SCOPE,
+        GoogleCalendarError,
+        client_credentials,
+        exchange_code,
+        save_refresh_token,
+    )
+
+    try:
+        settings = load_settings(config)
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    credentials = client_credentials()
+    if credentials is None:
+        _error_panel(
+            "faltan GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET",
+            "agregalas a config/.env (credencial OAuth 'Desktop app' de Google Cloud)",
+        )
+        raise typer.Exit(code=2)
+    redirect_uri = f"http://127.0.0.1:{port}/"
+    auth_url = f"{AUTH_URL}?" + urlencode(
+        {
+            "client_id": credentials[0],
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": CALENDAR_SCOPE,
+            "access_type": "offline",
+            "prompt": "consent",
+        }
+    )
+    console.print(
+        Panel(
+            f"Abrí esta URL en el browser de ESTA máquina:\n\n{auth_url}\n\n"
+            f"Espero el callback en {redirect_uri} ...",
+            title="Vincular Google Calendar",
+            expand=False,
+        )
+    )
+    code = _wait_oauth_code(port)
+    if code is None:
+        _error_panel("no llegó el authorization code", "reintentá: wyss calendar auth")
+        raise typer.Exit(code=1)
+    try:
+        refresh_token = asyncio.run(
+            exchange_code(
+                client_id=credentials[0],
+                client_secret=credentials[1],
+                code=code,
+                redirect_uri=redirect_uri,
+            )
+        )
+    except GoogleCalendarError as exc:
+        _error_panel(str(exc), "reintentá: wyss calendar auth")
+        raise typer.Exit(code=1) from exc
+    save_refresh_token(settings.data_dir, refresh_token)
+    console.print(
+        "Google Calendar vinculado: refresh token en data/google_calendar_token",
+        style="green",
+    )
+
+
+def _wait_oauth_code(port: int, timeout_seconds: int = 300) -> str | None:
+    """Loopback mínimo: recibe UN request con ?code=... y termina."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import parse_qs, urlsplit
+
+    captured: list[str] = []
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            query = parse_qs(urlsplit(self.path).query)
+            code_values = query.get("code", [])
+            if code_values:
+                captured.append(code_values[0])
+                body = b"Listo. Ya podes cerrar esta pestana y volver a la terminal."
+            else:
+                body = b"Falto el parametro code."
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args: object) -> None:  # silencio: sin ruido en consola
+            return
+
+    server = HTTPServer(("127.0.0.1", port), _Handler)
+    server.timeout = timeout_seconds
+    server.handle_request()
+    server.server_close()
+    return captured[0] if captured else None
 
 
 def _resolve_prefix(prefix: str, ids: list[str]) -> str | None:
