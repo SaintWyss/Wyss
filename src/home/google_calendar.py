@@ -18,7 +18,7 @@ _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 _MAX_RESULTS = 250
 
-CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned.readonly"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
