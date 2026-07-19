@@ -61,6 +61,8 @@ from execution.shell import ShellAdapter
 from execution.undo import UndoStep, apply_undo, inverse_plan, plan_undo
 from gateway.providers.ollama import OllamaEmbeddingProvider
 from gateway.secrets_patterns import BUILTIN_SECRET_PATTERNS
+from home.reminder_store import ReminderStore
+from home.timer_store import TimerStore
 from knowledge.chunker import TokenChunker
 from knowledge.extractors import (
     DocxExtractor,
@@ -96,9 +98,17 @@ app = typer.Typer(help="Wyss CLI")
 fin_app = typer.Typer(help="Ledger de finanzas")
 routine_app = typer.Typer(help="Rutinas programadas")
 memory_app = typer.Typer(help="Memoria del owner")
+reminder_app = typer.Typer(help="Recordatorios del hogar (proyectados al panel)")
+timer_app = typer.Typer(help="Timers del hogar (proyectados al panel)")
+calendar_app = typer.Typer(help="Agenda Google Calendar (proyectada al panel)")
+spotify_app = typer.Typer(help="Spotify del hogar (proyectado al panel)")
 app.add_typer(fin_app, name="fin")
 app.add_typer(routine_app, name="routine")
 app.add_typer(memory_app, name="memory")
+app.add_typer(reminder_app, name="reminder")
+app.add_typer(timer_app, name="timer")
+app.add_typer(calendar_app, name="calendar")
+app.add_typer(spotify_app, name="spotify")
 console = Console()
 stderr_console = Console(stderr=True)
 
@@ -979,6 +989,422 @@ def _memory_mutation(
         raise typer.Exit(code=1) from exc
 
 
+_DEFAULT_HOME_TZ = "America/Argentina/Cordoba"
+
+
+@reminder_app.command("add")
+def reminder_add(
+    text: str,
+    due_at: Annotated[
+        str,
+        typer.Option("--due", help="Vencimiento ISO-8601 con offset (2026-07-20T09:00:00-03:00)."),
+    ],
+    timezone: Annotated[
+        str,
+        typer.Option("--timezone", help="Timezone IANA del panel."),
+    ] = _DEFAULT_HOME_TZ,
+    recurrence: Annotated[
+        str | None,
+        typer.Option("--recurrence", help="Recurrencia libre (ej: 'diario')."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Crea un recordatorio que el panel proyecta."""
+    try:
+        settings = load_settings(config)
+        with ReminderStore(settings.data_dir / "reminders.db") as store:
+            reminder = store.add(text=text, due_at=due_at, timezone=timezone, recurrence=recurrence)
+        console.print(f"Recordatorio creado: {reminder.reminder_id}", style="green")
+    except ValueError as exc:
+        _error_panel(str(exc), "ej: --due 2026-07-20T09:00:00-03:00")
+        raise typer.Exit(code=2) from exc
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@reminder_app.command("list")
+def reminder_list(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista recordatorios."""
+    try:
+        settings = load_settings(config)
+        db_path = settings.data_dir / "reminders.db"
+        if not db_path.exists():
+            _empty_state("Sin recordatorios todavía.", "wyss reminder add ...")
+            return
+        with ReminderStore(db_path) as store:
+            reminders = store.list_all()
+        if not reminders:
+            _empty_state("Sin recordatorios todavía.", "wyss reminder add ...")
+            return
+        table = Table(show_header=True)
+        table.add_column("id")
+        table.add_column("texto")
+        table.add_column("vence")
+        table.add_column("estado")
+        for item in reminders:
+            table.add_row(item.reminder_id[:8], item.text, item.due_at, item.status)
+        console.print(table)
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@reminder_app.command("done")
+def reminder_done(
+    reminder_id: str,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Marca un recordatorio como completado (acepta prefijo de id)."""
+    try:
+        settings = load_settings(config)
+        with ReminderStore(settings.data_dir / "reminders.db") as store:
+            target = _resolve_prefix(reminder_id, [r.reminder_id for r in store.list_all()])
+            if target is None or not store.complete(target):
+                _error_panel(
+                    f"recordatorio no encontrado o ya completado: {reminder_id}",
+                    "listá disponibles con: wyss reminder list",
+                )
+                raise typer.Exit(code=1)
+        console.print(f"Completado: {reminder_id}", style="green")
+    except typer.Exit:
+        raise
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@timer_app.command("start")
+def timer_start(
+    label: str,
+    minutes: Annotated[
+        float,
+        typer.Option("--minutes", help="Duración en minutos."),
+    ],
+    preset: Annotated[
+        str | None,
+        typer.Option("--preset", help="Nombre de preset opcional."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Arranca un timer que el panel proyecta con countdown."""
+    try:
+        settings = load_settings(config)
+        with TimerStore(settings.data_dir / "timers.db") as store:
+            timer = store.start(label=label, duration_seconds=int(minutes * 60), preset=preset)
+        console.print(
+            f"Timer corriendo: {timer.timer_id[:8]} — vence {timer.deadline_at}",
+            style="green",
+        )
+    except ValueError as exc:
+        _error_panel(str(exc), "ej: wyss timer start pasta --minutes 10")
+        raise typer.Exit(code=2) from exc
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@timer_app.command("list")
+def timer_list(
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Lista timers con su estado actual."""
+    try:
+        settings = load_settings(config)
+        db_path = settings.data_dir / "timers.db"
+        if not db_path.exists():
+            _empty_state("Sin timers todavía.", "wyss timer start ...")
+            return
+        with TimerStore(db_path) as store:
+            _revision, timers = store.snapshot()
+        if not timers:
+            _empty_state("Sin timers todavía.", "wyss timer start ...")
+            return
+        table = Table(show_header=True)
+        table.add_column("id")
+        table.add_column("label")
+        table.add_column("estado")
+        table.add_column("restante (s)")
+        for item in timers:
+            table.add_row(item.timer_id[:8], item.label, item.status, str(item.remaining_seconds))
+        console.print(table)
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+def _timer_mutation(action: str, timer_id: str, config: Path) -> None:
+    try:
+        settings = load_settings(config)
+        with TimerStore(settings.data_dir / "timers.db") as store:
+            _revision, timers = store.snapshot()
+            target = _resolve_prefix(timer_id, [t.timer_id for t in timers])
+            ok = target is not None and getattr(store, action)(target)
+        if not ok:
+            _error_panel(
+                f"timer no encontrado o en estado incompatible: {timer_id}",
+                "listá disponibles con: wyss timer list",
+            )
+            raise typer.Exit(code=1)
+        console.print(f"{action}: {timer_id}", style="green")
+    except typer.Exit:
+        raise
+    except (ConfigError, OSError, sqlite3.Error) as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+
+
+@timer_app.command("pause")
+def timer_pause(
+    timer_id: str,
+    config: Annotated[Path, typer.Option("--config", help="Ruta al config.toml.")] = Path(
+        "config/config.toml"
+    ),
+) -> None:
+    """Pausa un timer corriendo."""
+    _timer_mutation("pause", timer_id, config)
+
+
+@timer_app.command("resume")
+def timer_resume(
+    timer_id: str,
+    config: Annotated[Path, typer.Option("--config", help="Ruta al config.toml.")] = Path(
+        "config/config.toml"
+    ),
+) -> None:
+    """Reanuda un timer pausado."""
+    _timer_mutation("resume", timer_id, config)
+
+
+@timer_app.command("cancel")
+def timer_cancel(
+    timer_id: str,
+    config: Annotated[Path, typer.Option("--config", help="Ruta al config.toml.")] = Path(
+        "config/config.toml"
+    ),
+) -> None:
+    """Cancela un timer corriendo o pausado."""
+    _timer_mutation("cancel", timer_id, config)
+
+
+@calendar_app.command("auth")
+def calendar_auth(
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Puerto loopback para el callback OAuth."),
+    ] = 8765,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Vincula Google Calendar (una vez): abre URL, guarda refresh token en data/.
+
+    Requiere GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en config/.env
+    (credencial OAuth tipo "Desktop app" con la Calendar API habilitada).
+    """
+    from urllib.parse import urlencode
+
+    from home.google_calendar import (
+        AUTH_URL,
+        CALENDAR_SCOPE,
+        GoogleCalendarError,
+        client_credentials,
+        exchange_code,
+        save_refresh_token,
+    )
+
+    try:
+        settings = load_settings(config)
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    credentials = client_credentials()
+    if credentials is None:
+        _error_panel(
+            "faltan GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET",
+            "agregalas a config/.env (credencial OAuth 'Desktop app' de Google Cloud)",
+        )
+        raise typer.Exit(code=2)
+    redirect_uri = f"http://127.0.0.1:{port}/"
+    auth_url = f"{AUTH_URL}?" + urlencode(
+        {
+            "client_id": credentials[0],
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": CALENDAR_SCOPE,
+            "access_type": "offline",
+            "prompt": "consent",
+        }
+    )
+    console.print(
+        Panel(
+            f"Abrí esta URL en el browser de ESTA máquina:\n\n{auth_url}\n\n"
+            f"Espero el callback en {redirect_uri} ...",
+            title="Vincular Google Calendar",
+            expand=False,
+        )
+    )
+    code = _wait_oauth_code(port)
+    if code is None:
+        _error_panel("no llegó el authorization code", "reintentá: wyss calendar auth")
+        raise typer.Exit(code=1)
+    try:
+        refresh_token = asyncio.run(
+            exchange_code(
+                client_id=credentials[0],
+                client_secret=credentials[1],
+                code=code,
+                redirect_uri=redirect_uri,
+            )
+        )
+    except GoogleCalendarError as exc:
+        _error_panel(str(exc), "reintentá: wyss calendar auth")
+        raise typer.Exit(code=1) from exc
+    save_refresh_token(settings.data_dir, refresh_token)
+    console.print(
+        "Google Calendar vinculado: refresh token en data/google_calendar_token",
+        style="green",
+    )
+
+
+@spotify_app.command("auth")
+def spotify_auth(
+    port: Annotated[
+        int,
+        typer.Option("--port", help="Puerto loopback para el callback OAuth."),
+    ] = 8766,
+    config: Annotated[
+        Path,
+        typer.Option("--config", help="Ruta al config.toml."),
+    ] = Path("config/config.toml"),
+) -> None:
+    """Vincula Spotify (una vez): abre URL, guarda refresh token en data/.
+
+    Requiere SPOTIFY_CLIENT_ID y SPOTIFY_CLIENT_SECRET en config/.env y que la
+    app de developer.spotify.com tenga el redirect http://127.0.0.1:8766/ exacto.
+    """
+    from urllib.parse import urlencode
+
+    from home.spotify import (
+        AUTH_URL as SPOTIFY_AUTH_URL,
+    )
+    from home.spotify import (
+        SPOTIFY_SCOPES,
+        SpotifyError,
+        exchange_code,
+        save_refresh_token,
+    )
+    from home.spotify import (
+        client_credentials as spotify_credentials,
+    )
+
+    try:
+        settings = load_settings(config)
+    except ConfigError as exc:
+        _error_panel(str(exc), _ACCION_CONFIG)
+        raise typer.Exit(code=1) from exc
+    credentials = spotify_credentials()
+    if credentials is None:
+        _error_panel(
+            "faltan SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET",
+            "agregalas a config/.env (app de developer.spotify.com)",
+        )
+        raise typer.Exit(code=2)
+    redirect_uri = f"http://127.0.0.1:{port}/"
+    auth_url = f"{SPOTIFY_AUTH_URL}?" + urlencode(
+        {
+            "client_id": credentials[0],
+            "response_type": "code",
+            "redirect_uri": redirect_uri,
+            "scope": " ".join(SPOTIFY_SCOPES),
+        }
+    )
+    console.print(
+        Panel(
+            f"Abrí esta URL en el browser de ESTA máquina:\n\n{auth_url}\n\n"
+            f"Espero el callback en {redirect_uri} ...",
+            title="Vincular Spotify",
+            expand=False,
+        )
+    )
+    code = _wait_oauth_code(port)
+    if code is None:
+        _error_panel("no llegó el authorization code", "reintentá: wyss spotify auth")
+        raise typer.Exit(code=1)
+    try:
+        refresh_token = asyncio.run(
+            exchange_code(
+                client_id=credentials[0],
+                client_secret=credentials[1],
+                code=code,
+                redirect_uri=redirect_uri,
+            )
+        )
+    except SpotifyError as exc:
+        _error_panel(str(exc), "reintentá: wyss spotify auth")
+        raise typer.Exit(code=1) from exc
+    save_refresh_token(settings.data_dir, refresh_token)
+    console.print("Spotify vinculado: refresh token en data/spotify_token", style="green")
+
+
+def _wait_oauth_code(port: int, timeout_seconds: int = 300) -> str | None:
+    """Loopback mínimo: recibe UN request con ?code=... y termina."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import parse_qs, urlsplit
+
+    captured: list[str] = []
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            query = parse_qs(urlsplit(self.path).query)
+            code_values = query.get("code", [])
+            if code_values:
+                captured.append(code_values[0])
+                body = b"Listo. Ya podes cerrar esta pestana y volver a la terminal."
+            else:
+                body = b"Falto el parametro code."
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args: object) -> None:  # silencio: sin ruido en consola
+            return
+
+    server = HTTPServer(("127.0.0.1", port), _Handler)
+    server.timeout = timeout_seconds
+    server.handle_request()
+    server.server_close()
+    return captured[0] if captured else None
+
+
+def _resolve_prefix(prefix: str, ids: list[str]) -> str | None:
+    """Id exacto o prefijo único; ambiguo/no encontrado → None."""
+    if prefix in ids:
+        return prefix
+    matches = [item for item in ids if item.startswith(prefix)]
+    return matches[0] if len(matches) == 1 else None
+
+
 @app.command()
 def undo(
     task_id: str,
@@ -1338,6 +1764,7 @@ def web(
     intake_token = (
         _load_or_create_intake_token(settings.data_dir) if settings.intake.enabled else None
     )
+    home_edge_token = _load_or_create_home_edge_token(settings.data_dir)
     local_url = f"{scheme}://127.0.0.1:{port}/?token={token}"
     if not lan:
         console.print(
@@ -1352,6 +1779,7 @@ def web(
                 settings,
                 token=token,
                 intake_token=intake_token,
+                home_edge_token=home_edge_token,
                 tls=tls,
                 lan_ip=lan_ip,
                 port=port,
@@ -1392,6 +1820,7 @@ def web(
             settings,
             token=token,
             intake_token=intake_token,
+            home_edge_token=home_edge_token,
             lan_hosts=frozenset({lan_ip}),
             tls=tls,
             lan_ip=lan_ip,
@@ -1433,6 +1862,25 @@ def _load_or_create_intake_token(data_dir: Path) -> str:
     best-effort del sistema.
     """
     token_file = data_dir / "intake_token"
+    if token_file.exists():
+        stored = token_file.read_text(encoding="utf-8").strip()
+        if len(stored) >= 32:
+            return stored
+    token = secrets.token_urlsafe(32)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(token, encoding="utf-8")
+    token_file.chmod(0o600)
+    return token
+
+
+def _load_or_create_home_edge_token(data_dir: Path) -> str:
+    """Token bearer del Home Edge (data/home_edge_token, 0600).
+
+    Mismo modelo que el token de intake: el bridge del panel lo manda como
+    `Authorization: Bearer` en `/api/home/*` y `/api/media/*`; borrar el
+    archivo rota el bearer.
+    """
+    token_file = data_dir / "home_edge_token"
     if token_file.exists():
         stored = token_file.read_text(encoding="utf-8").strip()
         if len(stored) >= 32:

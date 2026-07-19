@@ -44,6 +44,17 @@ from core.domain import Query, TipoTransaccion, Transaccion
 from core.domain.audit import ActorType
 from core.domain.errors import AuditIntegrityError, ConfigError, IndexIntegrityError
 from core.domain.security import Subject
+from home.google_calendar import (
+    GoogleCalendarClient,
+    GoogleCalendarError,
+    client_credentials,
+    load_refresh_token,
+)
+from home.reminder_store import ReminderStore
+from home.spotify import SpotifyClient, SpotifyError, not_linked_state
+from home.spotify import client_credentials as spotify_credentials
+from home.spotify import load_refresh_token as spotify_refresh_token
+from home.timer_store import TimerStore
 from knowledge.state_store import BcFreshness, StateStore
 from ledger.sqlite_store import SqliteLedgerStore
 from orchestrator.pending_store import PendingProposal, PendingStore
@@ -123,6 +134,7 @@ def build_web_app(
     *,
     token: str,
     intake_token: str | None = None,
+    home_edge_token: str | None = None,
     lan_hosts: frozenset[str] = frozenset(),
     tls: bool = False,
     lan_ip: str | None = None,
@@ -187,6 +199,13 @@ def build_web_app(
                 error="origen no permitido",
                 accion="usá la interfaz local servida por wyss web",
             )
+
+        if request.url.path.startswith(("/api/home/", "/api/media/")):
+            # Superficie exclusiva del Home Edge: bearer dedicado, jamás cookie.
+            auth_response = _authenticate_home_edge(request, home_edge_token=home_edge_token)
+            if auth_response is not None:
+                return auth_response
+            return await call_next(request)
 
         if request.url.path == "/api/intake":
             # Única exención de cookie: n8n no tiene cookie jar y usa bearer dedicado.
@@ -442,6 +461,115 @@ def build_web_app(
         finally:
             if store is not None:
                 store.close()
+
+    @web_app.get("/api/home/reminders")
+    async def api_home_reminders(timezone: str) -> dict[str, object]:
+        if not timezone or len(timezone) > 64:
+            raise WebError(
+                status.HTTP_400_BAD_REQUEST,
+                error="timezone inválida",
+                accion="mandá la timezone IANA configurada en el panel",
+            )
+        with ReminderStore(settings.data_dir / "reminders.db") as store:
+            revision, reminders = store.snapshot(timezone)
+        return {
+            "revision": revision,
+            "reminders": [reminder.to_payload() for reminder in reminders],
+        }
+
+    @web_app.get("/api/media/spotify", response_model=None)
+    async def api_media_spotify() -> dict[str, Any] | Response:
+        client = _spotify_client_or_none()
+        if client is None:
+            return not_linked_state()
+        try:
+            state = await client.state()
+        except SpotifyError as exc:
+            return _spotify_error_response(exc)
+        finally:
+            await client.aclose()
+        if state is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return state
+
+    @web_app.post("/api/media/spotify/commands", response_model=None)
+    async def api_media_spotify_command(body: MediaCommandBody) -> dict[str, Any] | Response:
+        client = _spotify_client_or_none()
+        if client is None:
+            # sin vinculación no hay comandos: el Edge lo mapea a reauth
+            raise WebError(
+                status.HTTP_401_UNAUTHORIZED,
+                error="Spotify no está vinculado",
+                accion="corré: wyss spotify auth",
+            )
+        try:
+            state = await client.execute(
+                action=body.action, value=body.value, device_id=body.device_id
+            )
+        except SpotifyError as exc:
+            return _spotify_error_response(exc)
+        finally:
+            await client.aclose()
+        if state is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return state
+
+    def _spotify_client_or_none() -> SpotifyClient | None:
+        credentials = spotify_credentials()
+        refresh = spotify_refresh_token(settings.data_dir)
+        if credentials is None or refresh is None:
+            return None
+        return _spotify_client(credentials[0], credentials[1], refresh)
+
+    @web_app.get("/api/home/calendar/events")
+    async def api_home_calendar(
+        timezone: str,
+        window_days: int = 7,
+        sync_token: str | None = None,
+        page_token: str | None = None,
+        single_events: str = "true",
+    ) -> dict[str, Any]:
+        del single_events  # siempre expandimos instancias (singleEvents=true)
+        if not timezone or len(timezone) > 64 or not 1 <= window_days <= 31:
+            raise WebError(
+                status.HTTP_400_BAD_REQUEST,
+                error="parámetros de calendar inválidos",
+                accion="mandá timezone IANA y window_days entre 1 y 31",
+            )
+        credentials = client_credentials()
+        refresh_token = load_refresh_token(settings.data_dir)
+        if credentials is None or refresh_token is None:
+            # 401 = reauthorization_required en el Edge: falta vincular Google
+            raise WebError(
+                status.HTTP_401_UNAUTHORIZED,
+                error="Google Calendar no está vinculado",
+                accion="corré: wyss calendar auth",
+            )
+        client = _calendar_client(credentials[0], credentials[1], refresh_token)
+        try:
+            return await client.events_page(
+                timezone=timezone,
+                window_days=window_days,
+                sync_token=sync_token,
+                page_token=page_token,
+            )
+        except GoogleCalendarError as exc:
+            raise WebError(
+                exc.status_code,
+                error=str(exc),
+                accion="revisá la vinculación con: wyss calendar auth",
+            ) from exc
+        finally:
+            await client.aclose()
+
+    @web_app.get("/api/home/timers")
+    async def api_home_timers() -> dict[str, object]:
+        with TimerStore(settings.data_dir / "timers.db") as store:
+            revision, timers = store.snapshot()
+        return {
+            "revision": revision,
+            "timers": [timer.to_payload() for timer in timers],
+        }
 
     @web_app.post("/api/ask")
     async def api_ask(body: AskBody) -> dict[str, Any]:
@@ -782,6 +910,68 @@ class _IntakeRateLimiter:
             return False
         self._hits.append(now)
         return True
+
+
+class MediaCommandBody(BaseModel):
+    """Body de POST /api/media/spotify/commands (contrato del Edge)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1, max_length=256)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    action: str = Field(min_length=1, max_length=64)
+    value: int | None = Field(default=None, ge=0, le=100)
+    device_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+def _spotify_error_response(exc: SpotifyError) -> JSONResponse:
+    """Error del proveedor con el status que el Edge mapea (+Retry-After en 429)."""
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else None
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": str(exc), "accion": "revisá la vinculación con: wyss spotify auth"},
+        headers=headers,
+    )
+
+
+def _spotify_client(client_id: str, client_secret: str, refresh_token: str) -> SpotifyClient:
+    """Factory monkeypatcheable en tests (evita red real)."""
+    return SpotifyClient(client_id, client_secret, refresh_token)
+
+
+def _calendar_client(
+    client_id: str, client_secret: str, refresh_token: str
+) -> GoogleCalendarClient:
+    """Factory monkeypatcheable en tests (evita red real)."""
+    return GoogleCalendarClient(client_id, client_secret, refresh_token)
+
+
+def _authenticate_home_edge(
+    request: Request,
+    *,
+    home_edge_token: str | None,
+) -> Response | None:
+    if home_edge_token is None:
+        return _error_response(
+            status.HTTP_404_NOT_FOUND,
+            error="home edge deshabilitado",
+            accion="levantá wyss web con el token de home edge",
+        )
+    header = request.headers.get("Authorization", "")
+    scheme, _, candidate = header.partition(" ")
+    if scheme.lower() != "bearer" or not candidate:
+        return _error_response(
+            status.HTTP_401_UNAUTHORIZED,
+            error="no autorizado",
+            accion="mandá Authorization: Bearer con el token de home edge",
+        )
+    if not compare_digest(candidate.strip(), home_edge_token):
+        return _error_response(
+            status.HTTP_401_UNAUTHORIZED,
+            error="no autorizado",
+            accion="verificá el token de home edge",
+        )
+    return None
 
 
 def _authenticate_intake(
