@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Producto final — app móvil + asistente diario
 status: active
-last_updated: 2026-07-18T13:45:00-03:00
-last_activity: 2026-07-18 -- Phase 16 Home authority core in progress
+last_updated: 2026-07-20T12:05:00-03:00
+last_activity: 2026-07-20 -- Phase 16 Home authority core complete (PR #7/#10/#11 en main)
 progress:
-  total_phases: 7
-  completed_phases: 7
+  total_phases: 8
+  completed_phases: 8
   total_plans: 32
   completed_plans: 32
   percent: 100
-stopped_at: Phase 16 implementation and review
+stopped_at: Phase 16 closed; pendiente release v1.0 formal (versionado, matriz, firma)
 ---
 
 # Wyss — State
@@ -29,12 +29,14 @@ See: `.planning/PROJECT.md` (updated 2026-07-10).
 ## Current Position
 
 - Phase: 16 — Home Authority Core
-- Plan: incremental PR #3–#7
-- Status: in progress
-- Last activity: 2026-07-18
-- Evidence: PRs, CI y `.planning/phases/16-home-authority-core/16-REVIEW.md`
+- Plan: incremental PR #3–#7, #10, #11 (todas mergeadas en `main`)
+- Status: complete
+- Last activity: 2026-07-20
+- Evidence: `main` en `b93ca2b`, `.planning/phases/16-home-authority-core/16-REVIEW.md`
+  (WR-01..WR-05 cerrados, matriz de invariantes toda "Cumple"), suite local
+  `754 passed, 7 skipped` el 2026-07-20
 
-## v1.0 Roadmap — Phases 9–15
+## v1.0 Roadmap — Phases 9–16
 
 Orden por dependencia. Regla inviolable: nada B/C se autoejecuta.
 
@@ -47,6 +49,7 @@ Orden por dependencia. Regla inviolable: nada B/C se autoejecuta.
 | 13. Intake n8n | Webhook externo → propuesta con floor B | Complete | daemon/web, summaries de fase |
 | 14. Web PC Polish | Superficies de rutinas, digest y memoria | Complete | `web/`, summaries de fase |
 | 15. Mobile APK | Capacitor, QR y pinning TOFU | Complete | `mobile/`, checkpoint físico aprobado |
+| 16. Home Authority Core | Ports, RPC Unix idempotente, política y auditoría | Complete | `16-REVIEW.md`, PR #7/#10/#11 en `main` |
 
 **Coverage:** 25/25 requirements mapeados a una fase del milestone.
 
@@ -59,6 +62,7 @@ Orden por dependencia. Regla inviolable: nada B/C se autoejecuta.
 | 2026-07-10 | Viejas fases Multi-agente/Rutinas y Modo Equipo quedan superadas | Rutinas se absorbieron en Phase 9; Modo Equipo queda post-v1.0 |
 | 2026-07-10 | APK como fase final propia | Requería spike de pinning y schema QR |
 | 2026-07-11 | Phase 15 cerrada por checkpoint del owner | Instalación, QR, TOFU y carga del bridge aprobados en teléfono real |
+| 2026-07-20 | Phase 16 cerrada | Cortes incrementales mergeados en `main`; review sin deuda y suite verde localmente |
 
 _Decisiones v0.1: ver `phases/*-DECISIONS.md` y git history._
 
