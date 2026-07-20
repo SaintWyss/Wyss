@@ -100,7 +100,32 @@ class SpotifyClient:
         payload = response.json()
         if not isinstance(payload, dict):
             raise SpotifyError(502, "Spotify devolvió un estado inválido")
-        return await self._to_contract(payload)
+        contract = await self._to_contract(payload)
+        contract["queue"] = await self._queue()
+        return contract
+
+    async def _queue(self) -> list[dict[str, str]]:
+        """Próximas pistas (≤5) sanitizadas; la cola es opcional y jamás rompe el estado."""
+        try:
+            response = await self._request("GET", "/me/player/queue")
+            decoded = response.json() if response.content else {}
+        except (SpotifyError, ValueError):
+            return []
+        items = decoded.get("queue") if isinstance(decoded, dict) else None
+        queue: list[dict[str, str]] = []
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("name") or "")[:180]
+            artists = item.get("artists") or []
+            artist = ", ".join(
+                str(entry.get("name", "")) for entry in artists if isinstance(entry, dict)
+            )[:180]
+            if title:
+                queue.append({"title": title, "artist": artist})
+            if len(queue) == 5:
+                break
+        return queue
 
     async def execute(
         self,
