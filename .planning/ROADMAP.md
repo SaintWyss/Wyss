@@ -3,8 +3,8 @@
 ## Milestones
 
 - ✅ **v0.1 Demo técnica** — Phases 1-8 (shipped 2026-07-10, tagged v0.1.0)
-- 🚧 **v1.0 Producto final — app móvil + asistente diario** — Phases 9-15 (in progress)
-- 🚧 **v1.0 Integración Home autoritativa** — Phases 16+ (in progress desde 2026-07-18)
+- ✅ **v1.0 Producto final — app móvil + asistente diario** — Phases 9-15 (complete)
+- ✅ **v1.0 Integración Home autoritativa** — Phase 16 (complete 2026-07-20)
 
 **Regla transversal inviolable:** nada B/C se auto-ejecuta — todo productor de planes (rutinas, intake, agentes) pasa por `CognitivePolicyEngine` y cae a la bandeja; el owner sella. Nivel D absoluto.
 
@@ -27,7 +27,7 @@
 - [x] **Phase 13: Intake n8n** - Webhook externo → propuesta → bandeja con bearer token
 - [x] **Phase 14: Web PC Polish** - Glow-up desktop + superficies de rutinas/digest/memoria
 - [x] **Phase 15: Mobile APK** - Capacitor + pairing QR + cert pinning TOFU
-- [ ] **Phase 16: Home Authority Core** - Ports, RPC Unix idempotente, política y auditoría
+- [x] **Phase 16: Home Authority Core** - Ports, RPC Unix idempotente, política y auditoría
 
 ## Phase Details
 
@@ -250,9 +250,9 @@ Sin orphans, sin duplicados. MULTI-02 (nada B/C se auto-ejecuta) se cierra en Ph
 | 11. Owner Memory | v1.0 | 0/TBD | Not started | - |
 | 12. Daily Assistant | v1.0 | 0/TBD | Not started | - |
 | 13. Intake n8n | v1.0 | 0/TBD | Not started | - |
-| 14. Web PC Polish | v1.0 | 0/TBD | Not started | - |
-| 15. Mobile APK | v1.0 | 5/6 | In Progress|  |
-| 16. Home Authority Core | v1.0 | incremental | In Progress | - |
+| 14. Web PC Polish | v1.0 | complete | Complete | 2026-07-11 |
+| 15. Mobile APK | v1.0 | 6/6 | Complete | 2026-07-11 |
+| 16. Home Authority Core | v1.0 | incremental | Complete | 2026-07-20 |
 
 ## Milestones del research (v1.0)
 
