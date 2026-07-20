@@ -160,3 +160,49 @@ async def test_toggle_favorite_saves_unsaved_track(recorder_check: Any = None) -
         if request.url.path == "/v1/me/tracks" and request.method == "PUT"
     ]
     assert len(saves) == 1
+
+
+async def test_state_includes_queue() -> None:
+    recorder = _Recorder(
+        {
+            "/v1/me/player/queue": httpx.Response(
+                200,
+                json={
+                    "queue": [
+                        {"name": "Nikes", "artists": [{"name": "Frank Ocean"}]},
+                        {"name": "", "artists": []},
+                        {"name": "Self Control", "artists": [{"name": "Frank Ocean"}]},
+                    ]
+                },
+            ),
+            "/v1/me/player": httpx.Response(200, json=_PLAYER),
+            "/v1/me/tracks/contains": httpx.Response(200, json=[False]),
+        }
+    )
+    client = _client(recorder)
+    try:
+        state = await client.state()
+    finally:
+        await client.aclose()
+    assert state is not None
+    assert state["queue"] == [
+        {"title": "Nikes", "artist": "Frank Ocean"},
+        {"title": "Self Control", "artist": "Frank Ocean"},
+    ]
+
+
+async def test_queue_failure_never_breaks_state() -> None:
+    recorder = _Recorder(
+        {
+            "/v1/me/player/queue": httpx.Response(500),
+            "/v1/me/player": httpx.Response(200, json=_PLAYER),
+            "/v1/me/tracks/contains": httpx.Response(200, json=[False]),
+        }
+    )
+    client = _client(recorder)
+    try:
+        state = await client.state()
+    finally:
+        await client.aclose()
+    assert state is not None
+    assert state["queue"] == []
