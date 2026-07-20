@@ -2763,7 +2763,7 @@ wheels = [
 
 [[package]]
 name = "wyss"
-version = "1.0.0.dev0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },

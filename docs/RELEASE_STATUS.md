@@ -1,16 +1,18 @@
 # Estado real de Wyss
 
-Última revisión documental: 2026-07-18.
+Última revisión documental: 2026-07-20.
 
 ## Resumen
 
-El código de `main` contiene el alcance funcional del milestone interno **v1.0 — app móvil + asistente diario**. Yo separo ese alcance de una publicación final:
+El código de `main` contiene el alcance funcional del milestone interno **v1.0 — app móvil + asistente diario**:
 
-- **alcance implementado:** fases 1–15, incluido el cliente Android;
-- **versión activa:** `1.0.0.dev0`, que identifica desarrollo de la línea v1 y no una release pública.
+- **alcance implementado:** fases 1–16, incluidos el cliente Android y el Home Authority Core;
+- **versión activa:** `1.0.0` en package, web y cliente Android.
 
-Yo no declaro una release v1.0 distribuible hasta completar artefactos, changelog, integración y
-gates de publicación.
+La preparación de release está completa: changelog, matriz de gates desde un commit exacto,
+artefactos, upgrade y rollback. Ver [`../CHANGELOG.md`](../CHANGELOG.md),
+[`releases/WYSS_v1.0.0.md`](releases/WYSS_v1.0.0.md) y [`UPGRADE.md`](UPGRADE.md).
+El tag y la publicación quedan sujetos a la autorización explícita del owner.
 
 ## Matriz de capacidades
 
@@ -68,9 +70,9 @@ No debe volver a describirse como “pendiente de toda verificación”, pero ta
 
 ### v0.1.0 frente a milestone v1.0
 
-`v0.1.0` es una release histórica cerrada el 10 de julio. Yo uso `1.0.0.dev0` durante la
-integración v1. Sólo voy a declarar `1.0.0` y publicar artefactos cuando todos los gates de esta
-sección estén completos.
+`v0.1.0` es una release histórica cerrada el 10 de julio. La integración v1 usó `1.0.0.dev0`; el
+sufijo se retiró al preparar esta release. `1.0.0` identifica el paquete, la web y el cliente
+Android desde el mismo commit.
 
 ### `.planning/ROADMAP.md` y `.planning/STATE.md`
 
@@ -84,16 +86,19 @@ Los artefactos de planificación acumularon casillas y métricas contradictorias
 - El bridge LAN usa TLS local; certificados self-signed requieren confianza TOFU.
 - Los permisos `0600` pueden no aplicarse en NTFS/FUSE.
 - Los datos SQLite que requieren WAL deben vivir en un filesystem compatible.
-- El APK validado usa el flujo local del owner; distribución, firma release y actualización segura deben documentarse antes de publicar.
-- La versión de desarrollo no implica artefactos finales ni autorización de publicación.
+- El APK se distribuye con firma debug del owner; no hay firma release ni canal de actualización.
 
-## Gates para declarar una release v1.0 formal
+## Gates de la release v1.0.0
 
-1. retirar el sufijo `.dev0` sólo desde el commit exacto aprobado;
-2. crear changelog consolidado desde v0.1.0;
-3. producir artefactos reproducibles y firmados;
-4. ejecutar la cadena Python, web y Android desde un commit exacto;
-5. repetir smoke de daemon, bridge, LLM, Notion, intake y APK;
-6. documentar upgrade y rollback;
-7. eliminar o marcar cualquier stub operativo restante;
-8. publicar checksums y evidencia de aceptación.
+| # | Gate | Estado |
+|---|---|---|
+| 1 | Retirar el sufijo `.dev0` desde el commit aprobado | Completo — package, web y Android en `1.0.0` |
+| 2 | Changelog consolidado desde v0.1.0 | Completo — `CHANGELOG.md` |
+| 3 | Artefactos reproducibles y firmados | Parcial — sdist/wheel reproducibles desde el tag con `uv.lock`; APK con firma **debug**, sin firma release |
+| 4 | Cadena Python, web y Android desde un commit exacto | Completo — evidencia en `releases/WYSS_v1.0.0.md` |
+| 5 | Smoke de daemon, bridge, LLM, Notion, intake y APK | Completo por fase, aprobado por el owner; sin repetición consolidada sobre este commit |
+| 6 | Upgrade y rollback documentados | Completo — `UPGRADE.md` |
+| 7 | Stubs operativos resueltos o marcados | Completo — el RPC `audit` dejó de ser stub (PR #5); `undo` limitado a `file.*` queda declarado |
+| 8 | Checksums y evidencia de aceptación | Los checksums se generan al construir y se publican como asset de la release, no dentro del repositorio |
+
+Pendiente de decisión del owner: firma release del APK y canal de distribución, tag y publicación.

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Producto final — app móvil + asistente diario
 status: active
-last_updated: 2026-07-20T12:05:00-03:00
-last_activity: 2026-07-20 -- Phase 16 Home authority core complete (PR #7/#10/#11 en main)
+last_updated: 2026-07-20T15:30:00-03:00
+last_activity: 2026-07-20 -- Preparacion de release v1.0.0 (version unificada, changelog, upgrade, matriz verde)
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 32
   completed_plans: 32
   percent: 100
-stopped_at: Phase 16 closed; pendiente release v1.0 formal (versionado, matriz, firma)
+stopped_at: Release v1.0.0 preparada en rama release/v1.0.0; pendiente OK del owner para tag y firma release del APK
 ---
 
 # Wyss — State
@@ -70,17 +70,18 @@ _Decisiones v0.1: ver `phases/*-DECISIONS.md` y git history._
 
 Ningún blocker para el alcance funcional del milestone.
 
-Pendientes para una release v1.0 formal:
+Preparacion de release v1.0.0 completa (rama `release/v1.0.0`): versionado unificado en
+`1.0.0`, changelog consolidado, `docs/UPGRADE.md`, `docs/releases/WYSS_v1.0.0.md` y matriz
+Python/web/Android verde desde el mismo commit.
 
-- unificar versionado del package, web y mobile;
-- ejecutar matriz completa Python/web/Android desde un commit exacto;
-- generar artefactos reproducibles y firmados;
-- completar changelog, upgrade y rollback;
-- resolver o declarar stubs operativos como audit RPC.
+Pendiente de decision del owner:
+
+- tag `v1.0.0` y publicacion;
+- firma release del APK y canal de distribucion (hoy firma debug).
 
 ## Notes
 
 - Modo LLM validado en el entorno del owner con Qwen vía LiteLLM local.
 - El modo deterministic sigue siendo el default de la plantilla.
-- `pyproject.toml` todavía declara `0.1.0`; milestone completo no equivale a release pública v1.0.
+- `pyproject.toml` declara `1.0.0`; el tag y la publicación siguen sujetos al OK del owner.
 - `.planning/ROADMAP.md` conserva detalle histórico y puede contener checkboxes desactualizados. Usar este State y `docs/RELEASE_STATUS.md` para estado vigente.
