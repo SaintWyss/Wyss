@@ -1,6 +1,19 @@
 <!-- Fuente única de instrucciones: AGENTS.md (Codex la lee directo, Claude la importa). Acá va SOLO lo exclusivo de Claude. -->
 @AGENTS.md
 
+## GSD Workflow Enforcement (solo Claude)
+
+Esta sección no va en AGENTS.md: Codex ejecuta tareas ya planificadas por wrapper y no abre GSD.
+
+Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+
+Use these entry points:
+- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
+- `/gsd-debug` for investigation and bug fixing
+- `/gsd-execute-phase` for planned phase work
+
+Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
+
 ## Orchestration Runbook (directiva del owner — 2026-06-12)
 
 Escrito por Fable 5. Cualquier modelo orquestador (sonnet incluido) DEBE seguir esto literalmente.
@@ -29,10 +42,10 @@ Por cada plan, en orden de waves, SECUENCIAL (worktree isolation falla con cwd=~
 1. **Prompt**: header estándar (proyecto, root absoluto `/mnt/hdd/Data/10_Workspace/projects/wyss`,
    reglas, formato SUMMARY con frontmatter `plan:`/`status:`, marcador `=== PLAN FOLLOWS ===`) + PLAN.md completo.
 2. **Ejecutar**: `cd <root> && timeout 3600s codex-gsd-exec < prompt > summary 2> err.log` en background.
-   Codex a veces commitea él mismo (bien formateado) y a veces deja todo untracked — ambos OK.
+   Codex NO commitea: deja los cambios sin commitear. Si alguna vez aparece un commit de Codex, se deshace
+   (`git reset --soft HEAD~1`) y se re-verifica antes de commitear, porque el gate va antes del commit.
 3. **Cierre (subagente sonnet)**: cadena verde `uv run pytest && uv run mypy && uv run ruff check src tests
-   && uv run lint-imports` (si falla: NO commitear, escalar a Fable) → commits atómicos por task si Codex
-   no commiteó → SUMMARY.md al dir de fase → `gsd-sdk query roadmap.update-plan-progress 03 <plan> complete`
+   && uv run lint-imports` (si falla: NO commitear, escalar a Fable) → commits atómicos por task → SUMMARY.md al dir de fase → `gsd-sdk query roadmap.update-plan-progress 03 <plan> complete`
    → commit docs. Trailer siempre: `Co-Authored-By:` del modelo orquestador.
 4. Heartbeat `[checkpoint] phase X wave N/M plan <id> <status> (P/Q plans done)` entre pasos.
 
