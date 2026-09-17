@@ -41,9 +41,11 @@ Por cada plan, en orden de waves, SECUENCIAL (worktree isolation falla con cwd=~
 
 1. **Prompt**: header estándar (proyecto, root absoluto `/mnt/hdd/Data/10_Workspace/projects/wyss`,
    reglas, formato SUMMARY con frontmatter `plan:`/`status:`, marcador `=== PLAN FOLLOWS ===`) + PLAN.md completo.
-2. **Ejecutar**: `cd <root> && timeout 3600s codex-gsd-exec < prompt > summary 2> err.log` en background.
-   Codex NO commitea: deja los cambios sin commitear. Si alguna vez aparece un commit de Codex, se deshace
-   (`git reset --soft HEAD~1`) y se re-verifica antes de commitear, porque el gate va antes del commit.
+2. **Ejecutar**: `cd <root> && BASE=$(git rev-parse HEAD) && timeout 3600s codex-gsd-exec < prompt > summary 2> err.log`
+   en background. Guardar `BASE` (el HEAD previo) junto al summary.
+   Codex NO commitea: deja los cambios sin commitear. Si `git rev-parse HEAD` ya no es `BASE`, Codex commiteó
+   (uno o varios): `git reset --soft $BASE` deja todo su trabajo en el index y se re-verifica antes de commitear,
+   porque el gate va antes del commit.
 3. **Cierre (subagente sonnet)**: cadena verde `uv run pytest && uv run mypy && uv run ruff check src tests
    && uv run lint-imports` (si falla: NO commitear, escalar a Fable) → commits atómicos por task → SUMMARY.md al dir de fase → `gsd-sdk query roadmap.update-plan-progress 03 <plan> complete`
    → commit docs. Trailer siempre: `Co-Authored-By:` del modelo orquestador.
