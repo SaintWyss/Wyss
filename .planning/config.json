@@ -70,7 +70,7 @@
   "mode": "yolo",
   "granularity": "fine",
   "model_overrides": {
-    "gsd-verifier": "sonnet",
+    "gsd-verifier": "fable",
     "gsd-code-fixer": "opus",
     "gsd-security-auditor": "fable",
     "gsd-code-reviewer": "sonnet"
