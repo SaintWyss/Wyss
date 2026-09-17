@@ -74,5 +74,6 @@
     "gsd-code-fixer": "opus",
     "gsd-security-auditor": "fable",
     "gsd-code-reviewer": "sonnet"
-  }
+  },
+  "claude_md_path": "./AGENTS.md"
 }
