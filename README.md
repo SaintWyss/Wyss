@@ -1,4 +1,9 @@
-# Wyss
+<h1 align="center">Wyss</h1>
+
+<p align="center"><strong>Asistente operativo personal con políticas y acciones supervisadas.</strong><br/>Python · agentes · automatización</p>
+
+> Proyecto en desarrollo. El alcance y la validación de cada funcionalidad se detallan a continuación.
+
 
 > El empleado que siempre necesitaste y nunca pudiste contratar.
 
