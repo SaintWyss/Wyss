@@ -1,11 +1,16 @@
-# Wyss
+<h1 align="center">Wyss</h1>
 
-> El empleado que siempre necesitaste y nunca pudiste contratar.
+<p align="center"><strong>Asistente operativo personal con políticas y acciones supervisadas.</strong><br/>Python · agentes · automatización</p>
+
+> Proyecto en desarrollo. El alcance y la validación de cada funcionalidad se detallan a continuación.
+
+
+> Asistencia operativa con decisiones supervisadas por su propietario.
 
 Asistente operativo humano-primero con política A–D, ejecución verificable, auditoría, conocimiento local, agentes especializados, web y cliente Android.
 
 **Autor:** Santiago Wyss  
-**Estado funcional:** alcance del milestone v1.0 implementado en el código  
+**Estado funcional:** alcance del milestone v1.0 implementado en el código; validación final pendiente  
 **Versión del paquete:** `1.0.0.dev0` — línea v1 en desarrollo; no es una release final
 
 - [Estado real y evidencia](docs/RELEASE_STATUS.md)
