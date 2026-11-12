@@ -17,6 +17,12 @@ Asistente operativo humano-primero con política A–D, ejecución verificable, 
 - [Guía del operador](docs/OPERATOR.md)
 - [Índice documental](docs/README.md)
 
+## Tecnologías y diseño del sistema
+
+El núcleo y los servicios utilizan **Python 3.12+**, con `uv` para dependencias y configuración validada con Pydantic. La interfaz web usa **React** y el cliente móvil está en `mobile/`. Para recuperación de información, el proyecto combina SQLite FTS5, búsqueda vectorial y fusión RRF; la auditoría utiliza SQLite.
+
+La arquitectura sigue puertos y adaptadores: `core` define dominio y política, los adaptadores ejecutan capacidades concretas y `bootstrap` conecta las dependencias. El orquestador prepara y evalúa acciones; la política determinista y los gates del propietario controlan su ejecución. El detalle de las capas y sus límites aparece en [Arquitectura](#arquitectura).
+
 ## Qué es
 
 Wyss recibe una instrucción, construye un plan, lo evalúa mediante una política determinista, solicita confirmación cuando corresponde, ejecuta mediante adapters y audita el resultado.
